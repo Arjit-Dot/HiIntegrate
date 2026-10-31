@@ -48,6 +48,7 @@ The validator (`config_loader.validate_config`) must enforce these as well. `too
 - **Empty is allowed:** a field the service can't supply stays empty (null), and that is not an error.
 - **Saving:** records are saved page by page. If page 7 fails, pages 1 to 6 stay stored and the run is `failed` with its partial counts.
 - **Identity:** a record is identified by `(source, id)`, so re-running a pull updates records instead of duplicating them. `source` is the integration `name`. Do not rename an integration after records exist.
+- **Secrets are pinned to a host (D-7.6):** a secret may be sent only to the host stored with it, and the engine checks that on **every** request, including next-page links and redirects. A mismatch sends nothing and fails the run with `secret_host_mismatch`. `PUT /secrets/{name}` takes `{value, host}`. A secret from the environment may carry `SECRET_<NAME>_HOST`; without it the engine logs a warning.
 - **Health:** one label per connection from the latest finished `schedule` or `manual` run. `test` runs are ignored, and `disabled` overrides the rest.
 
 ## Names that were fixed when these files were written
@@ -61,6 +62,7 @@ These were open in `docs/decisions.md` and are now settled here. They are the fi
 - `response_format` and `fan_out` are action-level keys. Both are reserved.
 - A map entry needs a `path` or a `default`. `format` is only valid with `transform: datetime`.
 - `error_when` is `{ path, equals, message_path }`, and a failure uses the run error code `api_error`.
+- `PUT /secrets/{name}` takes `{value, host}`, and `GET /secrets` returns `host` (null if unpinned). A run can fail with `secret_host_mismatch`.
 - A lookup run's body is `{"inputs": {...}}`. A lookup that fails at the service returns `502` with code `run_failed`.
 - Config bodies for `POST /integrations`, `PUT /integrations/{id}` and `POST /integrations/validate` may be JSON or `text/yaml`.
 

@@ -15,7 +15,7 @@ The earlier plan gave 21 hours for everything after the contract. This plan give
 - Access to GitHub, Jira, Okta and email is sorted in the first 30 minutes. A signup that stalls is the biggest risk to the whole plan.
 - Nobody waits on the other. The mock servers exist so neither person has to.
 
-The estimates below add up for each person, but there is **about 15 minutes of slack in total**. Section 13 says what to do at a checkpoint if you are behind.
+The estimates below add up for each person, but there is **about 15 minutes of slack in total**. D-7.6 (host pinning) added about 10 minutes to Person A's Phase 2 and 5 to Person B's, and that comes out of the slack. Section 13 says what to do at a checkpoint if you are behind.
 
 ## 1. Who owns what
 
@@ -28,6 +28,29 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 **Handoffs (agreed in D-8):** `config_loader.validate_config(data)`, `engine.run_action`, `engine.test_action`, `storage.get_results(filter)`, `secrets.get_secret(name)`. B's AI code calls `validate_config` and `get_results`.
 
 **Git:** short-lived branches, merge to `main` at least every hour and at every checkpoint. `main` must always run. No force-pushes.
+
+### The dashboard looks like `docs/ui-prototype.html`
+
+`docs/ui-prototype.html` is the **final visual** for the frontend (D-13). Open it in a browser. Person B builds the React app to match its screens, fields, dropdowns, colours and wording. Do not redesign it.
+
+| Screen in the prototype | Built in |
+|---|---|
+| Integrations (health, filters, enable, Test, Run, Edit) | Phase 1 and 2 |
+| Add integration (six sections, with the Config, Validation and Test tabs on the right) | Phase 1 and 2 |
+| Templates | Phase 2 |
+| Results, Quarantine (with Export all), Run history | Phase 2 |
+| Secrets (write-only, with the pinned host) | Phase 2 |
+| Run lookup panel, and the Test pop-up | Phase 2 |
+
+**What the prototype fakes, and the app replaces with real calls:** the sample data, the validation rules (the app calls `POST /integrations/validate`), the Test and Run results (the app calls `/test` and `/run`), and Save (the app stores the secret first, then the integration).
+
+**What the prototype does not show, and the app still needs:**
+- A Monaco YAML/JSON editor with a toggle. The prototype shows a read-only YAML preview.
+- Editing an existing integration (loading its saved config), and several actions per integration with a "+ Add action" button.
+- The "Generate with AI" and "Summarize" buttons, the alert state on a failing connection, and the visual mapping builder.
+- Inputs built from a template's `requires` block.
+- Loading, empty and error states, paging on the tables, and dark mode.
+
 
 ## 2. The timeline
 
@@ -91,7 +114,7 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] Command line: `python -m app.cli validate <file>` and `python -m app.cli test <integration> <action>`. `[B-2]` `[B-3]` *(10)*
 
 ### Person B (about 100 minutes)
-- [ ] Vite, React, TypeScript, Tailwind and shadcn/ui scaffold, with the app shell and navigation. *(15)*
+- [ ] Vite, React, TypeScript, Tailwind and shadcn/ui scaffold, with the app shell and navigation, matching `docs/ui-prototype.html`. *(15)*
 - [ ] Types generated from `schema/openapi.yaml` and the schemas, and the `api/` client with the one base-URL setting. Prism running. *(10)*
 - [ ] Integrations list: name, category, auth, schemas, action types, health pill, enable toggle, search and filters. *(15)*
 - [ ] Add/Edit page: the form and a Monaco editor side by side, a YAML/JSON toggle, and the **validation panel** calling `POST /integrations/validate`, with errors shown by field path. `[B-2]` *(35)*
@@ -113,7 +136,7 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] **Pagination**, all four styles, with the stop rules in `schema/README.md`. Pages are saved as they arrive, so a failure on page 7 keeps pages 1 to 6. `[FR-3]` *(25)*
 - [ ] **Normalizer** complete: every transform, `value_map`, `datetime`, `default`. **Quarantine** with the three reasons. `error_when`, `{{now - 24h}}`, `rate_limit.min_interval_ms`. `[FR-5]` `[FR-9]` *(25)*
 - [ ] **Storage** with SQLAlchemy: integrations, `users`, `devices`, `alerts` (upsert on `(source, id)`), quarantine and runs, plus the unique index that allows one `running` run per action. Postgres, with SQLite for tests. `[FR-11]` *(25)*
-- [ ] **Secrets**: the Fernet store and `PUT /secrets/{name}`, checked before the environment. `GET /secrets` lists names only. `[FR-6]` *(15)*
+- [ ] **Secrets**: the Fernet store and `PUT /secrets/{name}` (which takes `{value, host}`), checked before the environment. `GET /secrets` lists names, `set` and `host`, never values. **Pin each secret to its host (D-7.6):** the engine checks the host on every request, including next-page links and redirects, and fails with `secret_host_mismatch`. A secret from `.env` may carry `SECRET_<NAME>_HOST`. `[FR-6]` *(25)*
 - [ ] **`runner`** in `scheduler/`: run an action, save results and the run record, return the result. *(15)*
 - [ ] **API**: every route in `schema/openapi.yaml`. Pull runs return `202` and lookups return `200`. A repeat returns `409`, and a failed lookup returns `502 run_failed`. Templates load from `templates/`. *(40)*
 - [ ] Run GitHub, Jira and Okta for real, and fix the three configs in `templates/` where the real API differs. *(5, then continuing)*
@@ -121,7 +144,7 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 
 ### Person B (about 150 minutes)
 - [ ] Add/Edit page complete: auth fields that change with the type, pull and lookup fields, pagination for each style, the inputs table, the mapping table for the chosen schema, `error_when`, alerts, and the inputs built from the template's `requires` block. `[B-5]` *(30)*
-- [ ] **Token and password entry** (D-7.5): a password-type value field next to each secret name in the Add/Edit form (**API key**, **Token**, or **Password or API token**, by auth type; one per name in a template's `requires.secrets`). It is write-only, shows `set` or `not set` from `GET /secrets`, and stores the value with `PUT /secrets/{name}` before it saves the integration. On `501` it says to set `SECRET_<NAME>` in the environment and still saves. `[FR-6]` `[B-5]` *(10)*
+- [ ] **Token and password entry** (D-7.5): a password-type value field next to each secret name in the Add/Edit form (**API key**, **Token**, or **Password or API token**, by auth type; one per name in a template's `requires.secrets`). It is write-only, shows `set` or `not set` from `GET /secrets`, and stores the value with `PUT /secrets/{name}` before it saves the integration, sending the host of the `base_url` so the secret is pinned to it (D-7.6). On `501` it says to set `SECRET_<NAME>` in the environment and still saves. `[FR-6]` `[B-5]` *(15)*
 - [ ] Template gallery, with a "use this template" button that fills the form. `[B-5]` *(15)*
 - [ ] Results page: a schema selector, a source filter, and a table or JSON view. *(15)*
 - [ ] Quarantine page with filters and **Export all**. `[FR-9]` *(15)*
@@ -139,6 +162,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] A pull across several pages fills the table, and the dirty mock dataset fills the Quarantine page.
 - [ ] Validation and Test run against the real API.
 - [ ] A key typed into the Add form, and one set on the Secrets screen, are each used by a real run.
+- [ ] A secret pinned to `api.github.com` is refused for a config that points somewhere else (`secret_host_mismatch`), and nothing is sent.
 
 ## 7. Phase 3: reliability and AI (11:00pm to 12:30am)
 

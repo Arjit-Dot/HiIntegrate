@@ -123,5 +123,25 @@
     "records_invalid": 0,
     "retries": 0,
     "error": null
+  },
+  {
+    "run_id": "run-0008",
+    "integration": "github",
+    "action": "list_members",
+    "mode": "pull",
+    "trigger": "manual",
+    "status": "failed",
+    "started_at": "2026-01-01T09:40:00Z",
+    "finished_at": "2026-01-01T09:40:00Z",
+    "duration_ms": 12,
+    "pages_fetched": 0,
+    "records_pulled": 0,
+    "records_valid": 0,
+    "records_invalid": 0,
+    "retries": 0,
+    "error": {
+      "code": "secret_host_mismatch",
+      "message": "Refused. The secret github_token is pinned to api.github.com, but this request goes to attacker.example.com. Nothing was sent."
+    }
   }
 ]

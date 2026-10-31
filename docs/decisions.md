@@ -71,6 +71,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-10 | Tech choices and conventions | Locked |
 | D-11 | Golden fixtures | Locked. Files written, with synthetic samples |
 | D-12 | Build-speed decisions (closing Phase 0) | Locked (decided on the team's behalf) |
+| D-13 | The frontend visual | Locked |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -111,12 +112,13 @@ One line per decision. Details and reasons are in the sections below.
 | D-5.2 | Health view | 5 statuses from the latest finished `schedule` or `manual` run; `test` runs ignored | FR-10 | Extends roadmap |
 | D-5.3 | Alert rule | Email once when `consecutive_failures` reaches the threshold; resets on success | B-4 | default, approved |
 | D-6 | API contract | `/api/v1`, JSON, routes as listed; pull runs return 202, lookups 200; unpaged quarantine export; no API login in v1 | FR-10, B-2, B-3, B-5 | default, approved |
-| D-7 | Secrets | Env vars until Checkpoint 1, encrypted store (Fernet) by Checkpoint 2 (agreed); write-only API with redaction; user-chosen secret names; Git rules; token and password entry in the form (all agreed) | FR-6 | agreed |
+| D-7 | Secrets | Env vars until Checkpoint 1, encrypted store (Fernet) by Checkpoint 2 (agreed); write-only API with redaction; user-chosen secret names; Git rules; token and password entry in the form; each secret pinned to a host (all agreed) | FR-6 | agreed |
 | D-8 | Module boundaries | Five handoff functions; one `runner` runs, saves, scores health and alerts | None directly | default, approved |
 | D-9 | Mock servers | Prism for the frontend; a local mock API on 8001 for failure tests | FR-3, FR-7, FR-8, FR-9 | default, approved |
 | D-10 | Tech and conventions | Stateless FastAPI; APScheduler in a separate worker; SQLAlchemy and Postgres (SQLite for tests); React with Vite behind nginx; Compose | None directly | Claude, approved |
 | D-11 | Golden fixtures | Config, raw pages, normalized output, quarantine entry, run and health examples, device and alert samples | None directly | default, approved |
 | D-12 | Build-speed decisions | `https` only (local `http` allowed); no API login; any SMTP server; hash is 32/40/64 hex; Claude model from `LLM_MODEL`; worker syncs every 15 s; run IDs `run-<n>` | None directly | Claude, on the team's behalf |
+| D-13 | The frontend visual | `docs/ui-prototype.html` is the final visual; Person B builds the app to match it | FR-10, B-2, B-3, B-5 | agreed |
 
 ---
 
@@ -775,7 +777,7 @@ Three points. Points 1 and 2 were agreed one by one. Point 3 was set by default.
 | `retries` | Retries used | |
 | `error` | `code` and `message` | Empty unless `failed` |
 
-`error.code` is one of `auth_failed`, `connection_error`, `timeout`, `server_error`, `rate_limited`, `bad_response`, `api_error` and `client_error`. `api_error` is used when `error_when` fires. `bad_response` means the records were not where `records_path` says.
+`error.code` is one of `auth_failed`, `connection_error`, `timeout`, `server_error`, `rate_limited`, `bad_response`, `api_error`, `secret_host_mismatch` and `client_error`. `api_error` is used when `error_when` fires. `bad_response` means the records were not where `records_path` says.
 
 **Why**
 - The run record is the single source for the run history page, the health view and the "497 valid, 3 invalid" summary, so everything those need is stored on it.
@@ -904,7 +906,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 
 **Covers:** FR-6 · **Source:** agreed (extends the roadmap and `changes-v2` C-7)
 
-**Status:** all five points are agreed.
+**Status:** all six points are agreed.
 
 ### D-7.1: Where secret values live (agreed)
 
@@ -928,7 +930,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 ### D-7.2: What the API and logs may show (agreed)
 
 **Decision**
-- The API is **write-only**. `PUT /secrets/{name}` sets a value, and `GET /secrets` lists names with `set` and `updated_at`. No route ever returns a value.
+- The API is **write-only**. `PUT /secrets/{name}` sets a value, and `GET /secrets` lists names with `set`, `host` and `updated_at`. No route ever returns a value.
 - Replacing a secret is the only way to change it. A value can't be read back or edited in place.
 - `PUT /secrets/{name}` only works once the encrypted store exists (Phase 2). Until then it returns `501 unsupported`, because environment variables are the only source (D-7.1). The route is in `openapi.yaml` from the start so the frontend can build the Secrets screen against the mock.
 - Logs, error responses and test responses redact secret values and `Authorization` headers.
@@ -952,14 +954,14 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 ### D-7.4: Keeping secrets out of Git (agreed)
 
 - `.gitignore` includes `.env`, `*.db` and any local secrets folder.
-- `.env.example` holds placeholder names only.
+- There is **no `.env.example`**. The README lists the variable names, with no values, so there is no file to fill in and commit by mistake. Every `.env*` file is ignored.
 - `ENCRYPTION_KEY` comes from the environment and is never committed.
 - Run a secret scanner (for example gitleaks) before the first push and again at Phase 4, including the Git history.
 - A real key that was ever committed is treated as leaked and rotated.
 - Secrets are never sent to the AI.
 
 **Why**
-- The organizers' goal is that secrets are never committed. `.gitignore` stops the common mistakes, and a placeholder-only `.env.example` shows what to set without containing a real value.
+- The organizers' goal is that secrets are never committed. `.gitignore` stops the common mistakes, and listing the variable names in the README (with no values) shows what to set.
 - A scanner catches what `.gitignore` can't: a key pasted into a source file, a sample response or a doc, including in earlier commits.
 - A secret that reached Git history can't be fully removed, because copies may exist elsewhere. The safe response is to replace it.
 - Keeping secrets away from the AI means a prompt or a log of one can never leak a key.
@@ -979,6 +981,33 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 - D-7.1 planned for keys to be entered through the dashboard, and the add-a-source form (B-5) is where a user is already thinking about the login. Entering the key there avoids editing environment files and finishing on another screen.
 - Storing the secret before the integration means an integration never points at a secret that was not saved.
 - Keeping the field write-only is what lets a stolen browser session or a curious user fail to read keys back.
+
+### D-7.6: Each secret is pinned to a host (agreed)
+
+**Covers:** FR-6 · **Source:** agreed (proposed after asking what a hostile config could do with a real secret name)
+
+**Decision**
+- Every stored secret has a **host**: the only host it may be sent to, such as `api.github.com`. A host is the address part of a URL, with no scheme, path or port.
+- **Where the host comes from:**
+  - The Add/Edit form sends the host of the integration's `base_url`, after `{{vars.x}}` is filled in (`https://{{vars.domain}}.okta.com` becomes `acme.okta.com`).
+  - The Secrets screen asks for the host next to the value.
+  - A secret read from the environment may carry a companion variable, `SECRET_<NAME>_HOST`. Without it the secret still works, but the engine logs a warning that it is not pinned. Once the encrypted store exists, a host is required.
+- **The check:** before **every** request that uses a secret, the engine compares the request's host with the pinned host (exact match, case-insensitive). That includes next-page links taken from a response and redirects. On a mismatch the engine sends nothing and fails the run with `secret_host_mismatch`. A failed lookup returns `502 run_failed` as before.
+- **Changing the destination** means entering the value again for the new host. `PUT /secrets/{name}` takes `{value, host}` and replaces both.
+- `GET /secrets` lists each secret's `host`. The value is still never returned.
+- `POST /integrations/validate` returns a **warning** when the config's host differs from the secret's pinned host. The run itself refuses.
+
+**Why**
+- The `SECRET_` prefix (D-7.1) stops a config reading variables that are not secrets, but it does not stop a config naming a **real** secret and pointing it at someone else's server. A pasted config, a template or an AI draft could do that, and so could an edit to an existing integration.
+- Checking at the moment of sending is what also covers a malicious next-page link or redirect. A check at save time would not.
+- Entering the value again for a new host is a deliberate pause, so a change of destination cannot happen unnoticed.
+
+**Limits**
+- It stops silent exfiltration. It cannot stop a person from deliberately pinning a secret to a bad host.
+- Port numbers and subdomains are not part of the match: `acme.okta.com` is not `okta.com`.
+- Secrets in `.env` without a companion `_HOST` variable are unpinned, and the engine only warns.
+
+**Test:** the mock API, with a config whose host differs from the secret's.
 
 ---
 
@@ -1071,7 +1100,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 
 - **Ports:** backend 8000, mock API 8001, Prism mock 4010, frontend 5173 (Vite in development, nginx in Compose). Postgres 5432, internal to Compose only.
 - **CORS:** allows `localhost:5173` in development. In Compose, nginx forwards `/api` to the backend, so the browser sees one origin.
-- **`.env.example`** lists placeholder names only: `SECRET_*`, `DATABASE_URL`, `ENCRYPTION_KEY`, `LLM_API_KEY`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_FROM`, `POSTGRES_PASSWORD`.
+- **Environment variables:** the README lists the names, with no values: `SECRET_*`, `DATABASE_URL`, `ENCRYPTION_KEY`, `LLM_API_KEY`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_FROM`, `POSTGRES_PASSWORD`.
 - **Git:** short-lived branches merged to `main` often. Any change in `schema/` needs the other person's approval and a line in `docs/decisions.md`. The end of Phase 0 is tagged `contract-v1`.
 
 **Not built for scale in v1** (the seams exist, the work doesn't)
@@ -1150,6 +1179,20 @@ One shared set of examples that both people treat as the truth:
 **Why**
 - These were the last open questions. Each one blocked someone's work, and the choice that is fastest to build was taken every time.
 - None of them changes the contract files, except the `https` rule and the hash pattern, which are now in the reference check and the schema README.
+
+## D-13: The frontend visual
+
+**Covers:** FR-10, B-2, B-3, B-5 · **Source:** agreed
+
+**Decision**
+- `docs/ui-prototype.html` is the **final visual** for the dashboard: the screens, the fields, the dropdowns, the colours and the wording. Person B builds the React app to match it.
+- It is a single file with sample data. It is not the app, and it is not connected to the backend.
+- It already includes the write-only token and password field with the pinned host (D-7.5, D-7.6), and a Run panel for lookups with simulated failures.
+- What it does not show, and the app still needs, is listed in `roadmap.md`, under "The dashboard looks like `docs/ui-prototype.html`".
+
+**Why**
+- Both people can open one file and see the same dashboard, so the frontend does not drift from what was agreed.
+- The design is already tested against the contract: the configs it builds were checked against `schema/integration.schema.json`.
 
 ---
 
@@ -1247,6 +1290,22 @@ Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. 
 |---|---|
 | Entering a token or password | Added as D-7.5. The Add/Edit form gets a write-only value field next to each secret name. The Secrets screen already planned the same field. No API change was needed, because `PUT /secrets/{name}` and `GET /secrets` already exist |
 
+### R-8: Host pinning and the final visual
+
+| Item | Outcome |
+|---|---|
+| Secret-to-host pinning | Added as D-7.6. It changes `PUT /secrets/{name}` (takes `host`), `GET /secrets` (returns `host`) and the run error codes (`secret_host_mismatch`). Because `schema/` changed after `contract-v1`, it needs the other person's approval and a new tag |
+| The dashboard | `docs/ui-prototype.html` was restored from Git history, given the token and password field with the pinned host, and made the final visual (D-13) |
+
+### R-9: `.env.example` removed and history rewritten
+
+| Item | Outcome |
+|---|---|
+| What happened | Real credentials were typed into `.env.example`, and a `git add -A` committed and pushed them (commit `79c3a3f`, on `main`, a branch and the `contract-v1` tag) |
+| Fix | The commit was rebuilt without the credentials. `main`, `docs/phase0-contract` and the `contract-v1` tag were force-pushed to the clean history. `.env.example` was deleted, and the README lists the variable names instead. Every `.env*` file is now ignored |
+| What it does not fix | Anything that already fetched the old commit still has the values, so every one must be rotated. The old commit may stay viewable by its hash on GitHub until GitHub removes it |
+| Rule | Stage files by name with `git add <file>`, never `git add -A`, and read `git diff --staged` first. Run a secret scanner before every push |
+
 ---
 
 ## Open items
@@ -1258,4 +1317,5 @@ Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. 
 | The raw samples in `samples/` are synthetic, not captured live | Test realism | Replace when access is confirmed |
 | `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 1 and 2 |
 | Rate-limit state (`min_interval_ms`) is per process in v1, so it needs shared storage before running more than one worker (D-10) | Scaling out | After v1 |
-| Tag `contract-v1` once this branch is merged to `main` | The contract is frozen | Right after the merge |
+| `schema/` changed after the `contract-v1` tag (D-7.6). The other person must approve, then tag `contract-v1.1` | The frozen contract | Before the build starts on secrets |
+| **Rotate every credential that was in the old `.env.example`** (GitHub token, Jira token and email, Okta token and domain, Slack webhook, VirusTotal key, AbuseIPDB key). Removing it from Git history does not undo the exposure | Security | Now, by the person who owns each credential |

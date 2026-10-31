@@ -1,0 +1,1094 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integration Platform: UI prototype</title>
+<style>
+:root{
+  --bg:#f5f6fb; --card:#fff; --ink:#1b2430; --muted:#667085; --line:#e4e8f0;
+  --accent:#4f46e5; --accent-soft:#eef0ff; --accent-ink:#3730a3;
+  --ok:#15803d; --ok-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7;
+  --bad:#b91c1c; --bad-bg:#fee2e2; --off:#64748b; --off-bg:#e8ecf2; --info-bg:#e0f2fe; --info:#0369a1;
+  --radius:12px; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+h1,h2,h3{margin:0;line-height:1.25}
+h1{font-size:22px} h2{font-size:16px} h3{font-size:14px}
+code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.topbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:18px;padding:0 24px;height:56px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;white-space:nowrap}
+.logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#4338ca);display:grid;place-items:center;color:#fff;font-size:15px}
+.nav{display:flex;gap:2px;flex:1;overflow-x:auto}
+.nav button{border:0;background:none;padding:8px 12px;border-radius:8px;color:var(--muted);font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+.nav button:hover{background:#f1f3f9;color:var(--ink)}
+.nav button.active{background:var(--accent-soft);color:var(--accent-ink)}
+.proto{font-size:12px;background:var(--warn-bg);color:var(--warn);padding:4px 10px;border-radius:999px;font-weight:600;white-space:nowrap}
+main{max-width:1280px;margin:0 auto;padding:24px}
+.tab{display:none} .tab.active{display:block}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.page-head p{margin:4px 0 0;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card-pad{padding:18px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn:hover{background:#4338ca}
+.btn.secondary{background:#fff;color:var(--ink);border-color:var(--line)}
+.btn.secondary:hover{background:#f6f7fb}
+.btn.small{padding:4px 10px;font-size:12.5px}
+.btn.danger{background:#fff;color:var(--bad);border-color:#f3c6c6}
+input[type=text],input[type=number],input[type=password],select,textarea{width:100%;border:1px solid #d5dbe6;border-radius:8px;padding:8px 10px;font:inherit;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid #c7cbff;border-color:var(--accent)}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23667085' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+textarea{resize:vertical;min-height:64px}
+.toolbar input,.toolbar select{width:auto;min-width:150px}
+label{display:block;font-weight:600;font-size:12.5px;margin-bottom:5px}
+label.req::after{content:" *";color:var(--bad)}
+.hint{color:var(--muted);font-size:12px;margin-top:4px}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);background:#fafbfd;white-space:nowrap}
+td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.tablewrap{overflow-x:auto}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill.healthy,.pill.success,.pill.set{background:var(--ok-bg);color:var(--ok)}
+.pill.degraded,.pill.running,.pill.notset{background:var(--warn-bg);color:var(--warn)}
+.pill.failing,.pill.failed{background:var(--bad-bg);color:var(--bad)}
+.pill.disabled,.pill.never_run{background:var(--off-bg);color:var(--off)}
+.pill.schema{background:var(--accent-soft);color:var(--accent-ink)}
+.pill.trigger{background:var(--info-bg);color:var(--info)}
+.pill.pull{background:#e0e7ff;color:#3730a3}
+.pill.lookup{background:#f3e8ff;color:#6b21a8}
+.muted{color:var(--muted)} .small{font-size:12px}
+.name{font-weight:700}
+.switch{position:relative;display:inline-block;width:38px;height:22px}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:#cbd2de;border-radius:999px;cursor:pointer;transition:.15s}
+.slider::before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.switch input:checked + .slider{background:var(--accent)}
+.switch input:checked + .slider::before{transform:translateX(16px)}
+/* add / edit */
+.layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:20px;align-items:start}
+@media(max-width:1020px){.layout{grid-template-columns:1fr}}
+.sticky{position:sticky;top:76px}
+.section{padding:18px;border-bottom:1px solid var(--line)}
+.section:last-child{border-bottom:0}
+.section h2{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.step{width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center;font-size:12px;font-weight:700}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.grid .full{grid-column:1/-1}
+@media(max-width:620px){.grid,.grid.three{grid-template-columns:1fr}}
+.inline{display:flex;gap:8px;align-items:center}
+.callout{background:var(--accent-soft);border:1px solid #d9dcff;color:var(--accent-ink);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+.callout ul{margin:6px 0 0;padding-left:18px}
+.callout .star{color:var(--bad);font-weight:700}
+.maprow{display:grid;grid-template-columns:130px minmax(0,1fr) 130px 64px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line)}
+.maprow:last-child{border-bottom:0}
+.maprow .vm{grid-column:2/-1}
+.maphead{display:grid;grid-template-columns:130px minmax(0,1fr) 130px 64px;gap:8px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding-bottom:6px;border-bottom:1px solid var(--line)}
+.field{font-weight:700;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.tag{font-size:10.5px;background:var(--off-bg);color:var(--off);border-radius:6px;padding:1px 6px;margin-left:6px;font-family:-apple-system,sans-serif;font-weight:600}
+.inrow{display:grid;grid-template-columns:minmax(0,1fr) 120px minmax(0,1fr) 70px 34px;gap:8px;align-items:center;margin-bottom:8px}
+.tabs{display:flex;gap:4px;padding:10px 12px 0;border-bottom:1px solid var(--line)}
+.tabs button{border:0;background:none;padding:8px 12px;font:inherit;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer}
+.tabs button.active{color:var(--accent-ink);border-bottom-color:var(--accent)}
+.pane{display:none;padding:16px} .pane.active{display:block}
+pre{margin:0;background:#0f172a;color:#dbe4f3;border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;line-height:1.55;max-height:520px}
+.issue{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;margin-bottom:8px;background:var(--bad-bg);color:#7f1d1d}
+.issue.ok{background:var(--ok-bg);color:#14532d}
+.issue .p{font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two h3{margin-bottom:6px;font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.missing{display:inline-block;background:var(--warn-bg);color:var(--warn);padding:2px 8px;border-radius:6px;margin:0 6px 6px 0;font-size:12px;font-family:ui-monospace,Menlo,monospace}
+.actions-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+/* cards grid */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.tcard{padding:18px;display:flex;flex-direction:column;gap:10px}
+.tcard p{margin:0;color:var(--muted)}
+.tcard .meta{display:flex;gap:6px;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:6px 12px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button.active{background:var(--accent-soft);color:var(--accent-ink)}
+.modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:14px;max-width:720px;width:100%;max-height:88vh;overflow:auto;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.toast{position:fixed;right:20px;bottom:20px;background:#111827;color:#fff;padding:10px 16px;border-radius:10px;opacity:0;transform:translateY(8px);transition:.2s;z-index:60;pointer-events:none;max-width:360px}
+.toast.show{opacity:1;transform:none}
+.hint.err{color:var(--bad);font-weight:600}
+.runbox{margin-top:14px}
+.note{margin:18px 0 0;color:var(--muted);font-size:12.5px;text-align:center}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><div class="logo">⇄</div>Integration Platform</div>
+  <nav class="nav" id="nav">
+    <button data-tab="integrations" class="active">Integrations</button>
+    <button data-tab="add">Add integration</button>
+    <button data-tab="templates">Templates</button>
+    <button data-tab="results">Results</button>
+    <button data-tab="quarantine">Quarantine</button>
+    <button data-tab="runs">Run history</button>
+    <button data-tab="secrets">Secrets</button>
+  </nav>
+  <span class="proto">Prototype · sample data</span>
+</header>
+
+<main>
+
+<!-- ============ INTEGRATIONS ============ -->
+<section class="tab active" id="tab-integrations">
+  <div class="page-head">
+    <div>
+      <h1>Integrations</h1>
+      <p>One row per connected tool. Health comes from the latest finished scheduled or manual run. <b>Run</b> calls a lookup on demand.</p>
+    </div>
+    <button class="btn" data-goto="add">+ Add integration</button>
+  </div>
+  <div class="toolbar" style="margin-bottom:14px">
+    <input type="text" id="f-search" placeholder="Search by name">
+    <select id="f-category">
+      <option value="">All categories</option>
+      <option>identity</option><option>threat_intel</option><option>ticketing</option><option>alerting</option><option>other</option>
+    </select>
+    <select id="f-status">
+      <option value="">All statuses</option>
+      <option>healthy</option><option>degraded</option><option>failing</option><option>never_run</option><option>disabled</option>
+    </select>
+    <select id="f-mode">
+      <option value="">All action types</option>
+      <option value="pull">Has pull actions</option>
+      <option value="lookup">Has lookup actions</option>
+    </select>
+  </div>
+  <div class="card tablewrap">
+    <table>
+      <thead><tr><th>Integration</th><th>Category</th><th>Auth</th><th>Fills</th><th>Actions</th><th>Schedule</th><th>Last run</th><th>Records</th><th>Health</th><th>Enabled</th><th></th></tr></thead>
+      <tbody id="int-body"></tbody>
+    </table>
+  </div>
+  <p class="note"><span class="pill pull">pull</span> runs on a schedule and fetches many records. <span class="pill lookup">lookup</span> runs on demand and returns one record. One integration can have both.</p>
+</section>
+
+<!-- ============ ADD / EDIT ============ -->
+<section class="tab" id="tab-add">
+  <div class="page-head">
+    <div>
+      <h1>Add integration</h1>
+      <p>Fill in the form. The config on the right is built live, and nothing is saved until it validates.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>What the platform requires</strong> <span class="muted">(fields marked <span class="star">*</span>)</span>
+    <ul>
+      <li>An integration <b>name</b> (a short slug), a <b>base URL</b>, and an <b>authentication</b> method with a <b>secret name</b> and its value (a token or password, entered once, never shown again).</li>
+      <li>At least one <b>action</b>: a <b>mode</b> (pull or lookup), a <b>target schema</b>, a <b>method</b> and a <b>path</b>.</li>
+      <li>A mapping for <b>id</b>. The platform adds <code>source</code> and <code>fetched_at</code> itself.</li>
+    </ul>
+  </div>
+
+  <div class="layout">
+    <form id="form" class="card" autocomplete="off" onsubmit="return false">
+
+      <div class="section">
+        <h2><span class="step">1</span>Identity</h2>
+        <div class="grid">
+          <div><label class="req" for="name">Name</label><input type="text" id="name" value="generic-user"><div class="hint">Slug: lowercase letters, digits, - or _. It becomes the <code>source</code> on every record.</div></div>
+          <div><label for="display_name">Display name</label><input type="text" id="display_name" value="Generic user source"></div>
+          <div><label for="category">Category</label>
+            <select id="category"><option>identity</option><option>threat_intel</option><option>ticketing</option><option>alerting</option><option selected>other</option></select>
+          </div>
+          <div class="inline" style="padding-top:22px"><label class="switch" style="margin:0"><input type="checkbox" id="enabled" checked><span class="slider"></span></label><span>Enabled (scheduled runs happen)</span></div>
+          <div class="full"><label for="description">Description</label><textarea id="description">Starter for any service that lists users.</textarea></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2><span class="step">2</span>Connection</h2>
+        <div class="grid">
+          <div class="full"><label class="req" for="base_url">Base URL</label><input type="text" id="base_url" class="mono" value="https://{{vars.domain}}.example.com"><div class="hint">May contain <code>{{vars.x}}</code>, so one template works for any tenant. No other placeholders here.</div></div>
+          <div class="full"><label for="vars">Variables</label><textarea id="vars" class="mono" placeholder="domain=acme">domain=acme</textarea><div class="hint">One <code>name=value</code> per line. These are plain settings, not secrets.</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2><span class="step">3</span>Authentication</h2>
+        <div class="grid">
+          <div><label class="req" for="authType">Type</label>
+            <select id="authType"><option value="bearer" selected>bearer (Authorization: Bearer …)</option><option value="api_key">api_key (header or query)</option><option value="basic">basic (username and token)</option></select>
+          </div>
+          <div><label class="req" for="secret">Secret name</label><input type="text" id="secret" class="mono" value="api_token"><div class="hint">The <b>name</b> goes in the config. The value never does.</div></div>
+          <div class="full"><label for="secretValue" id="secretValueLabel">Token</label>
+            <input type="password" id="secretValue" autocomplete="new-password" placeholder="Paste the value here">
+            <div class="hint"><span id="secretState"></span> Write-only: stored encrypted, never shown again, and never part of the config. Leave it blank to keep the current value.</div>
+            <div class="hint" id="secretHost"></div>
+          </div>
+          <div data-auth="api_key" hidden><label for="authIn">Placement</label><select id="authIn"><option>header</option><option>query</option></select></div>
+          <div data-auth="api_key" hidden><label class="req" for="authName">Header or parameter name</label><input type="text" id="authName" value="Authorization"></div>
+          <div data-auth="api_key" hidden><label for="authPrefix">Prefix</label><input type="text" id="authPrefix" value="" placeholder='e.g. "SSWS " or "Token "'></div>
+          <div data-auth="basic" hidden><label class="req" for="authUser">Username</label><input type="text" id="authUser" placeholder="me@company.com"><div class="hint">Not a secret, so it is kept in the config.</div></div>
+        </div>
+        <div class="hint" style="margin-top:10px">OAuth2 is reserved in the schema and not available yet.</div>
+      </div>
+
+      <div class="section">
+        <h2><span class="step">4</span>Action</h2>
+        <div class="grid">
+          <div><label class="req" for="actionName">Action name</label><input type="text" id="actionName" class="mono" value="list_users"></div>
+          <div><label class="req" for="mode">Mode</label>
+            <select id="mode"><option value="pull" selected>pull (scheduled, many records)</option><option value="lookup">lookup (on demand, one record)</option></select>
+          </div>
+          <div><label class="req" for="schema">Target schema</label>
+            <select id="schema"><option value="user" selected>user</option><option value="device">device</option><option value="alert">alert</option></select>
+          </div>
+          <div><label class="req" for="method">Method</label><select id="method"><option>GET</option><option>POST</option></select></div>
+          <div class="full"><label class="req" for="path">Path</label><input type="text" id="path" class="mono" value="/api/users"><div class="hint">Lookups may use <code>{{input.name}}</code>. Pulls may not.</div></div>
+          <div class="full"><label for="query">Query parameters</label><textarea id="query" class="mono" placeholder="limit=100"></textarea><div class="hint">One <code>name=value</code> per line. <code>{{now - 24h}}</code> works for time windows.</div></div>
+          <div class="full"><label for="records">Records path</label><input type="text" id="records" class="mono" value="items"><div class="hint">Where the list sits in the response. <code>@</code> means the response itself.</div></div>
+        </div>
+
+        <div class="pull-only" style="margin-top:16px">
+          <div class="grid">
+            <div><label class="req">Schedule</label>
+              <div class="inline"><span class="muted">every</span><input type="number" id="schedN" value="15" min="1" style="width:90px">
+              <select id="schedU" style="width:120px"><option value="s">seconds</option><option value="m" selected>minutes</option><option value="h">hours</option><option value="d">days</option></select></div>
+              <div class="hint">Minimum 10 seconds.</div></div>
+            <div><label for="pgType">Pagination</label>
+              <select id="pgType"><option value="none">none</option><option value="next_link">next_link</option><option value="offset" selected>offset</option><option value="page_number">page_number</option><option value="cursor">cursor</option></select>
+            </div>
+            <div data-pg="next_link" hidden><label for="pgSource">Link source</label><select id="pgSource"><option>header</option><option>body</option></select></div>
+            <div data-pg="next_link" hidden><label for="pgHeader">Header or body path</label><input type="text" id="pgHeader" value="Link"></div>
+            <div data-pg="offset"><label for="pgOffset">Offset parameter</label><input type="text" id="pgOffset" value="offset"></div>
+            <div data-pg="offset"><label for="pgLimitParam">Limit parameter</label><input type="text" id="pgLimitParam" value="limit"></div>
+            <div data-pg="offset"><label for="pgLimit">Page size</label><input type="number" id="pgLimit" value="100" min="1"></div>
+            <div data-pg="offset"><label for="pgTotal">Total path (optional)</label><input type="text" id="pgTotal" placeholder="meta.total"></div>
+            <div data-pg="page_number" hidden><label for="pgPageParam">Page parameter</label><input type="text" id="pgPageParam" value="page"></div>
+            <div data-pg="page_number" hidden><label for="pgStart">First page</label><input type="number" id="pgStart" value="1" min="0"></div>
+            <div data-pg="cursor" hidden><label for="pgCursorParam">Cursor parameter</label><input type="text" id="pgCursorParam" value="after"></div>
+            <div data-pg="cursor" hidden><label for="pgNextCursor">Next cursor path</label><input type="text" id="pgNextCursor" value="meta.next"></div>
+            <div><label for="maxPages">Max pages</label><input type="number" id="maxPages" value="100" min="1"><div class="hint">Safety cap. Default 100.</div></div>
+          </div>
+        </div>
+
+        <div class="lookup-only" style="margin-top:16px" hidden>
+          <label class="req">Inputs</label>
+          <div class="hint" style="margin:-2px 0 8px">The values the caller must supply. Types are checked before any request is sent.</div>
+          <div id="inputs"></div>
+          <button type="button" class="btn secondary small" id="addInput">+ Add input</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2><span class="step">5</span>Field mapping <span class="pill schema" id="mapSchemaPill">user</span></h2>
+        <div class="hint" style="margin:-6px 0 10px">Left: our field. Right: where to find it in the response (JMESPath). <code>||</code> means "use the first that exists".</div>
+        <div class="maphead"><span>Our field</span><span>Path in response</span><span>Transform</span><span>Required</span></div>
+        <div id="maprows"></div>
+      </div>
+
+      <div class="section">
+        <h2><span class="step">6</span>Errors and alerts</h2>
+        <div class="grid">
+          <div><label for="onInvalid">When a record is invalid</label>
+            <select id="onInvalid"><option value="quarantine" selected>quarantine (save it with the reason)</option><option value="skip">skip (drop it, count it)</option></select>
+          </div>
+          <div class="inline" style="padding-top:22px"><label class="switch" style="margin:0"><input type="checkbox" id="store" checked><span class="slider"></span></label><span>Store results</span></div>
+          <div class="full"><label>Treat a 200 reply as an error when… <span class="muted">(optional)</span></label>
+            <div class="grid three">
+              <input type="text" id="errPath" placeholder="path, e.g. ok">
+              <input type="text" id="errEq" placeholder="equals, e.g. false">
+              <input type="text" id="errMsg" placeholder="message path, e.g. error">
+            </div>
+          </div>
+          <div><label for="afterFailures">Email after this many failed runs in a row</label><input type="number" id="afterFailures" value="3" min="1"></div>
+          <div><label for="recipients">Alert recipients</label><input type="text" id="recipients" placeholder="secops@example.com, oncall@example.com"></div>
+        </div>
+      </div>
+    </form>
+
+    <aside class="card sticky">
+      <div class="tabs">
+        <button type="button" class="active" data-pane="yaml">Config (YAML)</button>
+        <button type="button" data-pane="validate">Validation <span class="pill failed" id="issueCount" hidden>0</span></button>
+        <button type="button" data-pane="test">Test connection</button>
+      </div>
+      <div class="pane active" id="pane-yaml">
+        <div class="actions-bar">
+          <button type="button" class="btn secondary small" id="copyYaml">Copy</button>
+          <button type="button" class="btn secondary small" id="downloadYaml">Download</button>
+        </div>
+        <pre id="yaml"></pre>
+      </div>
+      <div class="pane" id="pane-validate">
+        <div class="actions-bar"><button type="button" class="btn" id="btnValidate">Validate</button><button type="button" class="btn secondary" id="btnSave">Save integration</button></div>
+        <div id="issues"></div>
+      </div>
+      <div class="pane" id="pane-test">
+        <div class="actions-bar"><button type="button" class="btn" id="btnTest">Run test (first page only)</button></div>
+        <div id="testout" class="muted">Calls the service once, then shows the raw reply beside the mapped record and flags paths that were not found.</div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ TEMPLATES ============ -->
+<section class="tab" id="tab-templates">
+  <div class="page-head">
+    <div><h1>Templates</h1><p>Starting points for each record type. Pick one and the form is filled in for you.</p></div>
+  </div>
+  <div class="cards">
+    <div class="card tcard"><div class="meta"><span class="pill schema">user</span><span class="pill trigger">identity</span></div><h2>Generic user source</h2><p>Lists users, with a lookup by ID. Maps id, name, email, status and last login.</p><div class="muted small">Actions: list_users (pull), get_user (lookup)</div><button class="btn" data-template="user">Use this template</button></div>
+    <div class="card tcard"><div class="meta"><span class="pill schema">device</span><span class="pill trigger">other</span></div><h2>Generic device source</h2><p>Lists devices, with a lookup by ID. Maps id, hostname, ip, os, owner and last seen.</p><div class="muted small">Actions: list_devices (pull), get_device (lookup)</div><button class="btn" data-template="device">Use this template</button></div>
+    <div class="card tcard"><div class="meta"><span class="pill schema">alert</span><span class="pill trigger">alerting</span></div><h2>Generic alert source</h2><p>Lists alerts from the last 24 hours, with a lookup by ID. Normalizes severity.</p><div class="muted small">Actions: list_alerts (pull), get_alert (lookup)</div><button class="btn" data-template="alert">Use this template</button></div>
+  </div>
+  <p class="note">Each template asks for a service domain and one secret, which comes from its <code>requires</code> block.</p>
+</section>
+
+<!-- ============ RESULTS ============ -->
+<section class="tab" id="tab-results">
+  <div class="page-head">
+    <div><h1>Results</h1><p>Normalized records, one table per schema.</p></div>
+    <div class="toolbar">
+      <select id="r-schema"><option value="user">user</option><option value="device">device</option><option value="alert">alert</option></select>
+      <select id="r-source"><option value="">All sources</option></select>
+      <div class="seg" id="r-view"><button class="active" data-view="table">Table</button><button data-view="json">JSON</button></div>
+    </div>
+  </div>
+  <div class="card tablewrap" id="r-table"></div>
+  <pre id="r-json" hidden></pre>
+  <p class="note">Every record carries <code>source</code> and <code>fetched_at</code>, added by the platform. A record is identified by <code>(source, id)</code>.</p>
+</section>
+
+<!-- ============ QUARANTINE ============ -->
+<section class="tab" id="tab-quarantine">
+  <div class="page-head">
+    <div><h1>Quarantine</h1><p>Records that failed the rules. The run carried on without them.</p></div>
+    <div class="toolbar">
+      <select id="q-reason"><option value="">All reasons</option><option>missing_required_field</option><option>transform_failed</option><option>invalid_value</option></select>
+      <select id="q-schema"><option value="">All schemas</option><option>user</option><option>device</option><option>alert</option></select>
+      <button class="btn" id="q-export">Export all (JSON)</button>
+    </div>
+  </div>
+  <div class="card tablewrap">
+    <table><thead><tr><th>Source</th><th>Action</th><th>Schema</th><th>Run</th><th>Reason</th><th>Field</th><th>Quarantined at</th><th>Original record</th></tr></thead><tbody id="q-body"></tbody></table>
+  </div>
+  <p class="note">Export returns every quarantined record in one file, not one page at a time.</p>
+</section>
+
+<!-- ============ RUNS ============ -->
+<section class="tab" id="tab-runs">
+  <div class="page-head">
+    <div><h1>Run history</h1><p>One row per run, newest first.</p></div>
+    <div class="toolbar"><select id="run-status"><option value="">All statuses</option><option>running</option><option>success</option><option>failed</option></select></div>
+  </div>
+  <div class="card tablewrap">
+    <table><thead><tr><th>Run</th><th>Integration</th><th>Action</th><th>Mode</th><th>Trigger</th><th>Status</th><th>Started</th><th>Duration</th><th>Pages</th><th>Pulled</th><th>Valid</th><th>Invalid</th><th>Retries</th><th>Error</th></tr></thead><tbody id="run-body"></tbody></table>
+  </div>
+  <p class="note">Test runs are shown here but ignored by the health view.</p>
+</section>
+
+<!-- ============ SECRETS ============ -->
+<section class="tab" id="tab-secrets">
+  <div class="page-head">
+    <div><h1>Secrets</h1><p>Keys and passwords are kept by name. A value can be set or replaced, and never shown again. Each one is pinned to the host it may be sent to.</p></div>
+  </div>
+  <div class="card tablewrap">
+    <table><thead><tr><th>Name</th><th>Status</th><th>Pinned host</th><th>Updated</th><th style="width:44%">Set or replace value</th></tr></thead><tbody id="sec-body"></tbody></table>
+  </div>
+  <p class="note">Configs refer to a secret by its name only. Values are stored encrypted and are hidden in logs and responses. The platform refuses to send a secret to any host other than the one it is pinned to.</p>
+</section>
+
+</main>
+
+<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2 id="modalTitle">Test result</h2><button class="btn secondary small" id="modalClose">Close</button></div><div id="modalBody"></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ==== CORE START ====
+const SCHEMAS = {
+  user:   { fields: ['id','name','email','status','last_login'], enums: { status: ['active','inactive','suspended','unknown'] }, dates: ['last_login'] },
+  device: { fields: ['id','hostname','ip','os','owner','last_seen'], enums: {}, dates: ['last_seen'] },
+  alert:  { fields: ['id','type','severity','timestamp','description'], enums: { severity: ['low','medium','high','critical','unknown'] }, dates: ['timestamp'] }
+};
+const PRESETS = {
+  user:   { path: '/api/users',   records: 'items', name: 'list_users',   category: 'identity', title: 'Generic user source',   desc: 'Starter for any service that lists users.',
+            map: { id: ['id','string'], name: ['name',''], email: ['email','lowercase'], status: ['status',''], last_login: ['last_login','datetime'] },
+            vm: { status: 'active=active, disabled=inactive, suspended=suspended' }, query: '' },
+  device: { path: '/api/devices', records: 'items', name: 'list_devices', category: 'other',    title: 'Generic device source', desc: 'Starter for any service that lists devices.',
+            map: { id: ['id','string'], hostname: ['hostname',''], ip: ['ip_address',''], os: ['os',''], owner: ['owner',''], last_seen: ['last_seen','datetime'] },
+            vm: {}, query: '' },
+  alert:  { path: '/api/alerts',  records: 'items', name: 'list_alerts',  category: 'alerting', title: 'Generic alert source',  desc: 'Starter for any service that lists alerts or events.',
+            map: { id: ['id','string'], type: ['type',''], severity: ['severity',''], timestamp: ['created_at','datetime'], description: ['message',''] },
+            vm: { severity: 'info=low, warning=medium, error=high, critical=critical' }, query: 'since={{now - 24h}}' }
+};
+const SAMPLE_RAW = {
+  user:   { id: 4021, name: 'Ada Lovelace', email: 'ADA@Acme.com', status: 'disabled' },
+  device: { id: 'd-77', hostname: 'ada-laptop', ip_address: '10.0.0.7', os: 'macOS 15', owner: 'Ada Lovelace', last_seen: 1767225600 },
+  alert:  { id: 'a-1009', type: 'login.failed', severity: 'warning', created_at: '2026-01-01T09:00:00Z', message: 'Bad password for ada@acme.com' }
+};
+const HOSTS = { github: 'api.github.com', jira: 'acme.atlassian.net', okta: 'acme.okta.com', 'generic-device': 'api.example.com', 'old-alerts': 'api.example.com' };
+const SLUG = /^[a-z0-9][a-z0-9_-]*$/;
+const SECRET = /^[A-Za-z0-9_]{1,64}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function parseKV(text) {
+  const o = {};
+  String(text || '').split('\n').forEach(line => {
+    const i = line.indexOf('=');
+    if (i > 0) { const k = line.slice(0, i).trim(), v = line.slice(i + 1).trim(); if (k) o[k] = /^\d+$/.test(v) ? Number(v) : v; }
+  });
+  return o;
+}
+function parseVM(text) {
+  const o = {};
+  String(text || '').split(',').forEach(p => {
+    const i = p.indexOf('=');
+    if (i > 0) { const k = p.slice(0, i).trim(), v = p.slice(i + 1).trim(); if (k && v) o[k] = v; }
+  });
+  return o;
+}
+function parseEq(v) {
+  v = String(v || '').trim();
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+  return v;
+}
+
+function buildConfig(s) {
+  const c = { version: 1, name: s.name };
+  if (s.display_name) c.display_name = s.display_name;
+  c.category = s.category;
+  if (s.description) c.description = s.description;
+  c.enabled = !!s.enabled;
+  const vars = parseKV(s.vars);
+  if (Object.keys(vars).length) c.vars = vars;
+  const req = {};
+  if (Object.keys(vars).length) { req.vars = {}; Object.keys(vars).forEach(k => req.vars[k] = { label: k, example: String(vars[k]) }); }
+  if (s.secret) req.secrets = [s.secret];
+  if (Object.keys(req).length) c.requires = req;
+  c.base_url = s.base_url;
+  const a = { type: s.authType };
+  if (s.authType === 'api_key') { a.in = s.authIn; a.name = s.authName; if (s.authPrefix) a.prefix = s.authPrefix; }
+  if (s.authType === 'basic') a.username = s.authUser;
+  a.secret = s.secret;
+  c.auth = a;
+  const to = String(s.recipients || '').split(',').map(x => x.trim()).filter(Boolean);
+  if (to.length) c.alerts = { after_failures: Number(s.afterFailures) || 3, to };
+
+  const act = { mode: s.mode, target_schema: s.schema };
+  if (s.mode === 'pull') act.schedule = 'every ' + s.schedN + s.schedU;
+  const rq = { method: s.method, path: s.path };
+  const q = parseKV(s.query);
+  if (Object.keys(q).length) rq.query = q;
+  act.request = rq;
+  if (s.mode === 'pull' && s.pgType !== 'none') {
+    const p = { type: s.pgType };
+    if (s.pgType === 'next_link') { p.source = s.pgSource; if (s.pgSource === 'header') p.header = s.pgHeader; else p.path = s.pgHeader; }
+    if (s.pgType === 'offset') { p.offset_param = s.pgOffset; p.limit_param = s.pgLimitParam; p.limit = Number(s.pgLimit) || 100; if (s.pgTotal) p.total_path = s.pgTotal; }
+    if (s.pgType === 'page_number') { p.param = s.pgPageParam; p.start = Number(s.pgStart); p.stop_when_empty = true; }
+    if (s.pgType === 'cursor') { p.cursor_param = s.pgCursorParam; p.next_cursor_path = s.pgNextCursor; }
+    p.max_pages = Number(s.maxPages) || 100;
+    act.pagination = p;
+  }
+  if (s.mode === 'lookup') {
+    const inputs = {};
+    (s.inputs || []).forEach(i => {
+      if (!i.name) return;
+      const o = { type: i.type };
+      if (i.type === 'enum') o.values = String(i.values || '').split(',').map(x => x.trim()).filter(Boolean);
+      o.required = !!i.required;
+      inputs[i.name] = o;
+    });
+    act.inputs = inputs;
+  }
+  act.records_path = s.records || '@';
+  if (s.errPath) act.error_when = { path: s.errPath, equals: parseEq(s.errEq), message_path: s.errMsg };
+  const map = {}, required = [];
+  SCHEMAS[s.schema].fields.forEach(f => {
+    const m = (s.map || {})[f];
+    if (!m || !m.path) return;
+    const vm = parseVM(m.valueMap);
+    if (!m.transform && !Object.keys(vm).length) map[f] = m.path;
+    else {
+      const e = { path: m.path };
+      if (m.transform) e.transform = m.transform;
+      if (Object.keys(vm).length) { e.value_map = vm; e.default = 'unknown'; }
+      map[f] = e;
+    }
+    if (m.required || f === 'id') required.push(f);
+  });
+  act.map = map;
+  act.required = required;
+  act.on_invalid = s.onInvalid;
+  if (!s.store) act.store = false;
+  c.actions = {}; c.actions[s.actionName || 'action'] = act;
+  return c;
+}
+
+function yamlScalar(v) {
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (v === null || v === undefined) return 'null';
+  const s = String(v);
+  if (s === '' || /^\s|\s$/.test(s) || /[:#{}\[\],&*!|>'"%@`]/.test(s) || /^(true|false|null|yes|no|on|off|~|[-+]?\d+(\.\d+)?)$/i.test(s)) return JSON.stringify(s);
+  return s;
+}
+function toYaml(o, ind) {
+  ind = ind || 0;
+  const pad = '  '.repeat(ind);
+  let out = '';
+  Object.keys(o).forEach(k => {
+    const v = o[k];
+    if (Array.isArray(v)) out += pad + k + ': [' + v.map(yamlScalar).join(', ') + ']\n';
+    else if (v && typeof v === 'object') {
+      if (!Object.keys(v).length) out += pad + k + ': {}\n';
+      else out += pad + k + ':\n' + toYaml(v, ind + 1);
+    } else out += pad + k + ': ' + yamlScalar(v) + '\n';
+  });
+  return out;
+}
+
+function placeholderIssues(text, path, ctx) {
+  const issues = [];
+  const re = /\{\{\s*([^}]*?)\s*\}\}/g;
+  let m;
+  while ((m = re.exec(String(text || ''))) !== null) {
+    const t = m[1];
+    const isVars = /^vars\.[A-Za-z_]\w*$/.test(t);
+    const isState = /^state\.[A-Za-z_]\w*$/.test(t);
+    const isNow = /^now(\s*-\s*\d+[smhd])?$/.test(t);
+    const isInput = /^input\.[A-Za-z_]\w*$/.test(t);
+    if (ctx === 'base_url') { if (!isVars) issues.push({ path, message: 'only {{vars.x}} is allowed in base_url, found {{' + t + '}}', severity: 'error' }); }
+    else if (isInput) {
+      if (ctx !== 'lookup') issues.push({ path, message: '{{' + t + '}} is allowed only in lookup actions', severity: 'error' });
+    } else if (!(isVars || isState || isNow)) issues.push({ path, message: 'unknown placeholder {{' + t + '}}. Use vars, input, state or now', severity: 'error' });
+  }
+  return issues;
+}
+
+function hostOf(url, varsText) {
+  const vars = parseKV(varsText);
+  const filled = String(url || '').replace(/\{\{\s*vars\.(\w+)\s*\}\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+  const m = /^https?:\/\/([^/:\s{}]+)/.exec(filled);
+  return m ? m[1].toLowerCase() : '';
+}
+function validateConfig(s, secrets) {
+  const e = [];
+  const add = (path, message, severity) => e.push({ path, message, severity: severity || 'error' });
+  if (!s.name) add('name', 'name is required');
+  else if (!SLUG.test(s.name)) add('name', 'must be a slug: lowercase letters, digits, - or _');
+  if (!s.base_url) add('base_url', 'base_url is required');
+  else {
+    placeholderIssues(s.base_url, 'base_url', 'base_url').forEach(i => e.push(i));
+    if (!/^https?:\/\//.test(s.base_url)) add('base_url', 'should start with https://', 'warning');
+  }
+  if (!s.secret) add('auth.secret', 'secret name is required');
+  else if (!SECRET.test(s.secret)) add('auth.secret', 'must be a name (letters, digits, underscores, up to 64), not a key');
+  if (secrets && s.secret && !s.secretValue) {
+    const known = secrets.find(x => x.name === s.secret), host = hostOf(s.base_url, s.vars);
+    if (known && known.host && host && known.host !== host) add('auth.secret', 'the secret ' + s.secret + ' is pinned to ' + known.host + ', but this base_url goes to ' + host + '. It will be refused unless you enter the value again to pin it to the new host', 'warning');
+  }
+  if (s.authType === 'api_key' && !s.authName) add('auth.name', 'header or parameter name is required for api_key');
+  if (s.authType === 'basic' && !s.authUser) add('auth.username', 'username is required for basic auth');
+
+  const an = s.actionName;
+  const base = 'actions.' + (an || '?');
+  if (!an) add('actions', 'at least one action with a name is required');
+  if (!s.path) add(base + '.request.path', 'path is required');
+  if (!SCHEMAS[s.schema]) add(base + '.target_schema', 'target_schema must be user, device or alert');
+  const ctx = s.mode === 'lookup' ? 'lookup' : 'pull';
+  placeholderIssues(s.path, base + '.request.path', ctx).forEach(i => e.push(i));
+  Object.values(parseKV(s.query)).forEach(v => placeholderIssues(v, base + '.request.query', ctx).forEach(i => e.push(i)));
+  placeholderIssues(s.vars, 'vars', 'vars').forEach(i => e.push(i));
+
+  if (s.mode === 'pull') {
+    const n = Number(s.schedN);
+    const secs = n * ({ s: 1, m: 60, h: 3600, d: 86400 }[s.schedU] || 0);
+    if (!Number.isInteger(n) || n < 1) add(base + '.schedule', 'schedule needs a whole number of 1 or more');
+    else if (secs < 10) add(base + '.schedule', 'minimum interval is 10 seconds');
+    if (s.pgType === 'offset' && (!s.pgOffset || !s.pgLimitParam)) add(base + '.pagination', 'offset paging needs an offset and a limit parameter');
+    if (s.pgType === 'next_link' && !s.pgHeader) add(base + '.pagination', 'next_link needs a header or body path');
+    if (s.pgType === 'page_number' && !s.pgPageParam) add(base + '.pagination.param', 'page_number needs a page parameter');
+    if (s.pgType === 'cursor' && (!s.pgCursorParam || !s.pgNextCursor)) add(base + '.pagination', 'cursor needs a cursor parameter and a next cursor path');
+  } else {
+    const names = (s.inputs || []).map(i => i.name).filter(Boolean);
+    if (!names.length) add(base + '.inputs', 'a lookup must declare at least one input');
+    if (new Set(names).size !== names.length) add(base + '.inputs', 'input names must be unique');
+    (s.inputs || []).forEach(i => { if (i.type === 'enum' && !String(i.values || '').trim()) add(base + '.inputs.' + (i.name || '?'), 'an enum input needs its allowed values'); });
+    const used = [];
+    const grab = t => { const re = /\{\{\s*input\.(\w+)\s*\}\}/g; let m; while ((m = re.exec(t || '')) !== null) used.push(m[1]); };
+    grab(s.path); Object.values(parseKV(s.query)).forEach(grab);
+    used.forEach(u => { if (!names.includes(u)) add(base + '.request', '{{input.' + u + '}} is used but not declared in inputs'); });
+  }
+  const m = (s.map || {});
+  if (SCHEMAS[s.schema]) {
+    if (!m.id || !m.id.path) add(base + '.map.id', 'id must be mapped');
+    SCHEMAS[s.schema].fields.forEach(f => { if (m[f] && m[f].required && !m[f].path) add(base + '.required', f + ' is required but has no path in map'); });
+    Object.keys(SCHEMAS[s.schema].enums).forEach(f => {
+      if (m[f] && m[f].path && !String(m[f].valueMap || '').trim()) add(base + '.map.' + f, f + ' has no value map. Values outside ' + SCHEMAS[s.schema].enums[f].join(', ') + ' will be quarantined', 'warning');
+    });
+  }
+  if (s.errPath || s.errEq || s.errMsg) { if (!s.errPath) add(base + '.error_when.path', 'error_when needs a path'); }
+  const recips = String(s.recipients || '').split(',').map(x => x.trim()).filter(Boolean);
+  recips.forEach(r => { if (!EMAIL.test(r)) add('alerts.to', r + ' is not a valid email address'); });
+  if (recips.length && !(Number(s.afterFailures) >= 1)) add('alerts.after_failures', 'must be 1 or more');
+  return e;
+}
+
+function getPath(obj, expr) {
+  expr = String(expr).trim();
+  if (/^'.*'$/.test(expr)) return expr.slice(1, -1);
+  if (expr === '@') return obj;
+  const parts = expr.match(/[^.\[\]]+|\[\d+\]/g) || [];
+  let cur = obj;
+  for (const p of parts) {
+    if (cur === null || cur === undefined) return undefined;
+    cur = p[0] === '[' ? cur[parseInt(p.slice(1), 10)] : cur[p];
+  }
+  return cur;
+}
+function evalExpr(obj, expr) {
+  for (const alt of String(expr).split('||')) {
+    const v = getPath(obj, alt);
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return undefined;
+}
+function toIso(v) {
+  if (typeof v === 'number' || /^\d+$/.test(String(v))) { let n = Number(v); if (n < 1e11) n *= 1000; return new Date(n).toISOString().replace('.000Z', 'Z'); }
+  const d = new Date(v);
+  return isNaN(d) ? null : d.toISOString().replace('.000Z', 'Z');
+}
+function applyTransform(v, t) {
+  if (v === undefined || v === null) return v;
+  switch (t) {
+    case 'string': return String(v);
+    case 'int': return parseInt(v, 10);
+    case 'float': return parseFloat(v);
+    case 'bool': return ['true', '1', 'yes'].includes(String(v).toLowerCase());
+    case 'lowercase': return String(v).toLowerCase();
+    case 'uppercase': return String(v).toUpperCase();
+    case 'datetime': return toIso(v);
+    default: return v;
+  }
+}
+function runTest(s, now) {
+  const raw = SAMPLE_RAW[s.schema];
+  const mapped = {}, missing = [];
+  SCHEMAS[s.schema].fields.forEach(f => {
+    const m = (s.map || {})[f];
+    if (!m || !m.path) return;
+    let v = evalExpr(raw, m.path);
+    if (v === undefined) { missing.push(f + ' ← ' + m.path); mapped[f] = null; return; }
+    v = applyTransform(v, m.transform);
+    const vm = parseVM(m.valueMap);
+    if (Object.keys(vm).length) v = (v in vm) ? vm[v] : 'unknown';
+    mapped[f] = v;
+  });
+  mapped.source = s.name || '(name)';
+  mapped.fetched_at = now || new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  return { raw, mapped, missing };
+}
+
+const LOOKUPS = {
+  github: [{ action: 'get_user', schema: 'user', key: 'username', store: true, inputs: [{ name: 'username', type: 'string', required: true }] }],
+  jira: [{ action: 'get_user', schema: 'user', key: 'account_id', store: true, inputs: [{ name: 'account_id', type: 'string', required: true }] }],
+  okta: [
+    { action: 'get_user', schema: 'user', key: 'id', store: true, inputs: [{ name: 'id', type: 'string', required: true }] },
+    { action: 'get_device', schema: 'device', key: 'id', store: false, inputs: [{ name: 'id', type: 'string', required: true }] }
+  ],
+  'generic-device': [{ action: 'get_device', schema: 'device', key: 'id', store: false, inputs: [{ name: 'id', type: 'string', required: true }] }]
+};
+const DIRECTORY = {
+  'github:user:ada': { id: '4021', name: 'Ada Lovelace', email: 'ada@acme.com', status: 'active', last_login: '' },
+  'github:user:alan': { id: '4022', name: 'Alan Turing', email: 'alan@acme.com', status: 'active', last_login: '' },
+  'jira:user:u-17': { id: 'u-17', name: 'Grace Hopper', email: 'grace@acme.com', status: 'suspended', last_login: '2025-12-29T14:10:00Z' },
+  'okta:user:00u1': { id: '00u1', name: 'Edsger Dijkstra', email: 'edsger@acme.com', status: 'inactive', last_login: '2025-11-02T08:30:00Z' },
+  'okta:device:d-77': { id: 'd-77', hostname: 'ada-laptop', ip: '', os: 'MACOS', owner: '', last_seen: '2026-01-01T09:00:00Z' },
+  'okta:device:d-78': { id: 'd-78', hostname: 'alan-phone', ip: '', os: 'IOS', owner: '', last_seen: '2025-12-31T18:44:00Z' },
+  'generic-device:device:d-77': { id: 'd-77', hostname: 'ada-laptop', ip: '10.0.0.7', os: 'macOS 15', owner: 'Ada Lovelace', last_seen: '2026-01-01T09:00:00Z' },
+};
+function isIp(v) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(v);
+  if (m) return m.slice(1).every(x => Number(x) <= 255);
+  return v.includes(':') && /^[0-9a-f:.]+$/i.test(v) && (v.match(/:/g) || []).length >= 2 && (v.match(/:/g) || []).length <= 8;
+}
+function validateInputs(defs, vals) {
+  const errs = [];
+  defs.forEach(d => {
+    const v = String(vals[d.name] == null ? '' : vals[d.name]).trim();
+    if (!v) { if (d.required) errs.push({ name: d.name, message: 'is required' }); return; }
+    if (d.type === 'int' && !/^-?\d+$/.test(v)) errs.push({ name: d.name, message: 'must be a whole number' });
+    if (d.type === 'ip' && !isIp(v)) errs.push({ name: d.name, message: 'must be a valid IPv4 or IPv6 address' });
+    if (d.type === 'domain' && !/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(v)) errs.push({ name: d.name, message: 'must be a domain name' });
+    if (d.type === 'hash' && !/^([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i.test(v)) errs.push({ name: d.name, message: 'must be a hex hash' });
+    if (d.type === 'enum' && !(d.values || []).includes(v)) errs.push({ name: d.name, message: 'must be one of ' + (d.values || []).join(', ') });
+  });
+  return errs;
+}
+function simulateLookup(integ, lk, vals, sim, now, runNo) {
+  const bad = validateInputs(lk.inputs, vals);
+  if (bad.length) return { rejected: bad };
+  const base = { run_id: 'run-' + runNo, integration: integ, action: lk.action, mode: 'lookup', trigger: 'manual' };
+  const key = String(vals[lk.key] || '').trim();
+  const latency = 180 + (key.length * 13) % 200;
+  const fail = (http, error, message, retries, ms) => Object.assign({}, base, { status: 'failed', http, error, message, retries, latency: ms, pulled: 0, valid: 0, saved: false });
+  if (sim === 'hostmismatch') return fail(null, 'secret_host_mismatch', 'Refused. The secret for this action is pinned to ' + (HOSTS[integ] || 'its host') + ', but this request would go to attacker.example.com. Nothing was sent.', 0, 12);
+  if (sim === 'wrongkey') return fail(401, 'auth_failed', 'Authentication failed (401). Not retried, because retrying would repeat the mistake.', 0, latency);
+  if (sim === 'servererr') return fail(500, 'server_error', 'Server error (500). Retried 3 times, waiting 1 s, 2 s and 4 s, then failed.', 3, 7400);
+  const rec = DIRECTORY[integ + ':' + lk.schema + ':' + key];
+  if (sim === 'notfound' || !rec) return fail(404, 'client_error', 'Not found (404). Not retried.', 0, latency);
+  const record = { source: integ };
+  SCHEMAS[lk.schema].fields.forEach(f => { record[f] = rec[f] === undefined ? '' : rec[f]; });
+  record.fetched_at = now;
+  return Object.assign({}, base, { status: 'success', http: 200, record, saved: lk.store, retries: 0, latency, pulled: 1, valid: 1 });
+}
+// ==== CORE END ====
+
+/* ---------------- sample data ---------------- */
+const INTEGRATIONS = [
+  { name: 'github', display: 'GitHub', pulls: ['list_members'], category: 'identity', auth: 'bearer', schemas: ['user'], schedule: 'every 5m', last: '2 min ago', records: 1240, status: 'healthy', enabled: true, error: '' },
+  { name: 'jira', display: 'Jira', pulls: ['list_users'], category: 'ticketing', auth: 'basic', schemas: ['user'], schedule: 'every 15m', last: '9 min ago', records: 312, status: 'degraded', enabled: true, error: '3 records quarantined' },
+  { name: 'okta', display: 'Okta', pulls: ['list_users', 'list_devices', 'list_alerts'], category: 'identity', auth: 'api_key', schemas: ['user','device','alert'], schedule: 'every 1m', last: '1 min ago', records: 0, status: 'failing', enabled: true, error: 'auth_failed: authentication failed (401). Alert email sent after 3 failures.' },
+  { name: 'generic-device', display: 'Generic device source', pulls: ['list_devices'], category: 'other', auth: 'bearer', schemas: ['device'], schedule: 'every 15m', last: 'never', records: 0, status: 'never_run', enabled: true, error: '' },
+  { name: 'old-alerts', display: 'Old alert feed', pulls: ['list_alerts'], category: 'alerting', auth: 'bearer', schemas: ['alert'], schedule: 'every 5m', last: '3 days ago', records: 880, status: 'disabled', enabled: false, error: '' }
+];
+const RESULTS = {
+  user: [
+    { source: 'github', id: '4021', name: 'Ada Lovelace', email: 'ada@acme.com', status: 'active', last_login: '', fetched_at: '2026-01-01T09:05:00Z' },
+    { source: 'github', id: '4022', name: 'Alan Turing', email: 'alan@acme.com', status: 'active', last_login: '', fetched_at: '2026-01-01T09:05:00Z' },
+    { source: 'jira', id: 'u-17', name: 'Grace Hopper', email: 'grace@acme.com', status: 'suspended', last_login: '2025-12-29T14:10:00Z', fetched_at: '2026-01-01T09:00:00Z' },
+    { source: 'okta', id: '00u1', name: 'Edsger Dijkstra', email: 'edsger@acme.com', status: 'inactive', last_login: '2025-11-02T08:30:00Z', fetched_at: '2025-12-31T09:00:00Z' }
+  ],
+  device: [
+    { source: 'okta', id: 'd-77', hostname: 'ada-laptop', ip: '', os: 'MACOS', owner: '', last_seen: '2026-01-01T09:00:00Z', fetched_at: '2026-01-01T09:05:00Z' },
+    { source: 'okta', id: 'd-78', hostname: 'alan-phone', ip: '', os: 'IOS', owner: '', last_seen: '2025-12-31T18:44:00Z', fetched_at: '2026-01-01T09:05:00Z' }
+  ],
+  alert: [
+    { source: 'okta', id: 'a-1009', type: 'login.failed', severity: 'medium', timestamp: '2026-01-01T09:00:00Z', description: 'Bad password for ada@acme.com', fetched_at: '2026-01-01T09:05:00Z' },
+    { source: 'okta', id: 'a-1010', type: 'policy.violation', severity: 'high', timestamp: '2026-01-01T09:02:10Z', description: 'Login from a new country', fetched_at: '2026-01-01T09:05:00Z' },
+    { source: 'okta', id: 'a-1011', type: 'session.start', severity: 'low', timestamp: '2026-01-01T09:03:41Z', description: 'User signed in', fetched_at: '2026-01-01T09:05:00Z' }
+  ]
+};
+const QUARANTINE = [
+  { source: 'jira', action: 'list_users', schema: 'user', run: 'run-5530', reason: 'missing_required_field', field: 'id', at: '2026-01-01T09:00:03Z', raw: { displayName: 'Orphan Account' } },
+  { source: 'jira', action: 'list_users', schema: 'user', run: 'run-5530', reason: 'invalid_value', field: 'status', at: '2026-01-01T09:00:03Z', raw: { id: 'u-44', status: 'banned' } },
+  { source: 'jira', action: 'list_users', schema: 'user', run: 'run-5530', reason: 'transform_failed', field: 'last_login', at: '2026-01-01T09:00:04Z', raw: { id: 'u-52', last_login: '31/31/2025' } },
+  { source: 'okta', action: 'list_alerts', schema: 'alert', run: 'run-5524', reason: 'missing_required_field', field: 'timestamp', at: '2025-12-31T23:10:00Z', raw: { id: 'a-998', type: 'login.failed' } }
+];
+const RUNS = [
+  { id: 'run-5532', integration: 'okta', action: 'list_users', mode: 'pull', trigger: 'schedule', status: 'failed', started: '09:06:00', dur: '0.4 s', pages: 0, pulled: 0, valid: 0, invalid: 0, retries: 0, error: 'auth_failed' },
+  { id: 'run-5531', integration: 'github', action: 'list_members', mode: 'pull', trigger: 'schedule', status: 'success', started: '09:05:00', dur: '6.2 s', pages: 13, pulled: 1240, valid: 1240, invalid: 0, retries: 0, error: '' },
+  { id: 'run-5530', integration: 'jira', action: 'list_users', mode: 'pull', trigger: 'schedule', status: 'success', started: '09:00:00', dur: '3.1 s', pages: 4, pulled: 315, valid: 312, invalid: 3, retries: 1, error: '' },
+  { id: 'run-5529', integration: 'github', action: 'list_members', mode: 'pull', trigger: 'test', status: 'success', started: '08:58:12', dur: '0.9 s', pages: 1, pulled: 100, valid: 100, invalid: 0, retries: 0, error: '' },
+  { id: 'run-5528', integration: 'okta', action: 'list_alerts', mode: 'pull', trigger: 'manual', status: 'running', started: '08:57:40', dur: '', pages: 2, pulled: 200, valid: 200, invalid: 0, retries: 0, error: '' },
+  { id: 'run-5524', integration: 'okta', action: 'list_alerts', mode: 'pull', trigger: 'schedule', status: 'failed', started: '23:10:00', dur: '13.0 s', pages: 6, pulled: 600, valid: 599, invalid: 1, retries: 3, error: 'connection_error' }
+];
+const SECRETS = [
+  { name: 'github_token', set: true, host: 'api.github.com', updated: '2025-12-30' },
+  { name: 'jira_token', set: true, host: 'acme.atlassian.net', updated: '2025-12-30' },
+  { name: 'okta_token', set: true, host: 'acme.okta.com', updated: '2025-12-31' },
+  { name: 'smtp_password', set: false, host: '', updated: '' }
+];
+
+/* ---------------- helpers ---------------- */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pill = (cls, text) => '<span class="pill ' + cls + '">' + esc(text || cls) + '</span>';
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  window.scrollTo(0, 0);
+}
+function openModal(title, html) { $('modalTitle').textContent = title; $('modalBody').innerHTML = html; $('modal').classList.add('open'); }
+
+/* ---------------- integrations list ---------------- */
+function actionsCell(i) {
+  const lookups = (LOOKUPS[i.name] || []).map(l => l.action);
+  const line = (mode, names) => names.length ? '<div class="small" style="margin-bottom:4px"><span class="pill ' + mode + '">' + mode + '</span> ' + names.map(n => '<code>' + esc(n) + '</code>').join(' ') + '</div>' : '';
+  return line('pull', i.pulls || []) + line('lookup', lookups);
+}
+function renderIntegrations() {
+  const q = $('f-search').value.toLowerCase(), cat = $('f-category').value, st = $('f-status').value, md = $('f-mode').value;
+  const hasMode = (i) => !md || (md === 'pull' ? (i.pulls || []).length > 0 : (LOOKUPS[i.name] || []).length > 0);
+  const rows = INTEGRATIONS.filter(i => (!q || (i.name + ' ' + i.display).toLowerCase().includes(q)) && (!cat || i.category === cat) && (!st || i.status === st) && hasMode(i));
+  $('int-body').innerHTML = rows.map(i => '<tr>' +
+    '<td><div class="name">' + esc(i.display) + '</div><div class="muted small mono">' + esc(i.name) + '</div></td>' +
+    '<td>' + esc(i.category) + '</td><td class="mono small">' + esc(i.auth) + '</td>' +
+    '<td>' + i.schemas.map(s => pill('schema', s)).join(' ') + '</td>' + '<td>' + actionsCell(i) + '</td>' +
+    '<td class="small">' + esc(i.schedule) + '</td><td class="small">' + esc(i.last) + '</td><td>' + i.records.toLocaleString() + '</td>' +
+    '<td>' + pill(i.status, i.status) + (i.error ? '<div class="muted small" style="max-width:240px;margin-top:4px">' + esc(i.error) + '</div>' : '') + '</td>' +
+    '<td><label class="switch"><input type="checkbox" ' + (i.enabled ? 'checked' : '') + ' data-toggle="' + esc(i.name) + '"><span class="slider"></span></label></td>' +
+    '<td style="white-space:nowrap">' + (LOOKUPS[i.name] ? '<button class="btn small" data-run="' + esc(i.name) + '">Run</button> ' : '') + '<button class="btn secondary small" data-test="' + esc(i.name) + '">Test</button> <button class="btn secondary small" data-goto="add">Edit</button></td></tr>').join('') || '<tr><td colspan="11" class="muted">No integrations match.</td></tr>';
+}
+
+/* ---------------- form state ---------------- */
+function val(id) { return $(id).value.trim(); }
+function readState() {
+  const schema = val('schema');
+  const map = {};
+  document.querySelectorAll('#maprows .maprow').forEach(r => {
+    const f = r.dataset.field;
+    map[f] = { path: r.querySelector('.m-path').value.trim(), transform: r.querySelector('.m-tr').value, required: r.querySelector('.m-req').checked, valueMap: r.querySelector('.m-vm') ? r.querySelector('.m-vm').value : '' };
+  });
+  const inputs = [];
+  document.querySelectorAll('#inputs .inrow').forEach(r => inputs.push({ name: r.querySelector('.i-name').value.trim(), type: r.querySelector('.i-type').value, values: r.querySelector('.i-vals').value, required: r.querySelector('.i-req').checked }));
+  return {
+    name: val('name'), display_name: val('display_name'), category: val('category'), description: val('description'), enabled: $('enabled').checked,
+    vars: $('vars').value, base_url: val('base_url'), authType: val('authType'), authIn: val('authIn'), authName: val('authName'), authPrefix: $('authPrefix').value, authUser: val('authUser'), secret: val('secret'), secretValue: $('secretValue').value,
+    actionName: val('actionName'), mode: val('mode'), schema, method: val('method'), path: val('path'), query: $('query').value, records: val('records'),
+    schedN: val('schedN'), schedU: val('schedU'), pgType: val('pgType'), pgSource: val('pgSource'), pgHeader: val('pgHeader'), pgOffset: val('pgOffset'), pgLimitParam: val('pgLimitParam'), pgLimit: val('pgLimit'), pgTotal: val('pgTotal'),
+    pgPageParam: val('pgPageParam'), pgStart: val('pgStart'), pgCursorParam: val('pgCursorParam'), pgNextCursor: val('pgNextCursor'), maxPages: val('maxPages'),
+    inputs, map, onInvalid: val('onInvalid'), store: $('store').checked, errPath: val('errPath'), errEq: val('errEq'), errMsg: val('errMsg'), afterFailures: val('afterFailures'), recipients: val('recipients')
+  };
+}
+const TRANSFORMS = ['', 'string', 'int', 'float', 'bool', 'lowercase', 'uppercase', 'datetime'];
+function renderMapping(schema, preset) {
+  const def = SCHEMAS[schema];
+  $('mapSchemaPill').textContent = schema;
+  $('maprows').innerHTML = def.fields.map(f => {
+    const p = (preset.map[f] || ['', '']);
+    const isEnum = !!def.enums[f];
+    return '<div class="maprow" data-field="' + f + '">' +
+      '<div class="field">' + f + (f === 'id' ? '<span class="tag">always required</span>' : '') + '</div>' +
+      '<input type="text" class="m-path mono" value="' + esc(p[0]) + '" placeholder="path in response">' +
+      '<select class="m-tr">' + TRANSFORMS.map(t => '<option value="' + t + '"' + (t === p[1] ? ' selected' : '') + '>' + (t || 'none') + '</option>').join('') + '</select>' +
+      '<label class="inline" style="margin:0;justify-content:center"><input type="checkbox" class="m-req" ' + (f === 'id' ? 'checked disabled' : '') + '></label>' +
+      (isEnum ? '<div class="vm"><input type="text" class="m-vm mono" value="' + esc(preset.vm[f] || '') + '" placeholder="value map, e.g. ACTIVE=active, OFF=inactive"><div class="hint">Allowed values: ' + def.enums[f].join(', ') + '</div></div>' : '') +
+      '</div>';
+  }).join('');
+}
+function addInputRow(d) {
+  d = d || { name: '', type: 'string', values: '', required: true };
+  const div = document.createElement('div');
+  div.className = 'inrow';
+  div.innerHTML = '<input type="text" class="i-name mono" placeholder="name" value="' + esc(d.name) + '">' +
+    '<select class="i-type">' + ['string', 'int', 'ip', 'domain', 'hash', 'enum'].map(t => '<option' + (t === d.type ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
+    '<input type="text" class="i-vals" placeholder="enum values, comma separated" value="' + esc(d.values) + '">' +
+    '<label class="inline" style="margin:0"><input type="checkbox" class="i-req" ' + (d.required ? 'checked' : '') + '> req.</label>' +
+    '<button type="button" class="btn secondary small i-del" title="Remove">×</button>';
+  $('inputs').appendChild(div);
+}
+function applyPreset(schema, keepIdentity) {
+  const pr = PRESETS[schema];
+  const lookup = val('mode') === 'lookup';
+  $('schema').value = schema;
+  if (!keepIdentity) {
+    $('name').value = 'generic-' + schema; $('display_name').value = pr.title; $('category').value = pr.category; $('description').value = pr.desc;
+  }
+  $('actionName').value = lookup ? 'get_' + schema : pr.name;
+  $('path').value = lookup ? pr.path + '/{{input.id}}' : pr.path;
+  $('records').value = lookup ? '@' : pr.records;
+  $('query').value = lookup ? '' : pr.query;
+  renderMapping(schema, pr);
+  $('inputs').innerHTML = '';
+  if (lookup) addInputRow({ name: 'id', type: 'string', values: '', required: true });
+}
+function syncVisibility() {
+  const t = val('authType'), mode = val('mode'), pg = val('pgType');
+  document.querySelectorAll('[data-auth]').forEach(e => e.hidden = e.dataset.auth !== t);
+  document.querySelectorAll('.pull-only').forEach(e => e.hidden = mode !== 'pull');
+  document.querySelectorAll('.lookup-only').forEach(e => e.hidden = mode !== 'lookup');
+  document.querySelectorAll('[data-pg]').forEach(e => e.hidden = e.dataset.pg !== pg);
+
+  const labels = { bearer: 'Token', api_key: 'API key', basic: 'Password or API token' };
+  $('secretValueLabel').textContent = labels[t] || 'Token';
+  const name = val('secret'), known = SECRETS.find(x => x.name === name), host = hostOf(val('base_url'), $('vars').value);
+  $('secretState').innerHTML = known && known.set ? '<span class="pill set">set</span>' : '<span class="pill notset">not set</span>';
+  $('secretHost').innerHTML = host
+    ? (known && known.host && known.host !== host && !$('secretValue').value
+        ? 'This secret is pinned to <code>' + esc(known.host) + '</code>. This integration sends requests to <code>' + esc(host) + '</code>, so it will be refused until you enter the value again.'
+        : 'Pinned to <code>' + esc(host) + '</code> (from the Base URL). The platform refuses to send this secret anywhere else.')
+    : 'The host comes from the Base URL, once it is filled in.';
+}
+function refresh() {
+  syncVisibility();
+  const s = readState();
+  $('yaml').textContent = toYaml(buildConfig(s));
+  const issues = validateConfig(s, SECRETS).filter(i => i.severity === 'error');
+  const c = $('issueCount');
+  c.hidden = !issues.length; c.textContent = issues.length;
+}
+function showValidation(focus) {
+  const s = readState(), issues = validateConfig(s, SECRETS);
+  const errs = issues.filter(i => i.severity === 'error');
+  let html = errs.length ? '' : '<div class="issue ok"><div><b>Valid.</b> No errors' + (issues.length ? ', ' + issues.length + ' warning' + (issues.length > 1 ? 's' : '') : '') + '.</div></div>';
+  html += issues.map(i => '<div class="issue" style="' + (i.severity === 'warning' ? 'background:var(--warn-bg);color:#78350f' : '') + '"><div><div class="p">' + esc(i.path) + '</div><div>' + esc(i.message) + '</div></div></div>').join('');
+  $('issues').innerHTML = html;
+  if (focus) setPane('validate');
+  return errs.length === 0;
+}
+function setPane(name) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.pane === name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+}
+function testHtml(s) {
+  const r = runTest(s);
+  const latency = 180 + Math.floor(Math.random() * 220);
+  return '<div style="margin-bottom:12px">' + pill('success', 'HTTP 200') + ' ' + pill('trigger', latency + ' ms') + ' ' + pill('trigger', '1 page fetched') + '</div>' +
+    (r.missing.length ? '<div style="margin-bottom:10px"><div class="muted small" style="margin-bottom:4px">Paths not found in the reply (the field stays empty):</div>' + r.missing.map(m => '<span class="missing">' + esc(m) + '</span>').join('') + '</div>' : '<div class="muted small" style="margin-bottom:10px">Every mapped path was found.</div>') +
+    '<div class="two"><div><h3>Raw reply</h3><pre>' + esc(JSON.stringify(r.raw, null, 2)) + '</pre></div><div><h3>Mapped record</h3><pre>' + esc(JSON.stringify(r.mapped, null, 2)) + '</pre></div></div>';
+}
+
+/* ---------------- other tables ---------------- */
+function renderResults() {
+  const schema = $('r-schema').value, src = $('r-source').value;
+  const all = RESULTS[schema];
+  const sources = [...new Set(all.map(r => r.source))];
+  if ($('r-source').dataset.schema !== schema) { $('r-source').innerHTML = '<option value="">All sources</option>' + sources.map(s => '<option>' + s + '</option>').join(''); $('r-source').dataset.schema = schema; }
+  const rows = all.filter(r => !src || r.source === src);
+  const cols = ['source'].concat(SCHEMAS[schema].fields).concat(['fetched_at']);
+  $('r-table').innerHTML = '<table><thead><tr>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + cols.map(c => '<td' + (c === 'status' || c === 'severity' ? '' : ' class="small"') + '>' + (c === 'status' || c === 'severity' ? pill(r[c] === 'active' || r[c] === 'low' ? 'success' : r[c] === 'inactive' || r[c] === 'medium' ? 'degraded' : 'failed', r[c]) : (r[c] === '' ? '<span class="muted">empty</span>' : esc(r[c]))) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+  $('r-json').textContent = JSON.stringify(rows, null, 2);
+}
+function filteredQuarantine() {
+  const r = $('q-reason').value, s = $('q-schema').value;
+  return QUARANTINE.filter(q => (!r || q.reason === r) && (!s || q.schema === s));
+}
+function renderQuarantine() {
+  $('q-body').innerHTML = filteredQuarantine().map(q => '<tr><td>' + esc(q.source) + '</td><td class="mono small">' + esc(q.action) + '</td><td>' + pill('schema', q.schema) + '</td><td class="mono small">' + esc(q.run) + '</td><td>' + pill('failed', q.reason) + '</td><td class="mono small">' + esc(q.field) + '</td><td class="small">' + esc(q.at) + '</td><td class="mono small">' + esc(JSON.stringify(q.raw)) + '</td></tr>').join('') || '<tr><td colspan="8" class="muted">Nothing quarantined.</td></tr>';
+}
+function renderRuns() {
+  const st = $('run-status').value;
+  $('run-body').innerHTML = RUNS.filter(r => !st || r.status === st).map(r => '<tr><td class="mono small">' + r.id + '</td><td>' + esc(r.integration) + '</td><td class="mono small">' + esc(r.action) + '</td><td>' + esc(r.mode) + '</td><td>' + pill('trigger', r.trigger) + '</td><td>' + pill(r.status, r.status) + '</td><td class="small">' + r.started + '</td><td class="small">' + (r.dur || '…') + '</td><td>' + r.pages + '</td><td>' + r.pulled + '</td><td>' + r.valid + '</td><td>' + (r.invalid ? pill('degraded', r.invalid) : 0) + '</td><td>' + r.retries + '</td><td class="small">' + (r.error ? pill('failed', r.error) : '') + '</td></tr>').join('');
+}
+function renderSecrets() {
+  $('sec-body').innerHTML = SECRETS.map(s => '<tr><td class="mono">' + s.name + '</td><td>' + pill(s.set ? 'set' : 'notset', s.set ? 'set' : 'not set') + '</td><td class="mono small">' + (s.host ? esc(s.host) : '<span class="muted">not pinned</span>') + '</td><td class="small">' + (s.updated || '') + '</td><td><div class="inline"><input type="password" autocomplete="new-password" placeholder="' + (s.set ? 'New value' : 'Value') + '" data-sec-input="' + s.name + '"><input type="text" class="mono" style="max-width:190px" placeholder="host, e.g. api.github.com" value="' + esc(s.host || '') + '" data-sec-host="' + s.name + '"><button class="btn small" data-sec="' + s.name + '">' + (s.set ? 'Replace' : 'Set') + '</button></div></td></tr>').join('');
+}
+
+/* ---------------- save (prototype) ---------------- */
+function savePrototype() {
+  const s = readState(), host = hostOf(s.base_url, s.vars);
+  let msg = 'Saved (prototype). Nothing is sent anywhere.';
+  if (s.secretValue) {
+    const known = SECRETS.find(x => x.name === s.secret);
+    if (known) { known.set = true; known.host = host; known.updated = '2026-01-01'; } else SECRETS.push({ name: s.secret, set: true, host, updated: '2026-01-01' });
+    $('secretValue').value = '';
+    renderSecrets();
+    msg = 'The secret was stored and pinned to ' + host + ', then the integration was saved (prototype).';
+  }
+  refresh();
+  toast(msg);
+}
+
+/* ---------------- run a lookup ---------------- */
+let runCtx = null, nextRun = 5533;
+const nowIso = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+function currentLookup() { return LOOKUPS[runCtx].find(l => l.action === $('runAction').value); }
+function sampleKeys(integ, lk) {
+  const pre = integ + ':' + lk.schema + ':';
+  return Object.keys(DIRECTORY).filter(k => k.startsWith(pre)).map(k => k.slice(pre.length));
+}
+function renderRunInputs() {
+  const lk = currentLookup();
+  const tries = sampleKeys(runCtx, lk);
+  $('runInputs').innerHTML = lk.inputs.map(d => {
+    const control = d.type === 'enum'
+      ? '<select id="run-in-' + d.name + '">' + d.values.map(v => '<option>' + v + '</option>').join('') + '</select>'
+      : '<input type="text" id="run-in-' + d.name + '" class="mono" placeholder="' + (d.name === lk.key && tries.length ? 'e.g. ' + tries[0] : d.type) + '">';
+    return '<div style="margin-bottom:12px"><label' + (d.required ? ' class="req"' : '') + ' for="run-in-' + d.name + '">' + d.name + ' <span class="muted" style="font-weight:400">(' + d.type + ')</span></label>' + control +
+      (d.name === lk.key && tries.length ? '<div class="hint">Sample values to try: ' + tries.map(esc).join(', ') + '</div>' : '') +
+      '<div class="hint err" id="run-err-' + d.name + '"></div></div>';
+  }).join('') + '<div class="muted small">Fills the <b>' + lk.schema + '</b> schema. Result is ' + (lk.store ? '<b>saved</b>' : '<b>not saved</b> (<code>store: false</code>)') + '.</div>';
+  $('runOut').innerHTML = '';
+}
+function openRun(integ) {
+  runCtx = integ;
+  const lks = LOOKUPS[integ];
+  openModal('Run a lookup: ' + integ,
+    '<div class="muted small" style="margin-bottom:12px">Prototype: the reply is simulated from sample data. A real run calls the service once and returns the mapped record straight away.</div>' +
+    '<div style="margin-bottom:12px"><label class="req" for="runAction">Action</label><select id="runAction">' + lks.map(l => '<option value="' + l.action + '">' + l.action + '</option>').join('') + '</select><div class="hint">Only lookup actions are listed. Pulls run on a schedule.</div></div>' +
+    '<div id="runInputs"></div>' +
+    '<div style="margin:6px 0 12px"><label for="runSim">Simulate</label><select id="runSim"><option value="normal">Normal reply</option><option value="hostmismatch">Secret sent to the wrong host</option><option value="wrongkey"' + (INTEGRATIONS.find(i => i.name === integ).status === 'failing' ? ' selected' : '') + '>Wrong key (401)</option><option value="notfound">Record not found (404)</option><option value="servererr">Server error (500)</option></select><div class="hint">Prototype only. Shows how each failure is handled.</div></div>' +
+    '<div class="actions-bar"><button type="button" class="btn" id="btnRunLookup">Run lookup</button></div><div id="runOut" class="runbox"></div>');
+  renderRunInputs();
+}
+function upsertResult(schema, record) {
+  const rows = RESULTS[schema];
+  const i = rows.findIndex(r => r.source === record.source && String(r.id) === String(record.id));
+  if (i >= 0) { rows[i] = record; return 'updated'; }
+  rows.push(record); return 'added';
+}
+function doRun() {
+  const lk = currentLookup(), vals = {};
+  lk.inputs.forEach(d => { vals[d.name] = $('run-in-' + d.name).value; $('run-err-' + d.name).textContent = ''; });
+  const res = simulateLookup(runCtx, lk, vals, $('runSim').value, nowIso(), nextRun);
+  if (res.rejected) {
+    res.rejected.forEach(r => { $('run-err-' + r.name).textContent = r.name + ' ' + r.message; });
+    $('runOut').innerHTML = '<div class="issue"><div><b>Rejected before any request was sent.</b> ' + res.rejected.length + ' input error' + (res.rejected.length > 1 ? 's' : '') + '. No run was created.</div></div>';
+    return;
+  }
+  nextRun++;
+  const t = new Date();
+  RUNS.unshift({ id: res.run_id, integration: res.integration, action: res.action, mode: 'lookup', trigger: 'manual', status: res.status, started: t.toTimeString().slice(0, 8), dur: (res.latency / 1000).toFixed(1) + ' s', pages: res.status === 'success' ? 1 : 0, pulled: res.pulled, valid: res.valid, invalid: 0, retries: res.retries, error: res.error || '' });
+  renderRuns();
+  let html = '<div style="margin-bottom:10px">' + pill(res.status, res.status === 'success' ? 'success' : 'failed') + ' ' + pill('trigger', res.http === null ? 'No request sent' : 'HTTP ' + res.http) + ' ' + pill('trigger', res.latency + ' ms') + (res.retries ? ' ' + pill('degraded', res.retries + ' retries') : '') + ' ' + pill('trigger', 'manual') + '</div>';
+  if (res.status === 'success') {
+    let note = 'Not saved (<code>store: false</code>).';
+    if (res.saved) { const how = upsertResult(lk.schema, res.record); renderResults(); note = 'Saved to the <b>' + lk.schema + '</b> table (' + how + '). Running it again updates the record, it does not duplicate it.'; }
+    html += '<h3 style="margin-bottom:6px">Mapped record</h3><pre>' + esc(JSON.stringify(res.record, null, 2)) + '</pre><div class="hint" style="margin-top:8px">' + note + '</div>';
+  } else {
+    html += '<div class="issue"><div><div class="p">' + esc(res.error) + '</div><div>' + esc(res.message) + '</div></div></div>';
+  }
+  html += '<div class="hint" style="margin-top:8px">Recorded as <b>' + res.run_id + '</b> in Run history.</div>';
+  $('runOut').innerHTML = html;
+}
+
+/* ---------------- events ---------------- */
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.dataset.tab) showTab(t.dataset.tab);
+  if (t.dataset.goto) showTab(t.dataset.goto);
+  if (t.dataset.template) { $('mode').value = 'pull'; applyPreset(t.dataset.template, false); showTab('add'); refresh(); toast('Template loaded: ' + PRESETS[t.dataset.template].title); }
+  if (t.dataset.test) { const sch = INTEGRATIONS.find(i => i.name === t.dataset.test).schemas[0]; const s = readState(); s.schema = sch; s.map = {}; const pr = PRESETS[sch]; Object.keys(pr.map).forEach(f => s.map[f] = { path: pr.map[f][0], transform: pr.map[f][1], valueMap: pr.vm[f] || '' }); s.name = t.dataset.test; openModal('Test: ' + t.dataset.test, testHtml(s)); }
+  if (t.dataset.run) openRun(t.dataset.run);
+  if (t.id === 'btnRunLookup') doRun();
+  if (t.dataset.pane) setPane(t.dataset.pane);
+  if (t.dataset.view) { document.querySelectorAll('#r-view button').forEach(b => b.classList.toggle('active', b === t)); $('r-table').hidden = t.dataset.view !== 'table'; $('r-json').hidden = t.dataset.view !== 'json'; }
+  if (t.dataset.sec) {
+    const name = t.dataset.sec, v = document.querySelector('[data-sec-input="' + name + '"]'), h = document.querySelector('[data-sec-host="' + name + '"]');
+    if (!v.value) { toast('Enter a value first'); return; }
+    const host = h.value.trim().toLowerCase();
+    if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(host)) { toast('Enter the host this secret may be sent to, for example api.github.com'); return; }
+    const s = SECRETS.find(x => x.name === name); s.set = true; s.host = host; s.updated = '2026-01-01';
+    renderSecrets(); refresh(); toast('Stored and pinned to ' + host + ' (prototype). The value is not shown again.');
+  }
+  if (t.classList.contains('i-del')) { t.closest('.inrow').remove(); refresh(); }
+  if (t.id === 'addInput') { addInputRow(); refresh(); }
+  if (t.id === 'btnValidate') showValidation(false);
+  if (t.id === 'btnSave') { if (showValidation(true)) savePrototype(); else toast('Fix the errors first'); }
+  if (t.id === 'btnTest') { const s = readState(); const errs = validateConfig(s).filter(i => i.severity === 'error'); $('testout').innerHTML = errs.length ? '<div class="issue"><div>Fix the validation errors first (' + errs.length + ').</div></div>' : testHtml(s); }
+  if (t.id === 'copyYaml') { navigator.clipboard && navigator.clipboard.writeText($('yaml').textContent); toast('Copied'); }
+  if (t.id === 'downloadYaml') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([$('yaml').textContent], { type: 'text/yaml' })); a.download = (val('name') || 'integration') + '.yaml'; a.click(); }
+  if (t.id === 'q-export') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(QUARANTINE, null, 2)], { type: 'application/json' })); a.download = 'quarantine-all.json'; a.click(); toast('Exported ' + QUARANTINE.length + ' records'); }
+  if (t.id === 'modalClose' || t.id === 'modal') $('modal').classList.remove('open');
+});
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset.toggle) { const i = INTEGRATIONS.find(x => x.name === t.dataset.toggle); i.enabled = t.checked; i.status = t.checked ? (i.last === 'never' ? 'never_run' : 'healthy') : 'disabled'; renderIntegrations(); toast(i.display + (t.checked ? ' enabled' : ' disabled')); }
+  if (t.id === 'runAction') renderRunInputs();
+  if (t.id === 'schema') { applyPreset(t.value, true); refresh(); }
+  if (t.id === 'mode') { applyPreset(val('schema'), true); refresh(); }
+});
+$('form').addEventListener('input', refresh);
+$('form').addEventListener('change', refresh);
+['f-search', 'f-category', 'f-status', 'f-mode'].forEach(id => $(id).addEventListener('input', renderIntegrations));
+['r-schema', 'r-source'].forEach(id => $(id).addEventListener('change', renderResults));
+['q-reason', 'q-schema'].forEach(id => $(id).addEventListener('change', renderQuarantine));
+$('run-status').addEventListener('change', renderRuns);
+
+/* ---------------- start ---------------- */
+applyPreset('user', true);
+renderIntegrations(); renderResults(); renderQuarantine(); renderRuns(); renderSecrets();
+refresh(); showValidation(false);
+</script>
+</body>
+</html>

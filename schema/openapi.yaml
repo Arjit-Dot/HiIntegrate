@@ -428,7 +428,7 @@ paths:
                   items:
                     type: array
                     items: { $ref: "#/components/schemas/SecretInfo" }
-              example: { items: [{ name: github_token, set: true, updated_at: "2025-12-30T10:00:00Z" }, { name: smtp_password, set: false, updated_at: null }] }
+              example: { items: [{ name: github_token, set: true, host: api.github.com, updated_at: "2025-12-30T10:00:00Z" }, { name: smtp_password, set: false, host: null, updated_at: null }] }
 
   /secrets/{name}:
     parameters:
@@ -436,13 +436,20 @@ paths:
     put:
       tags: [Secrets]
       summary: Set or replace a secret's value
-      description: Write-only. Used by the Secrets screen and by the Add/Edit form (which stores the value before it saves the integration). Returns `501` until the encrypted store exists (Phase 2), because environment variables are the only source before that.
+      description: Write-only. Used by the Secrets screen and by the Add/Edit form (which stores the value before it saves the integration). The secret is **pinned to `host`**, and the engine refuses to send it to any other host. Setting a secret again with a new host re-pins it. Returns `501` until the encrypted store exists (Phase 2), because environment variables are the only source before that.
       operationId: setSecret
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: false, required: [value], properties: { value: { type: string, minLength: 1, writeOnly: true } } }
+            schema:
+              type: object
+              additionalProperties: false
+              required: [value, host]
+              properties:
+                value: { type: string, minLength: 1, writeOnly: true }
+                host: { type: string, pattern: "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$", description: "The only host this secret may be sent to, such as api.github.com. Lowercase, no scheme, no path, no port." }
+            example: { value: "paste-the-token-here", host: api.github.com }
       responses:
         "204": { description: Stored }
         "400": { $ref: "#/components/responses/ValidationError" }
@@ -664,10 +671,11 @@ components:
         health: { $ref: "result.schema.json#/$defs/health" }
     SecretInfo:
       type: object
-      required: [name, set, updated_at]
+      required: [name, set, host, updated_at]
       properties:
         name: { type: string }
         set: { type: boolean }
+        host: { type: [string, "null"], description: "The host the secret is pinned to. Null if it has none (for example a secret read from the environment without a companion host)." }
         updated_at: { type: [string, "null"] }
     TemplateSummary:
       type: object

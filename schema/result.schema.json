@@ -218,7 +218,8 @@
             "rate_limited",
             "bad_response",
             "api_error",
-            "client_error"
+            "client_error",
+            "secret_host_mismatch"
           ]
         },
         "message": {

@@ -1,8 +1,8 @@
 # Secrets and local data (docs/decisions.md D-7.4). Never commit these.
+# Every .env file is ignored on purpose, including .env.example. The README lists the variable names instead.
 # Note: /secrets/ is anchored to the repo root, so the backend/app/secrets package is not ignored.
 .env
 .env.*
-!.env.example
 *.db
 *.sqlite
 *.sqlite3
