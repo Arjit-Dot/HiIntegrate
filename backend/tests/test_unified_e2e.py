@@ -11,6 +11,7 @@ from app.core.settings import REPO_ROOT
 from app.main import create_app
 from app.storage import make_engine
 from app.storage.models import Base
+from tests.helpers import signed_in
 from tests.mock_api.app import app as mock_app
 
 MOCK = parse_config((REPO_ROOT / "backend" / "tests" / "mock_api" / "mock-service.yaml").read_text())
@@ -26,7 +27,7 @@ def api(tmp_path, monkeypatch):
     app = create_app()
     app.dependency_overrides[engine_dep] = lambda: engine
     app.dependency_overrides[outbound_client_dep] = lambda: mock
-    return TestClient(app)
+    return signed_in(TestClient(app))
 
 
 def service(name: str, *, id_from: str = "id") -> dict:

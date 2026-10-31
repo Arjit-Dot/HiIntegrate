@@ -1,6 +1,7 @@
 // The only place that knows backend URLs. Point VITE_API_BASE at the Prism mock
 // (http://localhost:4010) or the real backend (http://localhost:8000/api/v1).
 import type { components } from '../types/api'
+import { clearToken, expireSession, getToken, setToken } from './session'
 
 export const API_BASE: string = import.meta.env.VITE_API_BASE ?? 'http://localhost:4010'
 
@@ -36,17 +37,24 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+const unreachable = () => new ApiError(0, 'unreachable', `Cannot reach the API at ${API_BASE}. Is the mock or backend running?`)
+
+/** fetch with the session token. A 401 on a signed-in request means the sign-in ended, so the app returns to the sign-in page. */
+async function request(url: string, init: RequestInit = {}): Promise<Response> {
+  const token = getToken()
+  const headers = { ...(init.headers as Record<string, string> | undefined), ...(token ? { 'X-Session-Token': token } : {}) }
   let res: Response
-  try {
-    res = await fetch(API_BASE + path, {
-      method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
-  } catch {
-    throw new ApiError(0, 'unreachable', `Cannot reach the API at ${API_BASE}. Is the mock or backend running?`)
-  }
+  try { res = await fetch(url, { ...init, headers }) } catch { throw unreachable() }
+  if (res.status === 401) expireSession()
+  return res
+}
+
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await request(API_BASE + path, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
   if (res.status === 204) return undefined as T
   const text = await res.text()
   const data = text ? JSON.parse(text) : undefined
@@ -61,6 +69,22 @@ const qs = (p: Record<string, string | number | undefined>) => {
   const q = new URLSearchParams()
   Object.entries(p).forEach(([k, v]) => v !== undefined && v !== '' && q.set(k, String(v)))
   return q.toString()
+}
+
+export type SessionInfo = { username: string; token: string; expires_at: string }
+
+export const auth = {
+  /** Sign in, or create the account first. Either way the token is kept for the next requests. */
+  signIn: async (mode: 'login' | 'register', username: string, password: string): Promise<string> => {
+    const r = await call<SessionInfo>('POST', `/auth/${mode}`, { username, password })
+    setToken(r.token)
+    return r.username
+  },
+  me: () => call<{ username: string }>('GET', '/auth/me'),
+  signOut: async () => {
+    try { await call<void>('POST', '/auth/logout') } catch { /* the token is dropped here even if the server cannot be reached */ }
+    clearToken()
+  },
 }
 
 export const api = {
@@ -98,9 +122,7 @@ export const api = {
     call<{ items: QuarantineRecord[]; total: number; limit: number; offset: number }>('GET', `/quarantine?${qs(p)}`),
   /** Every quarantined record with the same filters, as the JSON text of the file. */
   exportQuarantine: async (p: { reason?: string; target_schema?: string; source?: string }): Promise<string> => {
-    let res: Response
-    try { res = await fetch(`${API_BASE}/quarantine/export?${qs(p)}`) }
-    catch { throw new ApiError(0, 'unreachable', `Cannot reach the API at ${API_BASE}. Is the mock or backend running?`) }
+    const res = await request(`${API_BASE}/quarantine/export?${qs(p)}`)
     if (!res.ok) throw new ApiError(res.status, 'export_failed', `Export failed (${res.status})`)
     return res.text()
   },
@@ -108,12 +130,9 @@ export const api = {
     call<{ items: RunRecord[]; total: number; limit: number; offset: number }>('GET', `/runs?${qs(p)}`),
   /** Run one action now. A lookup answers 200 with the mapped record; a pull answers 202 with a run id. */
   runAction: async (id: string, action: string, inputs?: Record<string, unknown>) => {
-    let res: Response
-    try {
-      res = await fetch(`${API_BASE}/integrations/${encodeURIComponent(id)}/actions/${encodeURIComponent(action)}/run`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inputs ? { inputs } : {}),
-      })
-    } catch { throw new ApiError(0, 'unreachable', `Cannot reach the API at ${API_BASE}. Is the mock or backend running?`) }
+    const res = await request(`${API_BASE}/integrations/${encodeURIComponent(id)}/actions/${encodeURIComponent(action)}/run`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inputs ? { inputs } : {}),
+    })
     const text = await res.text()
     const data = text ? JSON.parse(text) : undefined
     if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`, data?.error?.details)

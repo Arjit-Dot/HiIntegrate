@@ -15,6 +15,7 @@ from app.api.deps import engine_dep, outbound_client_dep
 from app.main import create_app
 from app.storage import make_engine
 from app.storage.models import Base
+from tests.helpers import ACCT, signed_in
 from tests.test_ai import GITHUB_YAML, Script, clean_secrets, no_network
 
 PAGE = """<html><head><title>Acme API</title><style>.x{color:red}</style><script>var secret=1;</script></head>
@@ -150,7 +151,7 @@ def api(tmp_path, monkeypatch):
     app = create_app()
     app.dependency_overrides[engine_dep] = lambda: engine
     app.dependency_overrides[outbound_client_dep] = no_network
-    client = TestClient(app)
+    client = signed_in(TestClient(app))
     client.app_, client.engine = app, engine
     return client
 
@@ -518,7 +519,7 @@ def test_an_account_email_is_copied_from_a_saved_integration_that_uses_the_same_
     basic = basic.replace("requires: { vars: { site: { label: Site, example: your-site } },", "requires: { vars: { site: { label: Site, example: your-site }, email: { label: Email, example: you@your-company.com } },")
     saved = parse_config(basic.replace("your-site", "acme").replace("you@your-company.com", "ada@acme.example").replace("name: acme", "name: acme-saved"))
     with session_scope(api.engine) as s:
-        repo.create_integration(s, saved)
+        repo.create_integration(s, ACCT, saved)
     service(api, REAL, calls := [])
     body = generate(api, Script(basic))
     assert body["config"]["vars"] == {"site": "acme", "email": "ada@acme.example"}
@@ -532,7 +533,7 @@ def test_saved_values_are_not_copied_from_another_secret_or_over_the_persons_own
     pinned(monkeypatch)
     other = parse_config(ACME.replace("your-site", "acme").replace("name: acme", "name: acme-saved").replace("acme_token", "different_token"))
     with session_scope(api.engine) as s:
-        repo.create_integration(s, other)
+        repo.create_integration(s, ACCT, other)
     service(api, REAL, [])
     body = generate(api, Script(ACME))
     assert body["test"]["filled_vars"] == {"site": "acme"}  # from the pin only: the other integration uses a different secret

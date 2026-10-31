@@ -6,10 +6,11 @@ Run:  cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
 import logging
 import uuid
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, data, health, integrations, runs, secrets, templates
+from app.api import ai, auth, data, health, integrations, runs, secrets, templates
+from app.api.deps import account_dep
 from app.core.errors import install_error_handlers
 from app.core.logging import request_id_var, setup_logging
 from app.core.settings import get_settings
@@ -42,8 +43,11 @@ def create_app() -> FastAPI:
         return response
 
     install_error_handlers(app)
-    for module in (health, integrations, runs, data, secrets, templates, ai):
+    # D-18: only /health and the sign-in routes are open. Everything else needs a valid session token.
+    for module in (health, auth):
         app.include_router(module.router, prefix=settings.api_prefix)
+    for module in (integrations, runs, data, secrets, templates, ai):
+        app.include_router(module.router, prefix=settings.api_prefix, dependencies=[Depends(account_dep)])
     return app
 
 

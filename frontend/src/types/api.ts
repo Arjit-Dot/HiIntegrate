@@ -21,6 +21,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an account and sign in
+         * @description Usernames are lowercased (3 to 32 characters of letters, digits, dot, dash, underscore). Passwords are 8 to 128 characters and are stored only as a salted scrypt hash. The server can close registration with `ALLOW_REGISTRATION=false` (403).
+         */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in
+         * @description A wrong password and an unknown username give the same 401. After 8 wrong passwords for one username in 5 minutes the answer is 429 `rate_limited` until the window passes.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign out (the token stops working) */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who the token belongs to */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/integrations": {
         parameters: {
             query?: never;
@@ -456,7 +530,7 @@ export interface components {
         Error: {
             error: {
                 /** @enum {unknown} */
-                code: "validation_error" | "not_found" | "conflict" | "unsupported" | "run_failed" | "internal_error";
+                code: "validation_error" | "not_found" | "conflict" | "unsupported" | "run_failed" | "internal_error" | "unauthorized" | "rate_limited";
                 message: string;
                 /** @description Extra information, or null. */
                 details?: unknown;
@@ -1253,6 +1327,45 @@ export interface components {
         };
     };
     responses: {
+        /** @description Signed in. Send `token` in the `X-Session-Token` header from now on. */
+        SignedIn: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "username": "ada",
+                 *       "token": "kF3x-example-token",
+                 *       "expires_at": "2026-01-08T09:00:00Z"
+                 *     }
+                 */
+                "application/json": {
+                    username: string;
+                    token: string;
+                    /** Format: date-time */
+                    expires_at: string;
+                };
+            };
+        };
+        /** @description No sign-in, an unknown or expired token, or (on login) a wrong username or password. */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "unauthorized",
+                 *         "message": "Sign in first: send the session token you got from /auth/login in the X-Session-Token header.",
+                 *         "details": null
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description The request or the config is invalid. `details.errors` lists each problem with its field path. */
         ValidationError: {
             headers: {
@@ -1348,6 +1461,21 @@ export interface components {
         qReason: "missing_required_field" | "transform_failed" | "invalid_value";
     };
     requestBodies: {
+        Credentials: {
+            content: {
+                /**
+                 * @example {
+                 *       "username": "ada",
+                 *       "password": "correct horse battery"
+                 *     }
+                 */
+                "application/json": {
+                    username: string;
+                    /** Format: password */
+                    password: string;
+                };
+            };
+        };
         /** @description A config as JSON, or as YAML text. Both parse to the same thing. */
         Config: {
             content: {
@@ -1387,6 +1515,116 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["Credentials"];
+        responses: {
+            201: components["responses"]["SignedIn"];
+            400: components["responses"]["ValidationError"];
+            /** @description Registration is closed on this server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Registration is closed on this server.",
+                     *         "details": null
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["Credentials"];
+        responses: {
+            200: components["responses"]["SignedIn"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Too many wrong passwords for this username. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "rate_limited",
+                     *         "message": "Too many wrong passwords for this username. Wait a few minutes and try again.",
+                     *         "details": null
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The signed-in account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "username": "ada"
+                     *     }
+                     */
+                    "application/json": {
+                        username: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listIntegrations: {

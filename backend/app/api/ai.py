@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.ai import features
 from app.ai.client import LLMClient, LLMError
 from app.ai.docs import DocsError, check_url, fetch_docs, prepare_text
-from app.api.deps import outbound_client_dep, session_dep
+from app.api.deps import Account, outbound_client_dep, session_dep
 from app.core.errors import ApiError
 from app.engine import remap_records, test_action
 from app.engine.placeholders import PlaceholderError, fill
@@ -69,13 +69,13 @@ def fill_vars_from_pin(config: dict, host: str) -> dict:
 _EXAMPLE_START = ("your-", "you@", "admin@your-", "my-")
 
 
-def fill_vars_from_saved(s: Session, config: dict, secret_name: str, host: str) -> dict:
+def fill_vars_from_saved(s: Session, account: str, config: dict, secret_name: str, host: str) -> dict:
     """The person already told us their account email, org or similar when they set up this service before: copy those
     values from a saved integration that uses the same secret on the same host, but only over the AI's example values."""
     vars_ = config.get("vars") or {}
     examples = {k: str(v.get("example")) for k, v in ((config.get("requires") or {}).get("vars") or {}).items() if isinstance(v, dict)}
     filled: dict = {}
-    for row in repo.list_integrations(s):
+    for row in repo.list_integrations(s, account):
         other = row.config
         if (other.get("auth") or {}).get("secret") != secret_name:
             continue
@@ -92,7 +92,7 @@ def fill_vars_from_saved(s: Session, config: dict, secret_name: str, host: str) 
     return filled
 
 
-def make_tester(s: Session, client):
+def make_tester(s: Session, account: str, client):
     """Try a draft against the real service, first page only, nothing saved (B-3). Built to be safe to run on a draft the AI
     wrote from a web page: the secret is sent only to the host it is already pinned to, never to a host the AI chose."""
 
@@ -106,13 +106,13 @@ def make_tester(s: Session, client):
             return skipped(config, "there is no pull action to test")
         auth = config["auth"]
         try:
-            secret = get_secret(auth["secret"], s)
+            secret = get_secret(auth["secret"], s, account)
         except SecretNotFound:
             return skipped(config, f"the secret {auth['secret']} is not set yet: enter its value, then press Test connection")
         if secret.host is None:
             return skipped(config, f"the secret {auth['secret']} is not pinned to a host, so it is not sent to an address the AI chose")
         filled = fill_vars_from_pin(config, secret.host)
-        filled.update(fill_vars_from_saved(s, config, auth["secret"], secret.host))
+        filled.update(fill_vars_from_saved(s, account, config, auth["secret"], secret.host))
         try:
             host = urlsplit(fill(config["base_url"], vars=config.get("vars"))).hostname or ""
             check_url(f"https://{host}/")  # a public address only, whatever the draft says
@@ -120,7 +120,7 @@ def make_tester(s: Session, client):
             return skipped(config, f"the base URL cannot be tried yet ({exc}). Fill in Variables, then press Test connection", filled)
         if host != secret.host:
             return skipped(config, f"the secret {auth['secret']} is pinned to {secret.host}, but this config calls {host}", filled)
-        result = test_action(config, action, client=client, secret_lookup=lambda name: get_secret(name, s))
+        result = test_action(config, action, client=client, secret_lookup=lambda name: get_secret(name, s, account))
         return config, {"ran": True, "action": action, "ok": result["ok"], "status_code": result["status_code"], "missing_paths": result["missing_paths"],
                         "notes": result["notes"], "raw_sample": result["raw_sample"], "filled_vars": filled}
 
@@ -162,7 +162,7 @@ class ProposeFixBody(BaseModel):
 
 @router.post("/ai/generate-config")
 def generate_config(body: GenerateBody, llm: LlmDep, fetch: Annotated[Callable[[str], dict], Depends(docs_dep)], s: SessionDep,
-                    client: Annotated[object, Depends(outbound_client_dep)]) -> dict:
+                    client: Annotated[object, Depends(outbound_client_dep)], account: Account) -> dict:
     llm = require_llm(llm)
     if not (body.text or body.url or body.service):
         raise ApiError(422, "validation_error", "send a service name, a documentation url or some text",
@@ -188,8 +188,8 @@ def generate_config(body: GenerateBody, llm: LlmDep, fetch: Annotated[Callable[[
         parts.append(f"Documentation page: {page['url']}\n\n{page['text']}")
     if body.text:
         parts.append(prepare_text(body.text))
-    names = sorted(x["name"] for x in list_secrets(s))  # names only, never values
-    out = ask(features.generate_config, llm, "\n\n".join(parts), existing_secrets=names, tester=make_tester(s, client))
+    names = sorted(x["name"] for x in list_secrets(s, account))  # names only, never values
+    out = ask(features.generate_config, llm, "\n\n".join(parts), existing_secrets=names, tester=make_tester(s, account, client))
     if out.get("test"):
         out["test"] = {k: v for k, v in out["test"].items() if k != "raw_sample"}  # real data stays on the server
     elif "test" in out:
@@ -214,19 +214,19 @@ def suggest_mapping(body: SuggestMappingBody, llm: LlmDep) -> dict:
 
 
 @router.post("/ai/summarize")
-def summarize(llm: LlmDep, s: SessionDep, body: SummarizeBody | None = None) -> dict:
+def summarize(llm: LlmDep, s: SessionDep, account: Account, body: SummarizeBody | None = None) -> dict:
     llm = require_llm(llm)
     body = body or SummarizeBody()
-    records, total = repo.list_results(s, body.target, body.source, limit=200)
+    records, total = repo.list_results(s, account, body.target, body.source, limit=200)
     if not records:
         return {"summary": f"There are no stored {body.target} records" + (f" from {body.source}" if body.source else "") + " yet."}
     return {"summary": ask(features.summarize, llm, body.target, records, total)}
 
 
 @router.post("/ai/propose-fix")
-def propose_fix(body: ProposeFixBody, llm: LlmDep, s: SessionDep) -> dict:
+def propose_fix(body: ProposeFixBody, llm: LlmDep, s: SessionDep, account: Account) -> dict:
     llm = require_llm(llm)
-    config = repo.get_integration(s, body.integration).config
+    config = repo.get_integration(s, account, body.integration).config
     if body.action not in config["actions"]:
         raise UnknownAction(f"{body.integration} has no action {body.action!r}")
 
@@ -235,13 +235,13 @@ def propose_fix(body: ProposeFixBody, llm: LlmDep, s: SessionDep) -> dict:
         if not body.run_id:
             raise ApiError(422, "validation_error", "run_id is required for run_failure",
                            {"errors": [{"path": "run_id", "message": "is required for run_failure", "severity": "error"}]})
-        run = repo.run_dict(repo.get_run(s, body.run_id))
+        run = repo.run_dict(repo.get_run(s, account, body.run_id))
         if run["integration"] != body.integration or run["action"] != body.action:
             raise repo.NotFound(f"run {body.run_id} is not a run of {body.integration}.{body.action}")
         result = ask(features.propose_fix, llm, config, body.action, kind="run_failure", run=run)
         return {**result, "verification": None}
 
-    rows = repo.export_quarantine(s, source=body.integration, action=body.action, run_id=body.run_id)[-RECHECK_LIMIT:]
+    rows = repo.export_quarantine(s, account, source=body.integration, action=body.action, run_id=body.run_id)[-RECHECK_LIMIT:]
     if not rows:
         return {"summary": "There are no quarantined records for this action, so there is nothing to fix.", "changes": [], "errors": [], "verification": None}
     result = ask(features.propose_fix, llm, config, body.action, kind="quarantine", quarantine=rows)

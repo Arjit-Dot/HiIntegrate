@@ -13,6 +13,10 @@ Needs the stack running (docker compose up). Exit code 0 only if all four pass.
 
 The mock is not published by the normal Compose file (D-17 S-1), so the first form is the one to use.
 
+The API needs a sign-in (D-18). The script uses the account in REHEARSE_USERNAME and REHEARSE_PASSWORD (registering it
+if it is new), or, when they are not set, a throwaway account with a random name and password. It saves the mock's
+test token (a public test value) under that account, pinned to the mock's host, so it never needs the server's .env.
+
 Settings (environment): API_BASE (default http://localhost:8000/api/v1), MOCK_BASE_URL (the mock as the
 BACKEND reaches it, default http://mock-api:8001), MOCK_ADMIN (the mock as THIS script reaches it, default
 the same as MOCK_BASE_URL). The mock's token is a test value, pinned to the host `mock-api` by Compose.
@@ -20,11 +24,13 @@ the same as MOCK_BASE_URL). The mock's token is a test value, pinned to the host
 
 import json
 import os
+import secrets
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -35,9 +41,13 @@ NAME = "mock-service"
 CONFIG = Path(__file__).resolve().parents[1] / "tests" / "mock_api" / "mock-service.yaml"
 
 
-def call(method: str, url: str, body=None, timeout: int = 120):
+TOKEN = ""   # the session token, set by sign_in()
+
+
+def call(method: str, url: str, body=None, timeout: int = 120, token: str = ""):
     data = None if body is None else json.dumps(body).encode()
-    req = urllib.request.Request(url, method=method, data=data, headers={"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json", **({"X-Session-Token": token} if token else {})}
+    req = urllib.request.Request(url, method=method, data=data, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             text = r.read()
@@ -48,13 +58,28 @@ def call(method: str, url: str, body=None, timeout: int = 120):
 
 
 def api(method: str, path: str, body=None):
-    return call(method, API + path, body)
+    return call(method, API + path, body, token=TOKEN)
+
+
+def sign_in() -> None:
+    global TOKEN
+    user = os.environ.get("REHEARSE_USERNAME") or "rehearsal-" + secrets.token_hex(4)
+    password = os.environ.get("REHEARSE_PASSWORD") or secrets.token_urlsafe(18)
+    status, reply = call("POST", API + "/auth/register", {"username": user, "password": password})
+    if status == 409:  # the account exists: sign in
+        status, reply = call("POST", API + "/auth/login", {"username": user, "password": password})
+    if status not in (200, 201):
+        sys.exit(f"Could not sign in as {user}: HTTP {status} {reply}")
+    TOKEN = reply["token"]
 
 
 def setup() -> None:
     """Make sure the mock integration exists and points at the mock, and reset the mock's counters."""
     cfg = yaml.safe_load(CONFIG.read_text())
     cfg["base_url"] = MOCK_BASE_URL
+    status, reply = api("PUT", "/secrets/mock_token", {"value": "mock-secret-123", "host": urlsplit(MOCK_BASE_URL).hostname})
+    if status != 204:
+        sys.exit(f"Could not save the mock's test token: HTTP {status} {reply}")
     status, _ = api("GET", f"/integrations/{NAME}")
     status, reply = api("POST", "/integrations", cfg) if status == 404 else api("PUT", f"/integrations/{NAME}", cfg)
     if status not in (200, 201):
@@ -112,6 +137,7 @@ def main() -> int:
     status, _ = api("GET", "/health")
     if status != 200:
         sys.exit(f"The API at {API} is not answering. Start the stack first: docker compose up")
+    sign_in()
     setup()
     failed = 0
     for title, test in TESTS:

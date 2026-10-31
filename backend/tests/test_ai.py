@@ -18,6 +18,7 @@ from app.main import create_app
 from app.scheduler import runner
 from app.storage import make_engine, repo, session_scope
 from app.storage.models import Base
+from tests.helpers import ACCT, signed_in
 
 MOCK = parse_config((REPO_ROOT / "backend" / "tests" / "mock_api" / "mock-service.yaml").read_text())
 GITHUB_YAML = (REPO_ROOT / "templates" / "github.yaml").read_text()
@@ -209,7 +210,7 @@ def api(tmp_path, monkeypatch):
     app = create_app()
     app.dependency_overrides[engine_dep] = lambda: engine
     app.dependency_overrides[outbound_client_dep] = no_network
-    client = TestClient(app)
+    client = signed_in(TestClient(app))
     client.engine, client.app_ = engine, app
     return client
 
@@ -227,11 +228,11 @@ def dirty_service(api):
     cfg["actions"]["dirty_users"]["map"] = {"id": "id", "name": "name", "email": {"path": "email", "transform": "lowercase"},
                                             "status": {"path": "status", "value_map": {"active": "active", "disabled": "inactive"}}}
     with session_scope(api.engine) as s:
-        repo.create_integration(s, cfg)
+        repo.create_integration(s, ACCT, cfg)
     people = [{"id": f"u{i}", "name": f"Person {i}", "email": f"person{i}@acme.com", "status": st}
               for i, st in enumerate(["active", "pending", "pending", "suspended"], 1)]
     client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=people)))
-    run_id, result = runner.run(api.engine, "dirty", "dirty_users", "manual", client=client)
+    run_id, result = runner.run(api.engine, ACCT, "dirty", "dirty_users", "manual", client=client)
     assert result.records_invalid == 3
     return run_id
 
@@ -356,7 +357,7 @@ def test_nothing_quarantined_means_nothing_to_fix_and_no_model_call(api):
     cfg["name"], cfg["enabled"] = "clean", True
     cfg["actions"] = {"dirty_users": cfg["actions"]["dirty_users"]}
     with session_scope(api.engine) as s:
-        repo.create_integration(s, cfg)
+        repo.create_integration(s, ACCT, cfg)
     use(api, Script())
     body = api.post("/api/v1/ai/propose-fix", json={"kind": "quarantine", "integration": "clean", "action": "dirty_users"}).json()
     assert body["changes"] == [] and "nothing to fix" in body["summary"]
@@ -367,8 +368,8 @@ def test_run_failure_explains_the_cause_without_verification(api):
     cfg["name"], cfg["enabled"] = "broken", True
     cfg["actions"] = {"wrong_key": cfg["actions"]["wrong_key"]}
     with session_scope(api.engine) as s:
-        repo.create_integration(s, cfg)
-    run_id, _ = runner.run(api.engine, "broken", "wrong_key", "manual", client=TestClient(__import__("tests.mock_api.app", fromlist=["app"]).app), sleep=lambda s: None)
+        repo.create_integration(s, ACCT, cfg)
+    run_id, _ = runner.run(api.engine, ACCT, "broken", "wrong_key", "manual", client=TestClient(__import__("tests.mock_api.app", fromlist=["app"]).app), sleep=lambda s: None)
     model = use(api, Script({"summary": "The token was rejected (401). Replace the secret.", "changes": []}))
     body = api.post("/api/v1/ai/propose-fix", json={"kind": "run_failure", "integration": "broken", "action": "wrong_key", "run_id": run_id}).json()
     assert body["changes"] == [] and body["verification"] is None and "401" in body["summary"]

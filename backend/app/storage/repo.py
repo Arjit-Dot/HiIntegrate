@@ -1,4 +1,7 @@
-"""The only code that touches the database (D-8). Shapes returned match schema/result.schema.json."""
+"""The only code that touches the database (D-8). Shapes returned match schema/result.schema.json.
+
+D-18: every function that reads or writes a person's data takes `account` (the signed-in username) and only ever
+sees rows of that account. There is no way to ask for another account's rows."""
 
 from datetime import UTC, datetime
 from typing import Any
@@ -10,8 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.storage.models import (
     RECORD_TABLES,
+    Account,
     ActionState,
     AlertAttempt,
+    AuthSession,
     Integration,
     PathBaseline,
     Quarantine,
@@ -48,30 +53,34 @@ def integration_dict(row: Integration) -> dict:
             "created_at": row.created_at, "updated_at": row.updated_at}
 
 
-def create_integration(s: Session, config: dict) -> Integration:
-    if s.get(Integration, config["name"]):
+def create_integration(s: Session, account: str, config: dict) -> Integration:
+    if s.get(Integration, (account, config["name"])):
         raise Conflict(f"an integration named {config['name']} already exists", {"name": config["name"]})
     stamp = now_iso()
-    row = Integration(name=config["name"], config=config, revision=1, enabled=config.get("enabled", True), created_at=stamp, updated_at=stamp)
+    row = Integration(account=account, name=config["name"], config=config, revision=1, enabled=config.get("enabled", True), created_at=stamp, updated_at=stamp)
     s.add(row)
     s.flush()
     return row
 
 
-def get_integration(s: Session, name: str) -> Integration:
-    row = s.get(Integration, name)
+def get_integration(s: Session, account: str, name: str) -> Integration:
+    row = s.get(Integration, (account, name))
     if row is None:
         raise NotFound(f"no integration named {name}")
     return row
 
 
-def list_integrations(s: Session) -> list[Integration]:
-    return list(s.scalars(select(Integration).order_by(Integration.name)))
+def list_integrations(s: Session, account: str | None = None) -> list[Integration]:
+    """One account's integrations. `account=None` is for the worker only: every account's, so each can be scheduled."""
+    q = select(Integration).order_by(Integration.account, Integration.name)
+    if account is not None:
+        q = q.where(Integration.account == account)
+    return list(s.scalars(q))
 
 
-def replace_integration(s: Session, name: str, config: dict) -> Integration:
+def replace_integration(s: Session, account: str, name: str, config: dict) -> Integration:
     """D-15: update the existing row in place. The name cannot change, because records are keyed by it."""
-    row = get_integration(s, name)
+    row = get_integration(s, account, name)
     if config.get("name") != name:
         raise Conflict(f"the config's name must stay {name}; records are keyed by it", {"name": config.get("name")})
     row.config = config
@@ -82,32 +91,32 @@ def replace_integration(s: Session, name: str, config: dict) -> Integration:
     return row
 
 
-def set_enabled(s: Session, name: str, enabled: bool) -> Integration:
-    row = get_integration(s, name)
-    return replace_integration(s, name, {**row.config, "enabled": enabled})
+def set_enabled(s: Session, account: str, name: str, enabled: bool) -> Integration:
+    row = get_integration(s, account, name)
+    return replace_integration(s, account, name, {**row.config, "enabled": enabled})
 
 
-def delete_integration(s: Session, name: str) -> None:
-    s.delete(get_integration(s, name))
+def delete_integration(s: Session, account: str, name: str) -> None:
+    s.delete(get_integration(s, account, name))
     for model in (ActionState, PathBaseline, AlertAttempt):  # its history goes with it, so a new integration of the same name starts fresh
-        for row in s.scalars(select(model).where(model.integration == name)):
+        for row in s.scalars(select(model).where(model.account == account, model.integration == name)):
             s.delete(row)
     s.flush()
 
 
 # ---------------------------------------------------------------- records (D-3, upsert on (source, id))
 
-def upsert_records(s: Session, target: str, records: list[dict]) -> int:
+def upsert_records(s: Session, account: str, target: str, records: list[dict]) -> int:
     if not records:
         return 0
     table = RECORD_TABLES[target].__table__
     cols = RECORD_FIELDS[target] + ["source", "fetched_at", "raw"]
-    rows = [{c: r.get(c) for c in cols} for r in records]
+    rows = [{**{c: r.get(c) for c in cols}, "account": account} for r in records]
     dialect = s.get_bind().dialect.name
     insert = postgresql.insert if dialect == "postgresql" else sqlite.insert
     stmt = insert(table).values(rows)
     update = {c: stmt.excluded[c] for c in cols if c not in ("source", "id")}
-    s.execute(stmt.on_conflict_do_update(index_elements=["source", "id"], set_=update))
+    s.execute(stmt.on_conflict_do_update(index_elements=["account", "source", "id"], set_=update))
     return len(rows)
 
 
@@ -119,20 +128,20 @@ def record_dict(target: str, row: Any, *, with_raw: bool = False) -> dict:
     return out
 
 
-def get_results(s: Session, filter: dict | None = None) -> list[dict]:
+def get_results(s: Session, account: str, filter: dict | None = None) -> list[dict]:
     """The D-8 handoff for the AI summary: records of one type, newest first.
     Pass {"unified": True} for people merged across services (D-16)."""
     f = dict(filter or {})
     if f.pop("unified", False):
-        items, _ = list_unified_users(s, **{k: v for k, v in f.items() if k in ("source", "limit", "offset")})
+        items, _ = list_unified_users(s, account, **{k: v for k, v in f.items() if k in ("source", "limit", "offset")})
         return items
-    items, _ = list_results(s, **f)
+    items, _ = list_results(s, account, **f)
     return items
 
 
-def list_results(s: Session, target: str = "user", source: str | None = None, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
+def list_results(s: Session, account: str, target: str = "user", source: str | None = None, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
     model = RECORD_TABLES[target]
-    q = select(model)
+    q = select(model).where(model.account == account)
     if source:
         q = q.where(model.source == source)
     total = s.scalar(select(func.count()).select_from(q.subquery()))
@@ -147,16 +156,16 @@ def _person_key():
     return case(((User.email.is_not(None)) & (User.email != ""), func.lower(User.email)), else_=User.source + ":" + User.id)
 
 
-def list_unified_users(s: Session, source: str | None = None, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
+def list_unified_users(s: Session, account: str, source: str | None = None, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
     key = _person_key()
-    groups = select(key.label("k"), func.max(User.fetched_at).label("newest")).group_by(key)
+    groups = select(key.label("k"), func.max(User.fetched_at).label("newest")).where(User.account == account).group_by(key)
     if source:  # keep people who appear in this service, but still list all of their services
-        groups = groups.where(key.in_(select(key).where(User.source == source)))
+        groups = groups.where(key.in_(select(key).where(User.account == account, User.source == source)))
     total = s.scalar(select(func.count()).select_from(groups.subquery()))
     page_keys = [r.k for r in s.execute(groups.order_by(func.max(User.fetched_at).desc(), key).limit(limit).offset(offset))]
     if not page_keys:
         return [], total
-    rows = list(s.scalars(select(User).where(key.in_(page_keys)).order_by(User.source, User.id)))
+    rows = list(s.scalars(select(User).where(User.account == account, key.in_(page_keys)).order_by(User.source, User.id)))
     by_key: dict[str, list] = {k: [] for k in page_keys}
     for r in rows:
         by_key[(r.email.lower() if r.email else f"{r.source}:{r.id}")].append(r)
@@ -179,13 +188,13 @@ def list_unified_users(s: Session, source: str | None = None, limit: int = 50, o
 QUARANTINE_FIELDS = ["source", "action", "target_schema", "run_id", "raw", "reason", "field", "created_at"]
 
 
-def add_quarantine(s: Session, entries: list[dict]) -> int:
-    s.add_all(Quarantine(**{k: e[k] for k in QUARANTINE_FIELDS}) for e in entries)
+def add_quarantine(s: Session, account: str, entries: list[dict]) -> int:
+    s.add_all(Quarantine(account=account, **{k: e[k] for k in QUARANTINE_FIELDS}) for e in entries)
     return len(entries)
 
 
-def _quarantine_query(source=None, action=None, run_id=None, target_schema=None, reason=None):
-    q = select(Quarantine)
+def _quarantine_query(account, source=None, action=None, run_id=None, target_schema=None, reason=None):
+    q = select(Quarantine).where(Quarantine.account == account)
     for column, value in ((Quarantine.source, source), (Quarantine.action, action), (Quarantine.run_id, run_id),
                           (Quarantine.target_schema, target_schema), (Quarantine.reason, reason)):
         if value:
@@ -197,15 +206,15 @@ def quarantine_dict(row: Quarantine) -> dict:
     return {k: getattr(row, k) for k in QUARANTINE_FIELDS}
 
 
-def list_quarantine(s: Session, limit: int = 50, offset: int = 0, **filters) -> tuple[list[dict], int]:
-    q = _quarantine_query(**filters)
+def list_quarantine(s: Session, account: str, limit: int = 50, offset: int = 0, **filters) -> tuple[list[dict], int]:
+    q = _quarantine_query(account, **filters)
     total = s.scalar(select(func.count()).select_from(q.subquery()))
     rows = s.scalars(q.order_by(Quarantine.pk.desc()).limit(limit).offset(offset))
     return [quarantine_dict(r) for r in rows], total
 
 
-def export_quarantine(s: Session, **filters) -> list[dict]:
-    return [quarantine_dict(r) for r in s.scalars(_quarantine_query(**filters).order_by(Quarantine.pk))]
+def export_quarantine(s: Session, account: str, **filters) -> list[dict]:
+    return [quarantine_dict(r) for r in s.scalars(_quarantine_query(account, **filters).order_by(Quarantine.pk))]
 
 
 # ---------------------------------------------------------------- runs (D-5.1)
@@ -218,14 +227,14 @@ def run_dict(row: Run) -> dict:
     return {"run_id": row.run_id, **{k: getattr(row, k) for k in RUN_FIELDS}}
 
 
-def start_run(s: Session, integration: str, action: str, mode: str, trigger: str) -> Run:
+def start_run(s: Session, account: str, integration: str, action: str, mode: str, trigger: str) -> Run:
     """Raises Conflict if the action is already running (the unique index, D-10)."""
-    row = Run(integration=integration, action=action, mode=mode, trigger=trigger, status="running", started_at=now_iso())
+    row = Run(account=account, integration=integration, action=action, mode=mode, trigger=trigger, status="running", started_at=now_iso())
     try:
         with s.begin_nested():  # a savepoint, so a clash undoes only this insert
             s.add(row)
     except IntegrityError:
-        running = s.scalar(select(Run).where(Run.integration == integration, Run.action == action, Run.status == "running"))
+        running = s.scalar(select(Run).where(Run.account == account, Run.integration == integration, Run.action == action, Run.status == "running"))
         raise Conflict(f"{action} is already running", {"run_id": running.run_id if running else None}) from None
     return row
 
@@ -237,19 +246,19 @@ def finish_run(s: Session, row: Run, result: Any) -> Run:
     return row
 
 
-def get_run(s: Session, run_id: str) -> Run:
+def get_run(s: Session, account: str, run_id: str) -> Run:
     try:
         pk = int(run_id.removeprefix("run-"))
     except ValueError:
         raise NotFound(f"no run {run_id}") from None
     row = s.get(Run, pk)
-    if row is None:
+    if row is None or row.account != account:  # another account's run looks exactly like one that does not exist
         raise NotFound(f"no run {run_id}")
     return row
 
 
-def list_runs(s: Session, integration: str | None = None, status: str | None = None, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
-    q = select(Run)
+def list_runs(s: Session, account: str, integration: str | None = None, status: str | None = None, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
+    q = select(Run).where(Run.account == account)
     if integration:
         q = q.where(Run.integration == integration)
     if status:
@@ -265,7 +274,7 @@ def health(s: Session, integration: Integration) -> dict:
     behind a healthy one. Only schedule and manual runs count, and only actions still in the config."""
     actions = list(integration.config.get("actions") or {})
     runs = list(s.scalars(select(Run).where(
-        Run.integration == integration.name, Run.trigger.in_(COUNTED_TRIGGERS), Run.status != "running", Run.action.in_(actions),
+        Run.account == integration.account, Run.integration == integration.name, Run.trigger.in_(COUNTED_TRIGGERS), Run.status != "running", Run.action.in_(actions),
     ).order_by(Run.pk.desc()).limit(1000)))
     by_action: dict[str, list[Run]] = {}
     for r in runs:  # newest first
@@ -299,15 +308,15 @@ def health(s: Session, integration: Integration) -> dict:
             "consecutive_failures": max((trailing_failures(rs) for rs in by_action.values()), default=0)}
 
 
-def has_run(s: Session, integration: str, action: str) -> bool:
-    return s.scalar(select(Run.pk).where(Run.integration == integration, Run.action == action).limit(1)) is not None
+def has_run(s: Session, account: str, integration: str, action: str) -> bool:
+    return s.scalar(select(Run.pk).where(Run.account == account, Run.integration == integration, Run.action == action).limit(1)) is not None
 
 
-def failure_streak(s: Session, integration: str, action: str) -> int:
+def failure_streak(s: Session, account: str, integration: str, action: str) -> int:
     """Failed schedule/manual runs of this action in a row, newest first (D-5.3). A success ends the streak."""
     n = 0
     for status in s.scalars(select(Run.status).where(
-        Run.integration == integration, Run.action == action, Run.trigger.in_(COUNTED_TRIGGERS), Run.status != "running",
+        Run.account == account, Run.integration == integration, Run.action == action, Run.trigger.in_(COUNTED_TRIGGERS), Run.status != "running",
     ).order_by(Run.pk.desc()).limit(1000)):
         if status != "failed":
             break
@@ -317,42 +326,42 @@ def failure_streak(s: Session, integration: str, action: str) -> int:
 
 # ---------------------------------------------------------------- engine state ({{state.x}})
 
-def get_state(s: Session, integration: str, action: str) -> dict:
-    row = s.get(ActionState, (integration, action))
+def get_state(s: Session, account: str, integration: str, action: str) -> dict:
+    row = s.get(ActionState, (account, integration, action))
     return {"last_success_at": row.last_success_at} if row and row.last_success_at else {}
 
 
-def set_last_success(s: Session, integration: str, action: str, when: str) -> None:
-    row = s.get(ActionState, (integration, action)) or ActionState(integration=integration, action=action)
+def set_last_success(s: Session, account: str, integration: str, action: str, when: str) -> None:
+    row = s.get(ActionState, (account, integration, action)) or ActionState(account=account, integration=integration, action=action)
     row.last_success_at = when
     s.add(row)
 
 
 # ---------------------------------------------------------------- schema drift baseline
 
-def get_baseline(s: Session, integration: str, action: str) -> set[str]:
-    row = s.get(PathBaseline, (integration, action))
+def get_baseline(s: Session, account: str, integration: str, action: str) -> set[str]:
+    row = s.get(PathBaseline, (account, integration, action))
     return set(row.paths) if row else set()
 
 
-def add_to_baseline(s: Session, integration: str, action: str, paths: set[str]) -> None:
+def add_to_baseline(s: Session, account: str, integration: str, action: str, paths: set[str]) -> None:
     """Paths are only ever added: one that vanished stays remembered, so the drift stays visible until it returns
     or the config stops mapping it."""
-    row = s.get(PathBaseline, (integration, action)) or PathBaseline(integration=integration, action=action, paths=[])
+    row = s.get(PathBaseline, (account, integration, action)) or PathBaseline(account=account, integration=integration, action=action, paths=[])
     row.paths = sorted(set(row.paths) | paths)
     s.add(row)
 
 
 # ---------------------------------------------------------------- alert state (D-5.3)
 
-def record_alert_attempt(s: Session, integration: str, action: str, outcome: str, failures: int, message: str | None = None) -> None:
-    row = s.get(AlertAttempt, (integration, action)) or AlertAttempt(integration=integration, action=action)
+def record_alert_attempt(s: Session, account: str, integration: str, action: str, outcome: str, failures: int, message: str | None = None) -> None:
+    row = s.get(AlertAttempt, (account, integration, action)) or AlertAttempt(account=account, integration=integration, action=action)
     row.at, row.outcome, row.failures, row.message = now_iso(), outcome, failures, (message or None) and message[:240]
     s.add(row)
 
 
-def clear_alert_attempt(s: Session, integration: str, action: str) -> None:
-    row = s.get(AlertAttempt, (integration, action))
+def clear_alert_attempt(s: Session, account: str, integration: str, action: str) -> None:
+    row = s.get(AlertAttempt, (account, integration, action))
     if row is not None:
         s.delete(row)
 
@@ -363,7 +372,44 @@ def alert_state(s: Session, integration: Integration) -> dict | None:
     if not rule:
         return None
     actions = list(integration.config.get("actions") or {})
-    rows = list(s.scalars(select(AlertAttempt).where(AlertAttempt.integration == integration.name, AlertAttempt.action.in_(actions)).order_by(AlertAttempt.at.desc())))
+    rows = list(s.scalars(select(AlertAttempt).where(AlertAttempt.account == integration.account, AlertAttempt.integration == integration.name, AlertAttempt.action.in_(actions)).order_by(AlertAttempt.at.desc())))
     last = rows[0] if rows else None
     return {"after_failures": rule.get("after_failures", 3), "to": rule.get("to", []),
             "last_attempt": None if last is None else {"action": last.action, "at": last.at, "outcome": last.outcome, "failures": last.failures, "message": last.message}}
+
+
+# ---------------------------------------------------------------- accounts and sign-ins (D-18)
+
+def create_account(s: Session, username: str, password_hash: str) -> Account:
+    if s.get(Account, username):
+        raise Conflict("that username is taken", {"username": username})
+    row = Account(username=username, password_hash=password_hash, created_at=now_iso())
+    s.add(row)
+    s.flush()
+    return row
+
+
+def get_account(s: Session, username: str) -> Account | None:
+    return s.get(Account, username)
+
+
+def add_auth_session(s: Session, token_hash: str, account: str, expires_at: str) -> None:
+    s.add(AuthSession(token_hash=token_hash, account=account, created_at=now_iso(), expires_at=expires_at))
+    s.flush()
+
+
+def get_auth_session(s: Session, token_hash: str) -> AuthSession | None:
+    """The sign-in for this token hash, unless it has expired (an expired one is removed)."""
+    row = s.get(AuthSession, token_hash)
+    if row is not None and row.expires_at <= now_iso():
+        s.delete(row)
+        s.flush()
+        return None
+    return row
+
+
+def delete_auth_session(s: Session, token_hash: str) -> None:
+    row = s.get(AuthSession, token_hash)
+    if row is not None:
+        s.delete(row)
+        s.flush()

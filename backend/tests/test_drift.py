@@ -12,6 +12,7 @@ from app.engine.drift import DriftTracker, mapped_paths
 from app.scheduler import runner
 from app.storage import make_engine, repo, session_scope
 from app.storage.models import Base
+from tests.helpers import ACCT
 
 MOCK = parse_config((REPO_ROOT / "backend" / "tests" / "mock_api" / "mock-service.yaml").read_text())
 
@@ -90,16 +91,16 @@ def renamed_response():
 
 def health(engine):
     with session_scope(engine) as s:
-        return repo.health(s, repo.get_integration(s, "drifty"))
+        return repo.health(s, repo.get_integration(s, ACCT, "drifty"))
 
 
 def add_drifty(engine):
     with session_scope(engine) as s:
-        repo.create_integration(s, cfg_without("email"))
+        repo.create_integration(s, ACCT, cfg_without("email"))
 
 
 def run(engine, client):
-    return runner.run(engine, "drifty", "users_cursor", "schedule", client=client)[1]
+    return runner.run(engine, ACCT, "drifty", "users_cursor", "schedule", client=client)[1]
 
 
 def test_the_first_run_sets_the_baseline_and_is_never_drift(engine):
@@ -107,7 +108,7 @@ def test_the_first_run_sets_the_baseline_and_is_never_drift(engine):
     result = run(engine, renamed_response())  # `email` was never seen, so it did not vanish
     assert result.status == "success" and result.error is None and health(engine)["status"] == "healthy"
     with session_scope(engine) as s:
-        assert repo.get_baseline(s, "drifty", "users_cursor") == {"id", "name", "status", "last_login"}
+        assert repo.get_baseline(s, ACCT, "drifty", "users_cursor") == {"id", "name", "status", "last_login"}
 
 
 def test_a_renamed_field_after_a_good_run_succeeds_but_names_the_path(engine):
@@ -136,7 +137,7 @@ def test_a_failed_run_does_not_touch_the_baseline(engine):
     bad = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(401)))
     assert run(engine, bad).status == "failed"
     with session_scope(engine) as s:
-        assert repo.get_baseline(s, "drifty", "users_cursor") == set()
+        assert repo.get_baseline(s, ACCT, "drifty", "users_cursor") == set()
 
 
 def test_an_empty_response_neither_flags_nor_forgets(engine):
@@ -153,9 +154,9 @@ def test_remapping_the_field_in_the_config_ends_the_drift(engine):
     run(engine, users())
     assert run(engine, renamed_response()).error["code"] == "schema_drift"
     with session_scope(engine) as s:
-        cfg = copy.deepcopy(repo.get_integration(s, "drifty").config)
+        cfg = copy.deepcopy(repo.get_integration(s, ACCT, "drifty").config)
         cfg["actions"]["users_cursor"]["map"]["email"] = {"path": "mail", "transform": "lowercase"}
-        repo.replace_integration(s, "drifty", cfg)
+        repo.replace_integration(s, ACCT, "drifty", cfg)
     assert run(engine, renamed_response()).error is None and health(engine)["status"] == "healthy"
 
 
@@ -163,32 +164,32 @@ def test_the_baseline_is_kept_per_action(engine):
     cfg = cfg_without("email")
     cfg["actions"]["users_page_number"] = copy.deepcopy(MOCK["actions"]["users_page_number"])
     with session_scope(engine) as s:
-        repo.create_integration(s, cfg)
+        repo.create_integration(s, ACCT, cfg)
     run(engine, users())
     with session_scope(engine) as s:
-        assert "email" in repo.get_baseline(s, "drifty", "users_cursor") and repo.get_baseline(s, "drifty", "users_page_number") == set()
+        assert "email" in repo.get_baseline(s, ACCT, "drifty", "users_cursor") and repo.get_baseline(s, ACCT, "drifty", "users_page_number") == set()
 
 
 def test_deleting_an_integration_clears_its_baseline(engine):
     add_drifty(engine)
     run(engine, users())
     with session_scope(engine) as s:
-        repo.delete_integration(s, "drifty")
+        repo.delete_integration(s, ACCT, "drifty")
     with session_scope(engine) as s:
-        assert repo.get_baseline(s, "drifty", "users_cursor") == set()
+        assert repo.get_baseline(s, ACCT, "drifty", "users_cursor") == set()
 
 
 def test_a_real_failure_outranks_drift_in_health(engine):
     cfg = cfg_without("email")
     cfg["actions"]["wrong_key"] = copy.deepcopy(MOCK["actions"]["wrong_key"])
     with session_scope(engine) as s:
-        repo.create_integration(s, cfg)
+        repo.create_integration(s, ACCT, cfg)
     run(engine, users())
-    runner.run(engine, "drifty", "users_cursor", "schedule", client=renamed_response())
+    runner.run(engine, ACCT, "drifty", "users_cursor", "schedule", client=renamed_response())
     bad = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(401)))
-    runner.run(engine, "drifty", "wrong_key", "schedule", client=bad, sleep=lambda s: None)
+    runner.run(engine, ACCT, "drifty", "wrong_key", "schedule", client=bad, sleep=lambda s: None)
     with session_scope(engine) as s:
-        h = repo.health(s, repo.get_integration(s, "drifty"))
+        h = repo.health(s, repo.get_integration(s, ACCT, "drifty"))
     assert h["status"] == "failing" and h["last_error"]["code"] == "auth_failed"
 
 

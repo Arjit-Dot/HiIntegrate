@@ -14,6 +14,7 @@ from app.engine import build_request, remap_records, run_action
 from app.scheduler import alerts, runner, timer
 from app.storage import make_engine, repo, session_scope
 from app.storage.models import Base
+from tests.helpers import ACCT, signed_in
 from tests.mock_api.app import app as mock_app
 
 MOCK = parse_config((REPO_ROOT / "backend" / "tests" / "mock_api" / "mock-service.yaml").read_text())
@@ -47,7 +48,7 @@ def service(name="svc", actions=("users_cursor",), schedule=None, **extra) -> di
 
 def add(engine, cfg):
     with session_scope(engine) as s:
-        repo.create_integration(s, cfg)
+        repo.create_integration(s, ACCT, cfg)
 
 
 # ---------------------------------------------------------------- the timer
@@ -62,24 +63,24 @@ def test_sync_registers_enabled_pulls_and_follows_the_database(engine):
     sched = BackgroundScheduler(timezone="UTC")  # not started: jobs wait in the list
     add(engine, service("one", ("users_cursor", "get_user"), schedule="every 2m"))
     add(engine, {**service("off"), "enabled": False})
-    assert timer.sync(sched, engine) == {"added": ["one:users_cursor"], "updated": [], "removed": []}  # lookups and disabled are skipped
+    assert timer.sync(sched, engine) == {"added": ["tester:one:users_cursor"], "updated": [], "removed": []}  # lookups and disabled are skipped
     assert timer.sync(sched, engine) == {"added": [], "updated": [], "removed": []}  # nothing changed, nothing touched
 
     with session_scope(engine) as s:  # edit in place: the new interval takes effect
-        cfg = copy.deepcopy(repo.get_integration(s, "one").config)
+        cfg = copy.deepcopy(repo.get_integration(s, ACCT, "one").config)
         cfg["actions"]["users_cursor"]["schedule"] = "every 30s"
-        repo.replace_integration(s, "one", cfg)
-    assert timer.sync(sched, engine)["updated"] == ["one:users_cursor"]
-    assert sched.get_job("one:users_cursor").trigger.interval.total_seconds() == 30
+        repo.replace_integration(s, ACCT, "one", cfg)
+    assert timer.sync(sched, engine)["updated"] == ["tester:one:users_cursor"]
+    assert sched.get_job("tester:one:users_cursor").trigger.interval.total_seconds() == 30
 
     with session_scope(engine) as s:
-        repo.set_enabled(s, "one", False)
-    assert timer.sync(sched, engine)["removed"] == ["one:users_cursor"]
+        repo.set_enabled(s, ACCT, "one", False)
+    assert timer.sync(sched, engine)["removed"] == ["tester:one:users_cursor"]
     assert sched.get_jobs() == []
 
     with session_scope(engine) as s:
-        repo.set_enabled(s, "one", True)
-        repo.delete_integration(s, "one")
+        repo.set_enabled(s, ACCT, "one", True)
+        repo.delete_integration(s, ACCT, "one")
     assert timer.sync(sched, engine) == {"added": [], "updated": [], "removed": []}
 
 
@@ -87,32 +88,32 @@ def test_a_new_action_runs_at_once_and_a_known_one_waits_an_interval(engine, moc
     sched = BackgroundScheduler(timezone="UTC")  # not started, so a job only has a next time if we asked for one
     add(engine, service("fresh", ("users_cursor",), schedule="every 1h"))
     timer.sync(sched, engine, client=mock)
-    assert sched.get_job("fresh:users_cursor").next_run_time is not None  # never ran: first run at once
-    sched.remove_job("fresh:users_cursor")
-    runner.run(engine, "fresh", "users_cursor", "schedule", client=mock)
+    assert sched.get_job("tester:fresh:users_cursor").next_run_time is not None  # never ran: first run at once
+    sched.remove_job("tester:fresh:users_cursor")
+    runner.run(engine, ACCT, "fresh", "users_cursor", "schedule", client=mock)
     timer.sync(sched, engine, client=mock)
-    assert getattr(sched.get_job("fresh:users_cursor"), "next_run_time", None) is None  # has run: the interval decides, not a restart
+    assert getattr(sched.get_job("tester:fresh:users_cursor"), "next_run_time", None) is None  # has run: the interval decides, not a restart
 
 
 def test_a_scheduled_job_runs_the_action_and_saves_records(engine, mock):
     add(engine, service("job", ("users_cursor",)))
-    timer.run_job(engine, "job", "users_cursor", client=mock)
+    timer.run_job(engine, ACCT, "job", "users_cursor", client=mock)
     with session_scope(engine) as s:
-        runs, _ = repo.list_runs(s, "job")
+        runs, _ = repo.list_runs(s, ACCT, "job")
         assert [(r["trigger"], r["status"], r["records_valid"]) for r in runs] == [("schedule", "success", 25)]
 
 
 def test_a_run_still_going_is_skipped(engine, mock):
     add(engine, service("busy", ("users_cursor",)))
     with session_scope(engine) as s:
-        repo.start_run(s, "busy", "users_cursor", "pull", "manual")  # left `running`
-    timer.run_job(engine, "busy", "users_cursor", client=mock)  # must not raise or add a run
+        repo.start_run(s, ACCT, "busy", "users_cursor", "pull", "manual")  # left `running`
+    timer.run_job(engine, ACCT, "busy", "users_cursor", client=mock)  # must not raise or add a run
     with session_scope(engine) as s:
-        assert repo.list_runs(s, "busy")[1] == 1
+        assert repo.list_runs(s, ACCT, "busy")[1] == 1
 
 
 def test_a_job_for_a_deleted_integration_does_not_crash(engine):
-    timer.run_job(engine, "gone", "users_cursor")
+    timer.run_job(engine, ACCT, "gone", "users_cursor")
 
 
 def test_two_workers_cannot_run_the_same_action_twice(engine, mock):
@@ -126,19 +127,19 @@ def test_two_workers_cannot_run_the_same_action_twice(engine, mock):
         gate.wait(5)
         return real(*a, **k)
 
-    first = threading.Thread(target=lambda: timer.run_job(engine, "twice", "users_cursor", client=mock))
+    first = threading.Thread(target=lambda: timer.run_job(engine, ACCT, "twice", "users_cursor", client=mock))
     import app.scheduler.runner as r
     r.run_action = slow
     try:
         first.start()
         assert entered.wait(5)
-        timer.run_job(engine, "twice", "users_cursor", client=mock)  # skipped
+        timer.run_job(engine, ACCT, "twice", "users_cursor", client=mock)  # skipped
         gate.set()
         first.join(10)
     finally:
         r.run_action = real
     with session_scope(engine) as s:
-        assert repo.list_runs(s, "twice")[1] == 1
+        assert repo.list_runs(s, ACCT, "twice")[1] == 1
 
 
 # ---------------------------------------------------------------- incremental sync (B-1)
@@ -166,16 +167,16 @@ def test_last_success_is_kept_per_action_and_sent_next_time(engine):
         return httpx.Response(200, json={"items": [], "meta": {"next": None}})
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    runner.run(engine, "inc2", "users_cursor", "schedule", client=client)
-    runner.run(engine, "inc2", "users_cursor", "schedule", client=client)
+    runner.run(engine, ACCT, "inc2", "users_cursor", "schedule", client=client)
+    runner.run(engine, ACCT, "inc2", "users_cursor", "schedule", client=client)
     assert "updated_since" not in seen[0] and seen[1]["updated_since"].endswith("Z")
     ok = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
-    runner.run(engine, "inc2", "users_cursor", "schedule", client=ok, sleep=lambda s: None)
+    runner.run(engine, ACCT, "inc2", "users_cursor", "schedule", client=ok, sleep=lambda s: None)
     with session_scope(engine) as s:
-        before = repo.get_state(s, "inc2", "users_cursor")
-    runner.run(engine, "inc2", "users_cursor", "schedule", client=ok, sleep=lambda s: None)
+        before = repo.get_state(s, ACCT, "inc2", "users_cursor")
+    runner.run(engine, ACCT, "inc2", "users_cursor", "schedule", client=ok, sleep=lambda s: None)
     with session_scope(engine) as s:
-        assert repo.get_state(s, "inc2", "users_cursor") == before  # a failure does not move the mark
+        assert repo.get_state(s, ACCT, "inc2", "users_cursor") == before  # a failure does not move the mark
 
 
 # ---------------------------------------------------------------- the email alert (D-5.3)
@@ -210,7 +211,7 @@ def failing(name="alerted", **alerts_cfg):
 
 
 def run_failing(engine, mock, name="alerted", trigger="schedule"):
-    return runner.run(engine, name, "wrong_key", trigger, client=mock, sleep=lambda s: None)
+    return runner.run(engine, ACCT, name, "wrong_key", trigger, client=mock, sleep=lambda s: None)
 
 
 def test_one_email_at_the_threshold_and_not_again(engine, mock, monkeypatch):
@@ -237,10 +238,10 @@ def test_a_success_resets_the_count_so_a_new_streak_alerts_again(engine, mock, m
         run_failing(engine, mock)
     assert len(box.sent) == 1
     with session_scope(engine) as s:
-        repo.replace_integration(s, "alerted", ok)
+        repo.replace_integration(s, ACCT, "alerted", ok)
     run_failing(engine, mock)  # succeeds: ends the streak
     with session_scope(engine) as s:
-        repo.replace_integration(s, "alerted", bad)
+        repo.replace_integration(s, ACCT, "alerted", bad)
     for _ in range(2):
         run_failing(engine, mock)
     assert len(box.sent) == 2
@@ -268,7 +269,7 @@ def test_no_alerts_block_means_no_email(engine, mock, monkeypatch):
     cfg = service("quiet", ("wrong_key",))
     add(engine, cfg)
     for _ in range(4):
-        runner.run(engine, "quiet", "wrong_key", "schedule", client=mock, sleep=lambda s: None)
+        runner.run(engine, ACCT, "quiet", "wrong_key", "schedule", client=mock, sleep=lambda s: None)
     assert box.sent == []
 
 
@@ -395,7 +396,7 @@ def test_a_config_with_no_defaults_runs_with_built_in_values(mock, monkeypatch):
 def test_an_empty_first_page_is_a_success_with_nothing_saved(engine):
     add(engine, service("empty", ("users_cursor",)))
     client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"items": [], "meta": {"next": None}})))
-    _, result = runner.run(engine, "empty", "users_cursor", "schedule", client=client)
+    _, result = runner.run(engine, ACCT, "empty", "users_cursor", "schedule", client=client)
     assert (result.status, result.pages_fetched, result.records_pulled) == ("success", 1, 0)
 
 
@@ -403,7 +404,7 @@ def test_an_empty_first_page_is_a_success_with_nothing_saved(engine):
 
 def alert_state(engine, name="alerted"):
     with session_scope(engine) as s:
-        return repo.alert_state(s, repo.get_integration(s, name))
+        return repo.alert_state(s, repo.get_integration(s, ACCT, name))
 
 
 def test_no_alerts_block_means_no_alert_state(engine):
@@ -430,7 +431,7 @@ def test_a_sent_alert_is_remembered_until_the_next_success(engine, mock, monkeyp
     ok = copy.deepcopy(failing(after_failures=2))
     ok["actions"]["wrong_key"]["request"]["path"] = "/pages/cursor"
     with session_scope(engine) as s:
-        repo.replace_integration(s, "alerted", ok)
+        repo.replace_integration(s, ACCT, "alerted", ok)
     run_failing(engine, mock)  # succeeds: the streak ends
     assert alert_state(engine)["last_attempt"] is None
 
@@ -463,7 +464,7 @@ def test_a_test_run_neither_alerts_nor_clears_the_state(engine, mock, monkeypatc
     Outbox(monkeypatch)
     add(engine, failing(after_failures=1))
     run_failing(engine, mock, trigger="manual")
-    runner.run(engine, "alerted", "wrong_key", "test", client=mock, sleep=lambda s: None)
+    runner.run(engine, ACCT, "alerted", "wrong_key", "test", client=mock, sleep=lambda s: None)
     assert alert_state(engine)["last_attempt"]["outcome"] == "sent"
 
 
@@ -472,7 +473,7 @@ def test_deleting_an_integration_clears_its_alert_record(engine, mock, monkeypat
     add(engine, failing(after_failures=1))
     run_failing(engine, mock)
     with session_scope(engine) as s:
-        repo.delete_integration(s, "alerted")
+        repo.delete_integration(s, ACCT, "alerted")
     add(engine, failing(after_failures=1))
     assert alert_state(engine)["last_attempt"] is None
 
@@ -487,7 +488,7 @@ def test_the_dashboard_routes_carry_the_alert_state(engine, mock, monkeypatch):
     run_failing(engine, mock)
     app = create_app()
     app.dependency_overrides[engine_dep] = lambda: engine
-    api = TestClient(app)
+    api = signed_in(TestClient(app))
     one = api.get("/api/v1/integrations/alerted").json()
     assert one["alert"]["after_failures"] == 1 and one["alert"]["last_attempt"]["outcome"] == "sent"
     listed = {i["name"]: i for i in api.get("/api/v1/integrations").json()["items"]}

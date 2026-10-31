@@ -30,10 +30,10 @@ def parse_interval(text: str) -> int:
     return int(m.group(1)) * _UNITS[m.group(2)]
 
 
-def run_job(engine: Engine, integration: str, action: str, **runner_kwargs) -> None:
+def run_job(engine: Engine, account: str, integration: str, action: str, **runner_kwargs) -> None:
     """One scheduled run. Never raises, so one bad run cannot stop the timer."""
     try:
-        runner.run(engine, integration, action, "schedule", **runner_kwargs)
+        runner.run(engine, account, integration, action, "schedule", **runner_kwargs)
     except repo.Conflict:
         log.info("skipped %s.%s: the previous run is still going", integration, action)
     except (repo.NotFound, runner.UnknownAction):
@@ -42,13 +42,13 @@ def run_job(engine: Engine, integration: str, action: str, **runner_kwargs) -> N
         log.error("scheduled run of %s.%s crashed: %s", integration, action, type(exc).__name__)
 
 
-def _label(integration: str, action: str, seconds: int, revision: int) -> str:
+def _label(account: str, integration: str, action: str, seconds: int, revision: int) -> str:
     """Kept as the job's name: when it differs from the database, the job is out of date."""
-    return f"{integration}.{action} every {seconds}s (revision {revision})"
+    return f"{account}/{integration}.{action} every {seconds}s (revision {revision})"
 
 
-def _wanted(engine: Engine) -> dict[str, tuple[str, str, int, str]]:
-    """job id -> (integration, action, seconds, label) for every enabled pull action with a schedule."""
+def _wanted(engine: Engine) -> dict[str, tuple[str, str, str, int, str]]:
+    """job id -> (account, integration, action, seconds, label) for every enabled pull action with a schedule, of every account."""
     wanted = {}
     with session_scope(engine) as s:
         for row in repo.list_integrations(s):
@@ -57,7 +57,7 @@ def _wanted(engine: Engine) -> dict[str, tuple[str, str, int, str]]:
             for name, spec in (row.config.get("actions") or {}).items():
                 if spec.get("mode") == "pull" and spec.get("schedule"):
                     seconds = parse_interval(spec["schedule"])
-                    wanted[f"{row.name}:{name}"] = (row.name, name, seconds, _label(row.name, name, seconds, row.revision))
+                    wanted[f"{row.account}:{row.name}:{name}"] = (row.account, row.name, name, seconds, _label(row.account, row.name, name, seconds, row.revision))
     return wanted
 
 
@@ -71,18 +71,18 @@ def sync(scheduler: BaseScheduler, engine: Engine, **runner_kwargs) -> dict[str,
         if job.id not in wanted:
             scheduler.remove_job(job.id)
             changes["removed"].append(job.id)
-        elif job.name != wanted[job.id][3]:
+        elif job.name != wanted[job.id][4]:
             scheduler.remove_job(job.id)  # added again below with the new interval
             changes["updated"].append(job.id)
     existing = {j.id for j in scheduler.get_jobs()}
-    for job_id, (integration, action, seconds, label) in wanted.items():
+    for job_id, (account, integration, action, seconds, label) in wanted.items():
         if job_id in existing:
             continue
         with session_scope(engine) as s:
-            first_time = not repo.has_run(s, integration, action)
+            first_time = not repo.has_run(s, account, integration, action)
         extra = {"next_run_time": datetime.now(UTC)} if first_time else {}  # next_run_time=None would pause the job
         scheduler.add_job(
-            run_job, IntervalTrigger(seconds=seconds), id=job_id, args=[engine, integration, action], kwargs=runner_kwargs,
+            run_job, IntervalTrigger(seconds=seconds), id=job_id, args=[engine, account, integration, action], kwargs=runner_kwargs,
             name=label, max_instances=1, coalesce=True, misfire_grace_time=seconds, **extra,
         )
         if job_id not in changes["updated"]:

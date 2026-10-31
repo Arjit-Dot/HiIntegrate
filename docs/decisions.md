@@ -57,6 +57,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 16. [D-15: Configs live in the database](#d-15-configs-live-in-the-database-and-changes-update-them-in-place)
 17. [D-16: Unified users across services](#d-16-unified-users-across-services)
 18. [D-17: Security hardening](#d-17-security-hardening)
+    - [D-18: Accounts and per-person data](#d-18-accounts-and-per-person-data)
 19. [Revision log](#revision-log)
 20. [Open items](#open-items)
 
@@ -81,6 +82,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
 | D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
+| D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Needs Person B's approval and a new tag** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-7 of D-17 |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -131,6 +133,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | agreed |
 | D-15 | Configs in the database | One row per integration with a `revision`; adding to an existing service edits that row with `PUT`; templates are starting points only | FR-2, B-5 | approved by both |
 | D-16 | Unified users | `GET /users/unified` merges users across services by lowercased email into one entry listing each service. Stored records are unchanged | FR-11 | approved by both |
+| D-18 | Accounts | Username and password sign-in; a session token in `X-Session-Token`; every integration, record, run, quarantine row and secret belongs to one account; the worker schedules every account's pulls as that account | FR-6 | Person A, awaiting B |
 | D-17 | Security hardening | Shrink what a stranger on the network, a hostile config or a leaked file can reach: ports and headers first (S-1 to S-5), then a guard on the engine's outgoing requests, an audit log, an API login and rate limits (S-6 to S-9), then retention and key handling (S-10 to S-14) | FR-6 | Person B, confirmed by A |
 
 ---
@@ -1355,6 +1358,29 @@ One shared set of examples that both people treat as the truth:
 - Person A takes S-6 to S-12 as owner, and S-8 and S-13 jointly with Person B, as the table says.
 
 ---
+
+## D-18: Accounts and per-person data
+
+**Covers:** FR-6 · **Source:** the team's review of the demo: one set of keys for the whole site is not acceptable. **Status:** built by Person A on branch `a/multi-user`; needs Person B's approval and a new tag, because it changes `schema/openapi.yaml`.
+
+**Decision**
+- **Accounts.** `POST /auth/register` and `POST /auth/login` take a username and a password and return a session token. `POST /auth/logout` ends it, `GET /auth/me` says who it belongs to. Usernames are lowercase (3 to 32 characters). Passwords are 8 to 128 characters, stored only as a salted scrypt hash. Only the SHA-256 of a token is stored, so a copy of the database cannot be used to sign in. A token lasts 7 days.
+- **Header.** The token goes in `X-Session-Token`, not `Authorization`, because the optional nginx basic auth (D-17 S-3) already uses `Authorization`.
+- **Every route** except `/health`, `/auth/register` and `/auth/login` needs a valid token (401 `unauthorized` otherwise).
+- **Everything belongs to one account.** `integrations`, the three record tables, `quarantine`, `runs`, `secrets`, `action_state`, `path_baseline` and `alert_attempt` have an `account` column, and it is part of each primary key. Two people can have an integration with the same name, or a secret with the same name, holding different values. Storage functions take `account` and only ever see that account's rows. Another account's run id answers 404, the same as one that does not exist.
+- **Secrets.** Each account has its own encrypted secrets (still write-only, still pinned to a host, D-7). A run uses the secrets of the account that owns the integration, including runs started by the worker, which schedules every account's pulls separately.
+- **Server-wide environment secrets.** `SECRET_<NAME>` variables belong to the whole server, so they can be used by **one** account only, the one named in `ENV_SECRETS_ACCOUNT` (empty by default: nobody). This keeps the old `.env` setup working for a demo without letting anyone who registers use the server's real tokens. The command line, which has no accounts, still reads them.
+- **Registration** is open by default. `ALLOW_REGISTRATION=false` closes it (403).
+- **Brute force.** After 8 wrong passwords for one username in 5 minutes the answer is 429 `rate_limited`. The counter is in memory, per API process. A wrong password and an unknown username give the same 401 and take the same time.
+- **Contract changes** (`schema/openapi.yaml`): the four `/auth/*` routes, the `sessionToken` security scheme (global, with `security: []` on `/health` and the two sign-in routes), and the error codes `unauthorized` and `rate_limited`.
+
+**Not done (named, not hidden)**
+- **No migration.** Tables are created at startup (D-10), so an existing database does not get the new columns. Recreate it (`docker compose down -v`) or the API will fail on the first query. Old data cannot be assigned to an account automatically.
+- No password reset, no roles, no sharing between accounts, no account deletion, no change of username.
+- The throttle is per process and per username (not per address), so someone can lock a known username out for a few minutes.
+- The token is kept in the browser's `localStorage`, so a script injected into the page could read it. The CSP from D-17 S-2 limits where scripts can come from.
+- Alert emails go through the server's SMTP settings and any account can choose the recipients of its own alerts.
+- Over plain HTTP the password and token travel unencrypted (D-17 S-13: TLS).
 
 ## Revision log
 

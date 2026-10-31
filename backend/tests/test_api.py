@@ -14,6 +14,7 @@ from app.core.settings import REPO_ROOT
 from app.main import create_app
 from app.storage import make_engine, repo, session_factory
 from app.storage.models import Base
+from tests.helpers import ACCT, signed_in
 from tests.mock_api.app import app as mock_app
 
 MOCK = parse_config((REPO_ROOT / "backend" / "tests" / "mock_api" / "mock-service.yaml").read_text())
@@ -35,7 +36,7 @@ def env(tmp_path, monkeypatch):
     app = create_app()
     app.dependency_overrides[engine_dep] = lambda: engine
     app.dependency_overrides[outbound_client_dep] = lambda: mock
-    return TestClient(app), engine
+    return signed_in(TestClient(app)), engine
 
 
 @pytest.fixture
@@ -153,7 +154,7 @@ def test_an_action_that_is_already_running_returns_409(env):
     api, engine = env
     add_mock(api)
     with session_factory(engine)() as s:
-        repo.start_run(s, "mock-service", "users_offset", "pull", "schedule")
+        repo.start_run(s, ACCT, "mock-service", "users_offset", "pull", "schedule")
         s.commit()
     r = run(api, "users_offset")
     assert r.status_code == 409 and r.json()["error"]["code"] == "conflict" and r.json()["error"]["details"]["run_id"].startswith("run-")
@@ -268,7 +269,7 @@ def test_unified_users_merge_by_email_and_never_merge_without_one(env):
         return {"id": id_, "name": name, "email": email, "status": status, "last_login": last_login, "source": source, "fetched_at": fetched}
 
     with session_factory(engine)() as s:
-        repo.upsert_records(s, "user", [
+        repo.upsert_records(s, ACCT, "user", [
             user("github", "4021", "grace@acme.com", "ghopper"),
             user("jira", "5b10a1", "Grace@Acme.com".lower(), "Grace Hopper", last_login="2025-12-01T10:00:00Z"),
             user("okta", "00u1grace", "grace@acme.com", None, "suspended", "2025-12-20T10:00:00Z", "2026-01-01T09:05:00Z"),
@@ -311,7 +312,7 @@ def test_responses_match_result_schema(env):
     run(api, "dirty_users")
     run(api, "wrong_key")
     with session_factory(engine)() as s:
-        repo.upsert_records(s, "user", [{"id": "1", "name": "A", "email": "a@x.co", "status": "active", "last_login": None, "source": "github", "fetched_at": "2026-01-01T09:00:00Z"}])
+        repo.upsert_records(s, ACCT, "user", [{"id": "1", "name": "A", "email": "a@x.co", "status": "active", "last_login": None, "source": "github", "fetched_at": "2026-01-01T09:00:00Z"}])
         s.commit()
     schema = json.loads((REPO_ROOT / "schema" / "result.schema.json").read_text())
 

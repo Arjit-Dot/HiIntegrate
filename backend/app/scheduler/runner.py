@@ -32,6 +32,7 @@ class UnknownAction(LookupError):
 
 @dataclass
 class Started:
+    account: str
     run_pk: int
     run_id: str
     integration: str
@@ -47,18 +48,18 @@ def _action_or_fail(config: dict, action: str) -> dict:
     return config["actions"][action]
 
 
-def begin(engine: Engine, integration: str, action: str, trigger: str, inputs: dict | None = None) -> Started:
+def begin(engine: Engine, account: str, integration: str, action: str, trigger: str, inputs: dict | None = None) -> Started:
     """Check the inputs, then record a `running` run. Raises repo.NotFound, UnknownAction, InputsInvalid,
     or repo.Conflict when the action is already running (D-10)."""
     with session_scope(engine) as s:
-        cfg = repo.get_integration(s, integration).config
+        cfg = repo.get_integration(s, account, integration).config
         spec = _action_or_fail(cfg, action)
         if spec["mode"] == "lookup":
             issues = validate_inputs(spec.get("inputs") or {}, inputs)
             if issues:
                 raise InputsInvalid(issues)
-        run = repo.start_run(s, integration, action, spec["mode"], trigger)
-        return Started(run.pk, run.run_id, integration, action, spec["mode"], trigger, cfg)
+        run = repo.start_run(s, account, integration, action, spec["mode"], trigger)
+        return Started(account, run.pk, run.run_id, integration, action, spec["mode"], trigger, cfg)
 
 
 def execute(engine: Engine, started: Started, inputs: dict | None = None, *, client: httpx.Client | None = None,
@@ -73,53 +74,53 @@ def execute(engine: Engine, started: Started, inputs: dict | None = None, *, cli
     def on_page(records: list, quarantine: list, _page: int) -> None:
         with session_scope(engine) as s:
             if keep_records:
-                repo.upsert_records(s, target, records)
+                repo.upsert_records(s, started.account, target, records)
             if keep_quarantine:
-                repo.add_quarantine(s, quarantine)
+                repo.add_quarantine(s, started.account, quarantine)
 
     result = RunResult(integration=started.integration, action=action_name, mode=started.mode, trigger=started.trigger)
     try:
         with session_scope(engine) as lookup_session:
-            state = repo.get_state(lookup_session, started.integration, action_name)
-            baseline = repo.get_baseline(lookup_session, started.integration, action_name)
+            state = repo.get_state(lookup_session, started.account, started.integration, action_name)
+            baseline = repo.get_baseline(lookup_session, started.account, started.integration, action_name)
             result = run_action(cfg, action_name, inputs, started.trigger, state=state, client=client, on_page=on_page,
-                                sleep=sleep, run_id=started.run_id, secret_lookup=lambda name: get_secret(name, lookup_session), baseline=baseline)
+                                sleep=sleep, run_id=started.run_id, secret_lookup=lambda name: get_secret(name, lookup_session, started.account), baseline=baseline)
     finally:
         # Even if something unexpected broke, never leave the run stuck as `running`.
         with session_scope(engine) as s:
-            run = repo.get_run(s, started.run_id)
+            run = repo.get_run(s, started.account, started.run_id)
             if result.status == "running":
                 result.status, result.error = "failed", {"code": "bad_response", "message": "the run stopped unexpectedly"}
                 result.finished_at = now_iso()
             repo.finish_run(s, run, result)
             if result.status == "success" and started.mode == "pull":
-                repo.set_last_success(s, started.integration, action_name, result.started_at)
-                repo.add_to_baseline(s, started.integration, action_name, result.seen_paths)
+                repo.set_last_success(s, started.account, started.integration, action_name, result.started_at)
+                repo.add_to_baseline(s, started.account, started.integration, action_name, result.seen_paths)
             if result.status == "success" and started.trigger in repo.COUNTED_TRIGGERS:
-                repo.clear_alert_attempt(s, started.integration, action_name)  # the failure streak ended, so the alert resets
-    maybe_alert(engine, cfg, action_name, started.trigger, result)
+                repo.clear_alert_attempt(s, started.account, started.integration, action_name)  # the failure streak ended, so the alert resets
+    maybe_alert(engine, started.account, cfg, action_name, started.trigger, result)
     return result
 
 
-def run(engine: Engine, integration: str, action: str, trigger: str = "manual", inputs: dict | None = None, *,
+def run(engine: Engine, account: str, integration: str, action: str, trigger: str = "manual", inputs: dict | None = None, *,
         client: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep) -> tuple[str, RunResult]:
     """begin + execute, for lookups, the scheduler and the command line."""
-    started = begin(engine, integration, action, trigger, inputs)
+    started = begin(engine, account, integration, action, trigger, inputs)
     return started.run_id, execute(engine, started, inputs, client=client, sleep=sleep)
 
 
-def test(engine: Engine, integration: str, action: str, inputs: dict | None = None, *, client: httpx.Client | None = None,
+def test(engine: Engine, account: str, integration: str, action: str, inputs: dict | None = None, *, client: httpx.Client | None = None,
          sleep: Callable[[float], None] | None = None) -> dict:
     """B-3: one call, first page only, nothing saved. Recorded as a run with trigger `test`, which health ignores."""
-    started = begin(engine, integration, action, "test", inputs)
+    started = begin(engine, account, integration, action, "test", inputs)
     result: dict = {"ok": False, "notes": ["the test could not run"]}
     try:
         with session_scope(engine) as lookup_session:
             result = test_action(started.config, action, inputs, client=client, sleep=sleep,
-                                 secret_lookup=lambda name: get_secret(name, lookup_session))
+                                 secret_lookup=lambda name: get_secret(name, lookup_session, account))
     finally:
         with session_scope(engine) as s:
-            row = repo.get_run(s, started.run_id)
+            row = repo.get_run(s, started.account, started.run_id)
             row.status = "success" if result["ok"] else "failed"
             row.finished_at = now_iso()
             row.pages_fetched = result.get("pages_fetched", 0)

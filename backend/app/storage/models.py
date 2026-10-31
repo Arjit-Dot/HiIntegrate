@@ -8,10 +8,30 @@ class Base(DeclarativeBase):
     pass
 
 
+class Account(Base):
+    """D-18: a person who can sign in. Everything else in the database belongs to one account (its `account` column)."""
+
+    __tablename__ = "accounts"
+    username: Mapped[str] = mapped_column(String(64), primary_key=True)  # lowercase; it is the `account` value on every other table
+    password_hash: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(32))
+
+
+class AuthSession(Base):
+    """D-18: a sign-in. Only the SHA-256 of the token is stored, so a copy of the database cannot be used to sign in."""
+
+    __tablename__ = "auth_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[str] = mapped_column(String(32))
+    expires_at: Mapped[str] = mapped_column(String(32))
+
+
 class Integration(Base):
-    """D-15: the only source of truth for configs. One row per integration, edited in place."""
+    """D-15: the only source of truth for configs. One row per integration and owner, edited in place."""
 
     __tablename__ = "integrations"
+    account: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(64), primary_key=True)
     config: Mapped[dict] = mapped_column(JSON)
     revision: Mapped[int] = mapped_column(Integer, default=1)
@@ -21,6 +41,7 @@ class Integration(Base):
 
 
 class _Record:
+    account: Mapped[str] = mapped_column(String(64), primary_key=True)
     source: Mapped[str] = mapped_column(String(64), primary_key=True)
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     fetched_at: Mapped[str] = mapped_column(String(32))
@@ -58,6 +79,7 @@ RECORD_TABLES = {"user": User, "device": Device, "alert": Alert}
 class Quarantine(Base):
     __tablename__ = "quarantine"
     pk: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account: Mapped[str] = mapped_column(String(64), index=True)
     source: Mapped[str] = mapped_column(String(64), index=True)
     action: Mapped[str] = mapped_column(String(64))
     target_schema: Mapped[str] = mapped_column(String(16))
@@ -71,6 +93,7 @@ class Quarantine(Base):
 class Run(Base):
     __tablename__ = "runs"
     pk: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account: Mapped[str] = mapped_column(String(64), index=True)
     integration: Mapped[str] = mapped_column(String(64), index=True)
     action: Mapped[str] = mapped_column(String(64))
     mode: Mapped[str] = mapped_column(String(16))
@@ -88,7 +111,7 @@ class Run(Base):
 
     __table_args__ = (
         # D-10: only one run of an action can be running at a time, which also makes a second worker safe
-        Index("one_running_run_per_action", "integration", "action", unique=True,
+        Index("one_running_run_per_action", "account", "integration", "action", unique=True,
               postgresql_where=text("status = 'running'"), sqlite_where=text("status = 'running'")),
     )
 
@@ -98,9 +121,10 @@ class Run(Base):
 
 
 class Secret(Base):
-    """D-7.1, D-7.6: an encrypted value and the one host it may be sent to."""
+    """D-7.1, D-7.6, D-18: an encrypted value and the one host it may be sent to. Each account has its own."""
 
     __tablename__ = "secrets"
+    account: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(64), primary_key=True)
     ciphertext: Mapped[str] = mapped_column(Text)
     host: Mapped[str] = mapped_column(String(255))
@@ -111,6 +135,7 @@ class ActionState(Base):
     """Values the engine keeps between runs ({{state.x}}), such as last_success_at for incremental sync (B-1)."""
 
     __tablename__ = "action_state"
+    account: Mapped[str] = mapped_column(String(64), primary_key=True)
     integration: Mapped[str] = mapped_column(String(64), primary_key=True)
     action: Mapped[str] = mapped_column(String(64), primary_key=True)
     last_success_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -121,6 +146,7 @@ class PathBaseline(Base):
     A new table, so an existing database gets it from create_all without altering anything."""
 
     __tablename__ = "path_baseline"
+    account: Mapped[str] = mapped_column(String(64), primary_key=True)
     integration: Mapped[str] = mapped_column(String(64), primary_key=True)
     action: Mapped[str] = mapped_column(String(64), primary_key=True)
     paths: Mapped[list] = mapped_column(JSON, default=list)
@@ -131,6 +157,7 @@ class AlertAttempt(Base):
     was told. One row per action; it is removed when the action next succeeds (the streak, and so the alert, resets)."""
 
     __tablename__ = "alert_attempt"
+    account: Mapped[str] = mapped_column(String(64), primary_key=True)
     integration: Mapped[str] = mapped_column(String(64), primary_key=True)
     action: Mapped[str] = mapped_column(String(64), primary_key=True)
     at: Mapped[str] = mapped_column(String(32))

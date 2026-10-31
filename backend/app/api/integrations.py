@@ -9,7 +9,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from app.api.configs import integration_out, read_config, require_valid, summary
-from app.api.deps import Limit, Offset, engine_dep, outbound_client_dep, page, session_dep
+from app.api.deps import Account, Limit, Offset, engine_dep, outbound_client_dep, page, session_dep
 from app.core.errors import ApiError
 from app.scheduler import runner
 from app.storage import repo
@@ -37,9 +37,9 @@ class RunBody(BaseModel):
 
 
 @router.get("/integrations")
-def list_integrations(s: SessionDep, limit: Limit = 50, offset: Offset = 0, category: str | None = None,
+def list_integrations(s: SessionDep, account: Account, limit: Limit = 50, offset: Offset = 0, category: str | None = None,
                       status: str | None = None, q: str | None = None) -> dict:
-    items = [summary(s, r) for r in repo.list_integrations(s)]
+    items = [summary(s, r) for r in repo.list_integrations(s, account)]
     if category:
         items = [i for i in items if i["category"] == category]
     if status:
@@ -56,54 +56,54 @@ async def validate(request: Request) -> dict:
 
 
 @router.post("/integrations", status_code=201)
-async def create(request: Request, s: SessionDep) -> dict:
+async def create(request: Request, s: SessionDep, account: Account) -> dict:
     config, issues = await read_config(request)
-    row = repo.create_integration(s, require_valid(config, issues))
+    row = repo.create_integration(s, account, require_valid(config, issues))
     return integration_out(s, row)
 
 
 @router.get("/integrations/{name}")
-def get_one(name: str, s: SessionDep) -> dict:
-    return integration_out(s, repo.get_integration(s, name))
+def get_one(name: str, s: SessionDep, account: Account) -> dict:
+    return integration_out(s, repo.get_integration(s, account, name))
 
 
 @router.put("/integrations/{name}")
-async def replace(name: str, request: Request, s: SessionDep) -> dict:
+async def replace(name: str, request: Request, s: SessionDep, account: Account) -> dict:
     """D-15: update the existing row in place. To add an action, send the config with it included."""
     config, issues = await read_config(request)
     config = require_valid(config, issues)
     if config["name"] != name:
         raise ApiError(400, "validation_error", "The config's name must match the integration being replaced",
                        {"errors": [{"path": "name", "message": f"must stay {name}, because records are keyed by it", "severity": "error"}]})
-    return integration_out(s, repo.replace_integration(s, name, config))
+    return integration_out(s, repo.replace_integration(s, account, name, config))
 
 
 @router.delete("/integrations/{name}", status_code=204)
-def delete(name: str, s: SessionDep) -> Response:
-    repo.delete_integration(s, name)
+def delete(name: str, s: SessionDep, account: Account) -> Response:
+    repo.delete_integration(s, account, name)
     return Response(status_code=204)
 
 
 @router.patch("/integrations/{name}/enabled")
-def set_enabled(name: str, body: EnabledBody, s: SessionDep) -> dict:
-    return summary(s, repo.set_enabled(s, name, body.enabled))
+def set_enabled(name: str, body: EnabledBody, s: SessionDep, account: Account) -> dict:
+    return summary(s, repo.set_enabled(s, account, name, body.enabled))
 
 
 @router.get("/integrations/{name}/health")
-def get_health(name: str, s: SessionDep) -> dict:
-    return repo.health(s, repo.get_integration(s, name))
+def get_health(name: str, s: SessionDep, account: Account) -> dict:
+    return repo.health(s, repo.get_integration(s, account, name))
 
 
 @router.post("/integrations/{name}/test")
-def test(name: str, body: TestBody, engine: EngineDep, client: ClientDep) -> dict:
-    return runner.test(engine, name, body.action, body.inputs, client=client)
+def test(name: str, body: TestBody, engine: EngineDep, client: ClientDep, account: Account) -> dict:
+    return runner.test(engine, account, name, body.action, body.inputs, client=client)
 
 
 @router.post("/integrations/{name}/actions/{action}/run")
 def run_action(name: str, action: str, background: BackgroundTasks, response: Response, engine: EngineDep, client: ClientDep,
-               body: RunBody | None = None):
+               account: Account, body: RunBody | None = None):
     inputs = body.inputs if body else None
-    started = runner.begin(engine, name, action, "manual", inputs)
+    started = runner.begin(engine, account, name, action, "manual", inputs)
     if started.mode == "pull":  # D-6: a pull finishes in the background. Poll GET /runs/{run_id}.
         background.add_task(runner.execute, engine, started, inputs, client=client)
         response.status_code = 202

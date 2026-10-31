@@ -54,16 +54,16 @@ def send(settings, msg: EmailMessage, password: str | None) -> None:
         smtp.send_message(msg)
 
 
-def _note(engine: Engine, cfg: dict, action: str, outcome: str, failures: int, message: str | None = None) -> None:
+def _note(engine: Engine, account: str, cfg: dict, action: str, outcome: str, failures: int, message: str | None = None) -> None:
     """Remember what came of this alert, so the dashboard can say whether the person was told. Never raises."""
     try:
         with session_scope(engine) as s:
-            repo.record_alert_attempt(s, cfg["name"], action, outcome, failures, message)
+            repo.record_alert_attempt(s, account, cfg["name"], action, outcome, failures, message)
     except Exception as exc:  # noqa: BLE001
         log.error("could not record the alert outcome for %s: %s", cfg.get("name"), type(exc).__name__)
 
 
-def maybe_alert(engine: Engine, cfg: dict, action: str, trigger: str, result) -> bool:
+def maybe_alert(engine: Engine, account: str, cfg: dict, action: str, trigger: str, result) -> bool:
     """Call after a run is finished. Returns True if an email was sent. Never raises."""
     streak, password = 0, None
     try:
@@ -72,17 +72,17 @@ def maybe_alert(engine: Engine, cfg: dict, action: str, trigger: str, result) ->
             return False
         threshold = alerts.get("after_failures", DEFAULT_AFTER_FAILURES)
         with session_scope(engine) as s:
-            streak = repo.failure_streak(s, cfg["name"], action)
+            streak = repo.failure_streak(s, account, cfg["name"], action)
         if streak != threshold:
             return False
         settings = get_settings()
         if not (settings.smtp_host and settings.smtp_from):
             log.warning("alert for %s not sent: SMTP_HOST and SMTP_FROM are not set", cfg["name"])
-            _note(engine, cfg, action, "not_configured", streak, "SMTP is not set up on the server (SMTP_HOST and SMTP_FROM)")
+            _note(engine, account, cfg, action, "not_configured", streak, "SMTP is not set up on the server (SMTP_HOST and SMTP_FROM)")
             return False
         try:
             with session_scope(engine) as s:
-                secret = get_secret(SECRET_NAME, s)
+                secret = get_secret(SECRET_NAME, s, account)
             check_host(secret, settings.smtp_host)  # D-7.6: the password goes only to its own mail server
             password = secret.value
         except SecretNotFound:
@@ -90,11 +90,11 @@ def maybe_alert(engine: Engine, cfg: dict, action: str, trigger: str, result) ->
         msg = build_message(settings, cfg["name"], action, trigger, streak, result.error, result.finished_at or "", alerts["to"])
         send(settings, msg, password)
         log.info("alert sent for %s after %s failures", cfg["name"], streak)
-        _note(engine, cfg, action, "sent", streak)
+        _note(engine, account, cfg, action, "sent", streak)
         return True
     except Exception as exc:  # noqa: BLE001 - a failed alert must never fail the run
         log.error("alert for %s could not be sent: %s", cfg.get("name"), type(exc).__name__)
         if streak:
             detail = f"{type(exc).__name__}: {exc}"
-            _note(engine, cfg, action, "failed", streak, detail.replace(password, "[redacted]") if password else detail)
+            _note(engine, account, cfg, action, "failed", streak, detail.replace(password, "[redacted]") if password else detail)
         return False

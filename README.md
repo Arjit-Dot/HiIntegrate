@@ -76,11 +76,11 @@ docker compose up --build        # needs a .env in this folder; POSTGRES_PASSWOR
 - A blank line in `.env` (`SMTP_PORT=`) counts as not set.
 - `.env` is never copied into an image (`.dockerignore`) and never committed.
 - To reach the API or the mock directly from this machine while developing (still only on `127.0.0.1`): `docker compose -f docker-compose.yml -f docker-compose.debug.yml up`
-- **Failure rehearsal** (needs the stack running): `docker compose exec backend python scripts/rehearse.py` runs the four organizer tests (wrong key, network off, 429, missing field) against the mock service and prints PASS or FAIL for each. It runs inside the Compose network because the mock is not published.
+- **Failure rehearsal** (needs the stack running): `docker compose exec backend python scripts/rehearse.py` (it signs in with a throwaway account, or with `REHEARSE_USERNAME` and `REHEARSE_PASSWORD` if you set them) runs the four organizer tests (wrong key, network off, 429, missing field) against the mock service and prints PASS or FAIL for each. It runs inside the Compose network because the mock is not published.
 
 ## Security
 
-v1 has **no API login by design** (D-6), so the protection is around it (D-17):
+The API needs a sign-in (D-18): create an account on the dashboard, and each person then has their own integrations, records, runs and secrets. Around that, the protection is (D-17):
 
 - **Network (S-1):** only the dashboard is published, bound to `127.0.0.1`. Nothing else is reachable from the network.
 - **Password (S-3, optional):** set `DASHBOARD_PASSWORD` (and, if you like, `DASHBOARD_USER`, default `admin`) in `.env` and the dashboard and the API ask for it (basic auth). Without it there is no password. Use a password and HTTPS before exposing it beyond your own machine.
@@ -110,7 +110,9 @@ The platform logs in to GitHub, Jira, Okta and others with tokens and passwords.
 - **Each secret is pinned to a host.** A GitHub token is tied to `api.github.com` and the platform refuses to send it anywhere else, even if a pasted or AI-written config asks it to. To change the destination you enter the token again for the new host.
 - **Write-only.** You can set or replace a token, but it is never shown again, and logs and error messages hide it.
 - **Never commit `.env`.** It is ignored by Git, and so is every other `.env` file. There is no `.env.example`, so there is no file to fill in and commit by mistake. Do not send `.env` through chat or email, and revoke a token at once if it leaks.
-- **There is no login on the API in v1.** Run it on your own machine or in Docker.
+- **Accounts (D-18).** Every person signs in, and their secrets are their own: two people can save a `github_token` with different values and never see each other's. Passwords are stored hashed, and a wrong password is slowed down after 8 tries.
+- **`.env` tokens belong to one account.** `SECRET_<NAME>` variables are for the whole server, so only the account named in `ENV_SECRETS_ACCOUNT` can use them (empty means nobody). Register first, then set `ENV_SECRETS_ACCOUNT=<your username>` in `.env` and restart. Set `ALLOW_REGISTRATION=false` to stop anyone else registering.
+- **Existing database?** The new `account` columns are not added to an old database. Start fresh: `docker compose down -v` (this deletes stored data).
 
 The reasons are in [`docs/decisions.md`](docs/decisions.md) (D-7).
 

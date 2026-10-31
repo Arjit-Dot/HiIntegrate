@@ -30,6 +30,10 @@ x-backend: &backend
     # A test value for the mock service only (not a real key). Pinned to the mock's own host.
     SECRET_MOCK_TOKEN: mock-secret-123
     SECRET_MOCK_TOKEN_HOST: mock-api
+    # D-18: SECRET_<NAME> variables belong to the whole server, so only the ONE account named here can use them.
+    # Leave it empty to let nobody use them (every person then enters their own keys on the Secrets page).
+    ENV_SECRETS_ACCOUNT: ${ENV_SECRETS_ACCOUNT:-}
+    ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
   restart: unless-stopped
 
 services:

@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 log = logging.getLogger("app.errors")
 
 # Codes from schema/openapi.yaml (components.schemas.Error)
-CODES = {"validation_error", "not_found", "conflict", "unsupported", "run_failed", "internal_error"}
+CODES = {"validation_error", "not_found", "conflict", "unsupported", "run_failed", "internal_error", "unauthorized", "rate_limited"}
 
 
 class ApiError(Exception):
@@ -25,7 +25,7 @@ def error_body(code: str, message: str, details=None) -> dict:
 
 
 def _code_for_status(status: int) -> str:
-    return {404: "not_found", 409: "conflict", 501: "unsupported"}.get(status, "validation_error" if status < 500 else "internal_error")
+    return {401: "unauthorized", 404: "not_found", 409: "conflict", 429: "rate_limited", 501: "unsupported"}.get(status, "validation_error" if status < 500 else "internal_error")
 
 
 def install_error_handlers(app: FastAPI) -> None:
