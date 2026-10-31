@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.ai import features
 from app.ai.client import LLMClient, LLMError
-from app.ai.docs import DocsError, fetch_docs
+from app.ai.docs import DocsError, fetch_docs, prepare_text
 from app.api.deps import session_dep
 from app.core.errors import ApiError
 from app.engine import remap_records
@@ -77,7 +77,7 @@ def generate_config(body: GenerateBody, llm: LlmDep, fetch: Annotated[Callable[[
     if not body.text and not body.url:
         raise ApiError(422, "validation_error", "send a documentation url or some text",
                        {"errors": [{"path": "url", "message": "give a url or text", "severity": "error"}]})
-    material, source = body.text or "", None
+    material, source = prepare_text(body.text) if body.text else "", None
     if body.url:
         try:
             page = fetch(body.url)
@@ -85,7 +85,7 @@ def generate_config(body: GenerateBody, llm: LlmDep, fetch: Annotated[Callable[[
             raise ApiError(422, "validation_error", f"The documentation page cannot be used: {exc}",
                            {"errors": [{"path": "url", "message": str(exc), "severity": "error"}]}) from None
         source = {"url": page["url"], "chars": page["chars"], "truncated": page["truncated"]}
-        material = f"Documentation page: {page['url']}\n\n{page['text']}" + (f"\n\nExtra instructions from the person:\n{body.text}" if body.text else "")
+        material = f"Documentation page: {page['url']}\n\n{page['text']}" + (f"\n\nExtra instructions from the person:\n{prepare_text(body.text)}" if body.text else "")
     return {**ask(features.generate_config, llm, material), **({"source": source} if source else {})}
 
 

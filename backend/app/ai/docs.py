@@ -87,7 +87,7 @@ class _Text(HTMLParser):
 
 
 def to_text(body: str, content_type: str) -> str:
-    if "html" in content_type or "xhtml" in content_type or re.match(r"\s*(<!doctype html|<html)", body, re.IGNORECASE):
+    if "html" in content_type or re.search(r"<(!doctype html|html|body|head)\b", body[:2000], re.IGNORECASE):
         parser = _Text()
         parser.feed(body)
         text = "".join(parser.out)
@@ -136,3 +136,8 @@ def fetch_docs(url: str, *, client: httpx.Client | None = None, check=check_url)
     if len(text) < MIN_CHARS:
         raise DocsError("the page has almost no readable text (it may need JavaScript). Paste the text, a curl example or a sample response instead")
     return {"url": current, "text": text[:MAX_CHARS], "chars": len(text), "truncated": len(text) > MAX_CHARS}
+
+
+def prepare_text(text: str) -> str:
+    """Pasted or attached text for the model: HTML is turned into plain text, and the length is capped like a fetched page."""
+    return to_text(text, "")[:MAX_CHARS]

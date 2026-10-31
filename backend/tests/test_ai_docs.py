@@ -202,3 +202,20 @@ def test_neither_url_nor_text_is_a_422(api):
 def test_without_a_key_the_route_answers_501_before_fetching_anything(api):
     wire(api, None, lambda u: pytest.fail("must not fetch without a key"))
     assert api.post("/api/v1/ai/generate-config", json={"url": "https://docs.acme.example/api"}).status_code == 501
+
+
+# ---------------------------------------------------------------- an attached document arrives as text
+
+def test_prepare_text_turns_an_attached_html_file_into_text_and_caps_it():
+    attached = "Attached document (api.html):\n" + PAGE
+    out = docs.prepare_text(attached)
+    assert "GET /v2/users" in out and "<pre>" not in out and "var secret" not in out
+    assert docs.prepare_text("curl -H 'X: 1' https://api.acme.example/users") == "curl -H 'X: 1' https://api.acme.example/users"
+    assert len(docs.prepare_text("word " * 40000)) == docs.MAX_CHARS
+
+
+def test_an_attached_html_document_reaches_the_model_as_text(api):
+    model = Script(GITHUB_YAML)
+    wire(api, model, lambda u: pytest.fail("no page should be fetched"))
+    api.post("/api/v1/ai/generate-config", json={"text": "Attached document (api.html):\n" + PAGE})
+    assert "GET /v2/users" in model.prompts[0] and "var secret" not in model.prompts[0] and "<pre>" not in model.prompts[0]
