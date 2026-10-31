@@ -26,9 +26,13 @@ export default function Integrations() {
 
   const rows = (items ?? []).filter(i => !mode || i.actions.some(a => a.mode === mode))
 
+  // Update the row at once and keep it. Only undo it if the call fails.
+  // (A reload would bring back the old value from the Prism mock, which always returns the same list.)
   async function toggle(i: IntegrationSummary, enabled: boolean) {
-    try { await api.setEnabled(i.name, enabled); toast(`${i.display_name ?? i.name} ${enabled ? 'enabled' : 'disabled'}`); load() }
-    catch (e) { toast(e instanceof ApiError ? e.message : 'Could not change enabled state') }
+    const setRow = (value: boolean) => setItems(prev => prev && prev.map(x => (x.name === i.name ? { ...x, enabled: value } : x)))
+    setRow(enabled)
+    try { await api.setEnabled(i.name, enabled); toast(`${i.display_name ?? i.name} ${enabled ? 'enabled' : 'disabled'}`) }
+    catch (e) { setRow(!enabled); toast(e instanceof ApiError ? e.message : 'Could not change enabled state') }
   }
 
   return (
