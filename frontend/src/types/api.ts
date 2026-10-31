@@ -231,6 +231,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/unified": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Users merged across services (D-16)
+         * @description One entry per person. Users are matched by lowercased email, and each entry lists every service the person appears in. Built from the stored users, so nothing extra is stored.
+         */
+        get: operations["listUnifiedUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/quarantine": {
         parameters: {
             query?: never;
@@ -897,6 +917,15 @@ export interface components {
                 } & (unknown & unknown & unknown & unknown & unknown);
             };
         };
+        /** @description One service's view of a person inside a unified_user (D-16). */
+        unified_user_source: {
+            source: string;
+            id: string;
+            /** @enum {unknown} */
+            status?: "active" | "inactive" | "suspended" | "unknown" | null;
+            last_login?: string | null;
+            fetched_at?: string;
+        };
         /** @description A person. Table: users. Identity: (source, id). */
         user: {
             /** @description ID in the source system. Required. */
@@ -972,6 +1001,26 @@ export interface components {
                     last_login?: string | null;
                     /** @description The original record, kept for debugging. Set by the platform. Optional. */
                     raw?: Record<string, never>;
+                };
+                /** @description One service's view of a person inside a unified_user (D-16). */
+                unified_user_source: {
+                    source: string;
+                    id: string;
+                    /** @enum {unknown} */
+                    status?: "active" | "inactive" | "suspended" | "unknown" | null;
+                    last_login?: string | null;
+                    fetched_at?: string;
+                };
+                /** @description One person across services (D-16). Not stored: built from the users table when asked. People are matched by lowercased email. A user with no email is their own entry. */
+                unified_user: {
+                    /** @description The lowercased email, or source:id when the user has no email. */
+                    key: string;
+                    email?: string | null;
+                    /** @description The first non-empty name, in source order. */
+                    name?: string | null;
+                    /** @description The most recent last_login across sources, or null. */
+                    last_login?: string | null;
+                    sources: components["schemas"]["unified_user_source"][];
                 };
                 /** @description A device. Table: devices. Identity: (source, id). */
                 device: {
@@ -1087,6 +1136,17 @@ export interface components {
             retries: number;
             /** @description Null unless the run failed. */
             error: null | components["schemas"]["error"];
+        };
+        /** @description One person across services (D-16). Not stored: built from the users table when asked. People are matched by lowercased email. A user with no email is their own entry. */
+        unified_user: {
+            /** @description The lowercased email, or source:id when the user has no email. */
+            key: string;
+            email?: string | null;
+            /** @description The first non-empty name, in source order. */
+            name?: string | null;
+            /** @description The most recent last_login across sources, or null. */
+            last_login?: string | null;
+            sources: components["schemas"]["unified_user_source"][];
         };
         /** @description A record that failed the rules, kept with the reason. The run carried on without it. */
         quarantine_record: {
@@ -1829,6 +1889,80 @@ export interface operations {
                      */
                     "application/json": components["schemas"]["Page"] & {
                         items?: (components["schemas"]["user"] | components["schemas"]["device"] | components["schemas"]["alert"])[];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+        };
+    };
+    listUnifiedUsers: {
+        parameters: {
+            query?: {
+                /** @description Only people who appear in this service */
+                source?: string;
+                limit?: components["parameters"]["limit"];
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of unified users */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "key": "grace@acme.com",
+                     *           "email": "grace@acme.com",
+                     *           "name": "Grace Hopper",
+                     *           "last_login": "2025-12-20T10:00:00Z",
+                     *           "sources": [
+                     *             {
+                     *               "source": "jira",
+                     *               "id": "5b10a1",
+                     *               "status": "active",
+                     *               "last_login": null,
+                     *               "fetched_at": "2026-01-01T09:00:00Z"
+                     *             },
+                     *             {
+                     *               "source": "okta",
+                     *               "id": "00u1grace",
+                     *               "status": "active",
+                     *               "last_login": "2025-12-20T10:00:00Z",
+                     *               "fetched_at": "2026-01-01T09:05:00Z"
+                     *             }
+                     *           ]
+                     *         },
+                     *         {
+                     *           "key": "github:4021",
+                     *           "email": null,
+                     *           "name": "ada-l",
+                     *           "last_login": null,
+                     *           "sources": [
+                     *             {
+                     *               "source": "github",
+                     *               "id": "4021",
+                     *               "status": "active",
+                     *               "last_login": null,
+                     *               "fetched_at": "2026-01-01T09:05:00Z"
+                     *             }
+                     *           ]
+                     *         }
+                     *       ],
+                     *       "total": 2,
+                     *       "limit": 50,
+                     *       "offset": 0
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Page"] & {
+                        items?: components["schemas"]["unified_user"][];
                     };
                 };
             };
