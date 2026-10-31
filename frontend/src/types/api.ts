@@ -841,7 +841,7 @@ export interface components {
             /** @description every <N><unit>, unit s, m, h or d. Minimum 10 seconds. Pull only. */
             schedule?: string;
             pagination?: components["schemas"]["pagination"];
-            /** @description Send a 'changed since' value on each run. Pull only. No v1 service uses it. */
+            /** @description Send a 'changed since' value on each run. Pull only. The first run, which has no previous success, sends the request as written. The Okta template uses it for the System Log. */
             incremental?: {
                 param: string;
                 /** @description Usually {{state.last_success_at}}. */
@@ -1060,7 +1060,7 @@ export interface components {
                     /** @description every <N><unit>, unit s, m, h or d. Minimum 10 seconds. Pull only. */
                     schedule?: string;
                     pagination?: components["schemas"]["pagination"];
-                    /** @description Send a 'changed since' value on each run. Pull only. No v1 service uses it. */
+                    /** @description Send a 'changed since' value on each run. Pull only. The first run, which has no previous success, sends the request as written. The Okta template uses it for the System Log. */
                     incremental?: {
                         param: string;
                         /** @description Usually {{state.last_success_at}}. */
