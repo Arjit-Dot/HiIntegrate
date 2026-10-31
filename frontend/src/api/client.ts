@@ -11,6 +11,8 @@ export type ValidateResponse = S['ValidateResponse']
 export type TestResponse = S['TestResponse']
 export type SecretInfo = S['SecretInfo']
 export type TemplateSummary = S['TemplateSummary']
+export type RunRecord = S['run_record']
+export type QuarantineRecord = S['quarantine_record']
 export type Config = Record<string, any>
 
 export class ApiError extends Error {
@@ -40,6 +42,12 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T
 }
 
+const qs = (p: Record<string, string | number | undefined>) => {
+  const q = new URLSearchParams()
+  Object.entries(p).forEach(([k, v]) => v !== undefined && v !== '' && q.set(k, String(v)))
+  return q.toString()
+}
+
 export const api = {
   health: () => call<{ status: string }>('GET', '/health'),
   listIntegrations: (p: { q?: string; category?: string; status?: string } = {}) => {
@@ -57,6 +65,20 @@ export const api = {
     call<TestResponse>('POST', `/integrations/${encodeURIComponent(id)}/test`, { action, inputs }),
   listTemplates: () => call<{ items: TemplateSummary[] }>('GET', '/templates'),
   getTemplate: (id: string) => call<{ id: string; config: Config; yaml: string }>('GET', `/templates/${encodeURIComponent(id)}`),
+  listResults: (p: { target: string; source?: string; limit?: number; offset?: number }) =>
+    call<{ items: Record<string, unknown>[]; total: number; limit: number; offset: number }>('GET', `/results?${qs(p)}`),
+  listQuarantine: (p: { reason?: string; target_schema?: string; source?: string; limit?: number; offset?: number }) =>
+    call<{ items: QuarantineRecord[]; total: number; limit: number; offset: number }>('GET', `/quarantine?${qs(p)}`),
+  /** Every quarantined record with the same filters, as the JSON text of the file. */
+  exportQuarantine: async (p: { reason?: string; target_schema?: string; source?: string }): Promise<string> => {
+    let res: Response
+    try { res = await fetch(`${API_BASE}/quarantine/export?${qs(p)}`) }
+    catch { throw new ApiError(0, 'unreachable', `Cannot reach the API at ${API_BASE}. Is the mock or backend running?`) }
+    if (!res.ok) throw new ApiError(res.status, 'export_failed', `Export failed (${res.status})`)
+    return res.text()
+  },
+  listRuns: (p: { status?: string; integration?: string; limit?: number; offset?: number }) =>
+    call<{ items: RunRecord[]; total: number; limit: number; offset: number }>('GET', `/runs?${qs(p)}`),
   listSecrets: () => call<{ items: SecretInfo[] }>('GET', '/secrets'),
   setSecret: (name: string, value: string, host: string) =>
     call<void>('PUT', `/secrets/${encodeURIComponent(name)}`, { value, host }),
