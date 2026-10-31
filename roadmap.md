@@ -136,12 +136,14 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] **Test panel** on that page: raw reply beside the mapped record, with missing paths highlighted. `[B-3]` *(10)*
 - [ ] Capture real sample responses from GitHub, Jira and Okta into `samples/`, replacing the synthetic files. Run `npm run check`. *(15, in the gaps)*
 
-### Checkpoint 1 at 9:15pm
-- [ ] A: `validate` rejects the 14 files in `samples/invalid/` with the expected errors.
-- [ ] A: `test` makes a live call (mock API and GitHub) and reports missing paths.
-- [ ] A: retries and 429 handling work against the mock API.
-- [ ] B: list page and editor run on the Prism mock, with the validation and test panels wired.
-- [ ] `main` runs and holds both people's work.
+### Checkpoint 1 at 9:15pm: passed (checked at 9:05pm on `main` at `090d696`)
+- [x] A: `validate` rejects the 14 files in `samples/invalid/` with the expected errors. *(14 of 14 rejected, 7 of 7 templates valid.)*
+- [x] A: `test` makes a live call (mock API and GitHub) and reports missing paths. *(Mock offset page OK; GitHub `get_user` OK, no missing paths. Jira `list_users` also OK.)*
+- [x] A: retries and 429 handling work against the mock API. *(Flaky: OK after 2 retries, 1 s then 2 s. 429: OK after waiting 1 s. Wrong key: `auth_failed`, not retried.)*
+- [x] B: list page and editor run on the Prism mock, with the validation and test panels wired. *(`npm run build` passes; the app is served on 5173; the list, validate and test calls answer from Prism, with CORS allowed for localhost:5173. The screens were not looked at in a browser during this check.)*
+- [x] `main` runs and holds both people's work. *(106 backend tests pass, `ruff` clean, the contract check passes, the frontend type check passes.)*
+
+**Carried into Phase 2:** `SECRET_OKTA_TOKEN_HOST` in Person A's `.env` contains an `@`, so the live Okta tests are refused until it holds only the host. Okta devices stay empty until a device is enrolled (skipped for now).
 
 ## 6. Phase 2: core features (9:15 to 11:45pm)
 
