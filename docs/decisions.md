@@ -84,7 +84,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
 | (R-14 to R-19) | Contract v4: schema drift, the AI routes, alert state | Approved by both. Tagged `contract-v4` (see R-20) |
 | D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions, **both checked and confirmed by Person B (1 Nov)**. On `main` at `f345556`; `contract-v4` is tagged after this confirmation** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
-| D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov), built on branch `a/audit-and-limits`, awaiting Person A's approval.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged after approval |
+| D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov). Merged and tagged `contract-v5` by Person B (1 Nov), since R-20 gave S-7 to S-9 to Person B. Person A has not yet confirmed.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -1416,7 +1416,7 @@ Person B reviewed the branch (`a/multi-user` at `4af82b7`) before approving:
 
 ## D-19: Audit log and rate limits (S-7 and S-9)
 
-**Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: built on branch `a/audit-and-limits`, not merged. It changes `schema/openapi.yaml`, so it needs Person A's approval and a new tag (`contract-v5`) before it goes to `main`.**
+**Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: merged to `main` and tagged `contract-v5` by Person B, on Person B's own call, because Person A handed S-7 to S-9 to Person B (R-20). Person A had not yet read D-19 when it was merged: Person A should read it and either confirm or ask for changes. Any change after that needs a new tag, not a moved one.**
 
 D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each needs its own contract approval. Checkpoint 3 is **not** green yet (see `roadmap.md`). Person A handed S-7 to S-9 to Person B on 1 Nov (R-20), so Person B built S-7 and S-9 now and keeps them off `main` until Person A approves the contract change. Nothing here is on `main`, so the ordering rule is still met where it matters: no unapproved contract change is live.
 
@@ -1452,7 +1452,7 @@ D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each n
 
 `backend/tests/test_audit_limits.py` (17 tests): every event is recorded; no secret value and no config text appears in the log; filters and paging; one account cannot read another's log; 401 without a sign-in; a failed change leaves no entry; 429 with `Retry-After`; reads and validation are never limited; the limit is per account; run and AI buckets are separate; `0` turns a limit off; the window slides; the size cap catches a declared and a streamed oversize body, keeps headers (so `Link` paging still works) and defaults to 10 MB. The whole suite: 382 passed, 7 skipped. `ruff`, the contract check, the Redocly lint and the frontend build pass.
 
-### Approval needed from Person A
+### Still wanted from Person A
 
 1. Approve or list changes to the contract impact above.
 2. If approved: merge `a/audit-and-limits` to `main`, tag `contract-v5`, and tick S-7 and S-9 in `roadmap.md`.

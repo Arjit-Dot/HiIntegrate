@@ -243,7 +243,7 @@ The Phase 4 audit found no secret in logs, replies, the database, files or Git h
 
 **Only if Checkpoint 3's list is already green (Person A, with tests):**
 - [ ] **S-6** Outgoing-request guard in the engine: refuse loopback, private, link-local and metadata addresses on the first request, every redirect and every next-page link, except `localhost`, `127.0.0.1` and `mock-api`. Connect to the resolved address. Reuse the check in `backend/app/ai/docs.py`. Adds one error code (`blocked_address`) to `result.schema.json`, so it needs both people's approval and a new tag. *(45)*
-- [ ] **S-7 to S-9** Audit log, API login, rate limits and a response size cap. Each adds a route, a security scheme or a response code to `openapi.yaml`, so each needs approval and a tag first. *(60 or more)*
+- [x] **S-7 to S-9** Done 1 Nov (D-19, `contract-v5`). S-7 audit log with `GET /audit`; S-9 per-account `429` limits on write, run and AI routes plus a 10 MB response cap in the engine; S-8 was already delivered by D-18 (accounts and `401`). 17 new tests, 382 pass. Not shown in the demo flow yet. *(done)*
 
 **Not built:** S-10 retention and delete routes, S-11 key rotation, S-12 file-based secrets, S-13 TLS and CI scanning, S-14 AI hardening (including pinning the address in the documentation fetcher).
 
