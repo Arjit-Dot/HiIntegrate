@@ -95,6 +95,8 @@ def execute(engine: Engine, started: Started, inputs: dict | None = None, *, cli
             if result.status == "success" and started.mode == "pull":
                 repo.set_last_success(s, started.integration, action_name, result.started_at)
                 repo.add_to_baseline(s, started.integration, action_name, result.seen_paths)
+            if result.status == "success" and started.trigger in repo.COUNTED_TRIGGERS:
+                repo.clear_alert_attempt(s, started.integration, action_name)  # the failure streak ended, so the alert resets
     maybe_alert(engine, cfg, action_name, started.trigger, result)
     return result
 

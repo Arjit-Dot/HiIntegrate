@@ -124,3 +124,16 @@ class PathBaseline(Base):
     integration: Mapped[str] = mapped_column(String(64), primary_key=True)
     action: Mapped[str] = mapped_column(String(64), primary_key=True)
     paths: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class AlertAttempt(Base):
+    """The last time an alert email was due for an action, and what came of it, so the dashboard can say whether the person
+    was told. One row per action; it is removed when the action next succeeds (the streak, and so the alert, resets)."""
+
+    __tablename__ = "alert_attempt"
+    integration: Mapped[str] = mapped_column(String(64), primary_key=True)
+    action: Mapped[str] = mapped_column(String(64), primary_key=True)
+    at: Mapped[str] = mapped_column(String(32))
+    outcome: Mapped[str] = mapped_column(String(16))  # sent, failed, not_configured
+    failures: Mapped[int] = mapped_column(Integer)
+    message: Mapped[str | None] = mapped_column(String(240), nullable=True)

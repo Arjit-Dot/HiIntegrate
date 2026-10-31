@@ -6,6 +6,7 @@ import { api, ApiError, type IntegrationSummary, type TestResponse } from '../ap
 import { ErrorBox, Modal, Pill, useToast } from '../components/common'
 import { TestResult } from '../components/TestResult'
 import { RunLookup } from '../components/RunLookup'
+import { AlertNote } from '../components/AlertNote'
 
 const CATEGORIES = ['identity', 'threat_intel', 'ticketing', 'alerting', 'other']
 const STATUSES = ['healthy', 'degraded', 'failing', 'never_run', 'disabled']
@@ -85,6 +86,7 @@ export default function Integrations() {
                   <td>
                     <Pill kind={status}>{status}</Pill>
                     {h.last_error && <div className="muted small" style={{ maxWidth: 240, marginTop: 4 }}>{h.last_error.message}</div>}
+                    <AlertNote name={i.name} alert={i.alert} health={h} enabled={i.enabled} compact />
                   </td>
                   <td><Switch checked={i.enabled} onCheckedChange={v => toggle(i, v)} aria-label={`Enable ${i.name}`} /></td>
                   <td style={{ whiteSpace: 'nowrap' }}>

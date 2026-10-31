@@ -8,7 +8,16 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.storage.models import RECORD_TABLES, ActionState, Integration, PathBaseline, Quarantine, Run, User
+from app.storage.models import (
+    RECORD_TABLES,
+    ActionState,
+    AlertAttempt,
+    Integration,
+    PathBaseline,
+    Quarantine,
+    Run,
+    User,
+)
 
 RECORD_FIELDS = {
     "user": ["id", "name", "email", "status", "last_login"],
@@ -80,7 +89,7 @@ def set_enabled(s: Session, name: str, enabled: bool) -> Integration:
 
 def delete_integration(s: Session, name: str) -> None:
     s.delete(get_integration(s, name))
-    for model in (ActionState, PathBaseline):  # its history goes with it, so a new integration of the same name starts fresh
+    for model in (ActionState, PathBaseline, AlertAttempt):  # its history goes with it, so a new integration of the same name starts fresh
         for row in s.scalars(select(model).where(model.integration == name)):
             s.delete(row)
     s.flush()
@@ -332,3 +341,29 @@ def add_to_baseline(s: Session, integration: str, action: str, paths: set[str]) 
     row = s.get(PathBaseline, (integration, action)) or PathBaseline(integration=integration, action=action, paths=[])
     row.paths = sorted(set(row.paths) | paths)
     s.add(row)
+
+
+# ---------------------------------------------------------------- alert state (D-5.3)
+
+def record_alert_attempt(s: Session, integration: str, action: str, outcome: str, failures: int, message: str | None = None) -> None:
+    row = s.get(AlertAttempt, (integration, action)) or AlertAttempt(integration=integration, action=action)
+    row.at, row.outcome, row.failures, row.message = now_iso(), outcome, failures, (message or None) and message[:240]
+    s.add(row)
+
+
+def clear_alert_attempt(s: Session, integration: str, action: str) -> None:
+    row = s.get(AlertAttempt, (integration, action))
+    if row is not None:
+        s.delete(row)
+
+
+def alert_state(s: Session, integration: Integration) -> dict | None:
+    """What the dashboard shows about alerts: the config's rule, and the last attempt of the current failure streak."""
+    rule = integration.config.get("alerts")
+    if not rule:
+        return None
+    actions = list(integration.config.get("actions") or {})
+    rows = list(s.scalars(select(AlertAttempt).where(AlertAttempt.integration == integration.name, AlertAttempt.action.in_(actions)).order_by(AlertAttempt.at.desc())))
+    last = rows[0] if rows else None
+    return {"after_failures": rule.get("after_failures", 3), "to": rule.get("to", []),
+            "last_attempt": None if last is None else {"action": last.action, "at": last.at, "outcome": last.outcome, "failures": last.failures, "message": last.message}}

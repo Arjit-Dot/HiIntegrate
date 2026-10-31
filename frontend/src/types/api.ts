@@ -514,10 +514,32 @@ export interface components {
                 mode: "pull" | "lookup" | "webhook";
             }[];
             health: components["schemas"]["health"];
+            alert?: components["schemas"]["AlertState"];
+        };
+        /** @description Null when the config has no `alerts` block. Otherwise the rule, and what came of the alert for the current failure streak. */
+        AlertState: null | {
+            after_failures: number;
+            to: string[];
+            /** @description Null until an alert was due in the current streak. Cleared when the action next succeeds. */
+            last_attempt: null | {
+                action: string;
+                /** @description ISO 8601 UTC. */
+                at: string;
+                /**
+                 * @description `sent`: the email left. `failed`: the mail server refused or was unreachable (see `message`). `not_configured`: the server has no SMTP settings.
+                 * @enum {unknown}
+                 */
+                outcome: "sent" | "failed" | "not_configured";
+                /** @description Failed runs in a row when the alert was due. */
+                failures: number;
+                /** @description Why it failed. Never contains the password. */
+                message?: string | null;
+            };
         };
         Integration: {
             config: components["schemas"]["integration.schema"];
             health: components["schemas"]["health"];
+            alert?: components["schemas"]["AlertState"];
             /** @description 1 when created, plus 1 on every save (D-15). Editing in place never creates a second integration. */
             revision?: number;
             created_at?: string;

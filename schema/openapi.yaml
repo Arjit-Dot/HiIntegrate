@@ -824,12 +824,35 @@ components:
             required: [name, mode]
             properties: { name: { type: string }, mode: { enum: [pull, lookup, webhook] } }
         health: { $ref: "result.schema.json#/$defs/health" }
+        alert: { $ref: "#/components/schemas/AlertState" }
+    AlertState:
+      description: "Null when the config has no `alerts` block. Otherwise the rule, and what came of the alert for the current failure streak."
+      oneOf:
+        - { type: "null" }
+        - type: object
+          required: [after_failures, to, last_attempt]
+          properties:
+            after_failures: { type: integer, minimum: 1 }
+            to: { type: array, items: { type: string } }
+            last_attempt:
+              description: "Null until an alert was due in the current streak. Cleared when the action next succeeds."
+              oneOf:
+                - { type: "null" }
+                - type: object
+                  required: [action, at, outcome, failures]
+                  properties:
+                    action: { type: string }
+                    at: { type: string, description: "ISO 8601 UTC." }
+                    outcome: { enum: [sent, failed, not_configured], description: "`sent`: the email left. `failed`: the mail server refused or was unreachable (see `message`). `not_configured`: the server has no SMTP settings." }
+                    failures: { type: integer, minimum: 1, description: "Failed runs in a row when the alert was due." }
+                    message: { type: [string, "null"], description: "Why it failed. Never contains the password." }
     Integration:
       type: object
       required: [config, health]
       properties:
         config: { $ref: "integration.schema.json" }
         health: { $ref: "result.schema.json#/$defs/health" }
+        alert: { $ref: "#/components/schemas/AlertState" }
         revision: { type: integer, minimum: 1, description: "1 when created, plus 1 on every save (D-15). Editing in place never creates a second integration." }
         created_at: { type: string }
         updated_at: { type: string }

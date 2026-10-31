@@ -1525,6 +1525,12 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | Security plan | The audit (Phase 4) showed no secret in logs, API replies, the database, files or Git history, but listed no further hardening | D-17 lists 14 items (S-1 to S-14) with owners and contract impact. **Nothing is built yet** | A review of the running stack found the API open to anyone on the network, ports published on every interface, no guard on the engine's outgoing requests, and no audit log or retention |
 | Contract files | Unchanged | Unchanged. S-7 to S-10 would add routes, a security scheme or response codes to `openapi.yaml`, and S-6 one error code to `result.schema.json` | Each needs both people's approval and a new tag before it is built |
 
+### R-17: Alert state on integrations (1 Nov) · awaiting Person B
+
+| Item | Before | Now | Why |
+|---|---|---|---|
+| `GET /integrations` and `GET /integrations/{id}` | `health` only | Also `alert`: null without an `alerts` block, otherwise `{after_failures, to, last_attempt}`, where `last_attempt` is `{action, at, outcome: sent \| failed \| not_configured, failures, message}` or null | The roadmap asks for a visible alert state on failing connections. Counting failures against the threshold would say "alert sent" even when SMTP is down, so the platform records what came of each alert (a new `alert_attempt` table, one row per action, removed when the action next succeeds). The message never holds the password. Additive; needs Person B's approval |
+
 ---
 
 ## Open items
