@@ -3,6 +3,7 @@ import { api, type UnifiedUser } from '../api/client'
 import { SCHEMAS, type SchemaName } from '../lib/config'
 import { ErrorBox, Pill } from '../components/common'
 import { PAGE_SIZE, Pager } from '../components/Pager'
+import { SummaryButton, SummaryCard, useSummary } from '../components/SummaryPanel'
 
 const tone = (v: unknown) => (v === 'active' || v === 'low' ? 'success' : v === 'inactive' || v === 'medium' ? 'degraded' : 'failed')
 const when = (v: string | null | undefined) => (v ? new Date(v).toLocaleString() : null)
@@ -22,6 +23,7 @@ export default function Results() {
   const [error, setError] = useState('')
 
   const unified = schema === 'user' && people
+  const summary = useSummary(schema, source, unified ? undefined : data?.total)  // the People view counts people, not stored records
 
   useEffect(() => {
     setData(null)
@@ -59,8 +61,10 @@ export default function Results() {
             <button className={view === 'table' ? 'active' : ''} onClick={() => setView('table')}>Table</button>
             <button className={view === 'json' ? 'active' : ''} onClick={() => setView('json')}>JSON</button>
           </div>
+          <SummaryButton s={summary} />
         </div>
       </div>
+      <SummaryCard s={summary} />
       {error && <ErrorBox message={error} />}
       {view === 'json'
         ? <pre>{data === null ? 'Loading…' : JSON.stringify(rows, null, 2)}</pre>
