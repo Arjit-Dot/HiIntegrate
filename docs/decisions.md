@@ -82,6 +82,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
 | D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
+| (R-14 to R-19) | Contract v4: schema drift, the AI routes, alert state | Approved by both. Tagged `contract-v4` (see R-20) |
 | D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions, **both checked and confirmed by Person B (1 Nov)**. On `main` at `f345556`; `contract-v4` is tagged after this confirmation** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
 | D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov), built on branch `a/audit-and-limits`, awaiting Person A's approval.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged by Person A after approval |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
@@ -1356,7 +1357,7 @@ One shared set of examples that both people treat as the truth:
 - **S-1 to S-5** go in before the freeze (deployment files only, no contract change).
 - **S-6 to S-9** are built only when Checkpoint 3's list is already green. Confirming D-17 does **not** approve their contract changes: S-6 (`blocked_address`), S-7 (audit route), S-8 (security scheme and `401`) and S-9 (`429`) each still need both people's approval and a new tag before they are built.
 - **S-10 to S-14** are named as next steps, not built.
-- Person A takes S-6 to S-12 as owner, and S-8 and S-13 jointly with Person B, as the table says.
+- Person A takes S-6 and S-10 to S-12 as owner. **S-7 to S-9 (audit log, API login, rate limits) are handled by Person B** (decided by Person A, 1 Nov). S-13 stays joint, as the table says.
 
 ---
 
@@ -1647,6 +1648,22 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | Item | Before | Now | Why |
 |---|---|---|---|
 | `templates/okta.yaml`, `list_alerts` | A fixed `since: now - 24h` on every run | Also `incremental: { param: since, value: "{{state.last_success_at}}" }`. The first run keeps the 24 hour window. Later runs ask only for events since the previous successful run | The roadmap verifies B-1 with "the second run sends `last_success_at`", and no shipped config used it. Run on the real Okta org: the first run fetched 238 events over 4 pages, the second sent `since` = the first run's start and fetched nothing new. The description of `incremental` in `integration.schema.json` no longer says that no service uses it (text only) |
+
+### R-20: Contract v4 (1 Nov)
+
+Tag `contract-v4` marks the contract after these changes, all approved by both people:
+
+| Entry | Change |
+|---|---|
+| R-14 | Run error code `schema_drift`, and a run `error` may be set on a success |
+| R-15 | `POST /ai/generate-config` takes `service`, `url` and/or `text`, and replies with `source`, `tried`, `attempts` and `test` |
+| R-17 | `alert` (the rule and the last attempt's outcome) on `GET /integrations` and `GET /integrations/{id}` |
+| R-18 | `POST /ai/suggest-mapping` |
+| R-19 | Text only: the description of `incremental` |
+
+**Not in v4:** D-17 S-6 (adds the error code `blocked_address`) and S-7 to S-9 (an audit route, a security scheme with `401`, and `429` replies). Each still needs both people's approval and its own tag. **S-7 to S-9 are handled by Person B.** The D-18 accounts and sign-in work is S-8 and is not part of v4.
+
+Build against `contract-v4`: `cd schema/tools && npm run check` passes, and `frontend/src/types/api.ts` is generated from it.
 
 ---
 

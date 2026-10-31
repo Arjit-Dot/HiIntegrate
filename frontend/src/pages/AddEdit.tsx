@@ -2,7 +2,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTheme } from '../lib/theme'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
@@ -11,18 +11,24 @@ import { applyPreset, buildConfig, configToState, defaultState, hostOf, SCHEMAS,
 import { ErrorBox, Pill, useToast } from '../components/common'
 import { TestResult } from '../components/TestResult'
 import { AiDraft } from '../components/AiDraft'
+import { AddActions } from '../components/AddActions'
 import { AlertNote } from '../components/AlertNote'
 import { SuggestMapping } from '../components/SuggestMapping'
 import { lineOf, locate, missingVar } from '../lib/validation'
 
 type Issue = { path: string; message: string; severity: 'error' | 'warning'; line?: number }
 type Pane = 'config' | 'validate' | 'test'
-type Draft = { from: string; problems: number; tried: number; vars: [string, string][]; secret?: string; test?: GenerateConfigResponse['test'] }
+type Draft = { from: string; problems: number; tried: number; vars: [string, string][]; secret?: string; test?: GenerateConfigResponse['test']; existing?: string; actions?: Config }
 
 export default function AddEdit() {
   const [theme] = useTheme()
   const { id } = useParams()
-  const templateId = useSearchParams()[0].get('template')
+  const [query] = useSearchParams()
+  const templateId = query.get('template')
+  const location = useLocation()
+  // Actions sent here from the Add page (an AI draft of a service that already exists) are offered for merging.
+  const [incoming, setIncoming] = useState<Config | undefined>((location.state as { incoming?: Config } | null)?.incoming)
+  const [adding, setAdding] = useState(!!incoming || query.get('add') === '1')   // the "add several actions" panel
   const [requires, setRequires] = useState<Config | undefined>()   // from the template, to tell the person what to fill in
   const nav = useNavigate()
   const toast = useToast()
@@ -85,7 +91,8 @@ export default function AddEdit() {
     const problems = r.errors.filter(e => e.severity === 'error').length
     const from = r.source?.url ?? 'the attached document'
     const c0 = r.config as Config | undefined
-    setDraft({ from, problems, tried: Math.max((r.tried?.length ?? 1) - 1, 0), vars: Object.entries<unknown>(c0?.vars ?? {}).map(([k, v]) => [k, String(v)]), secret: c0?.auth?.secret, test: r.test })
+    setDraft({ from, problems, tried: Math.max((r.tried?.length ?? 1) - 1, 0), vars: Object.entries<unknown>(c0?.vars ?? {}).map(([k, v]) => [k, String(v)]), secret: c0?.auth?.secret, test: r.test,
+      existing: c0?.name && taken.includes(c0.name) ? c0.name : undefined, actions: c0?.actions })
     setMode('manual')
     try {
       const c = r.config as Config | undefined
@@ -150,6 +157,43 @@ export default function AddEdit() {
       }
     }))
   }, [issues, text, fmt, pane, editorTick])
+
+  // Several actions in one integration, in both Add and Edit (D-15). The working config is `base`: before the form moves to
+  // another action, what is in the form is committed to it, so nothing typed is lost when switching.
+  function commit(): Config | null {
+    if (parsed.error || !parsed.config) { toast(parsed.error ?? 'The config is not valid yet.'); return null }
+    return parsed.config
+  }
+  function show(c: Config, action: string | undefined, blank = false) {
+    setRaw(null); setBase(c)
+    setS(p => ({ ...(blank ? applyPreset(p, 'user', 'pull') : configToState(c, action)), secretValue: p.secretValue }))
+    setEditedAction(blank ? undefined : action)
+  }
+  const freeName = (c: Config, stem = 'new_action') => { let n = stem, i = 2; while (c.actions?.[n]) n = `${stem}_${i++}`; return n }
+  function switchTo(name: string) {
+    if (name === s.actionName) return
+    const c = commit(); if (c) show(c, name)
+  }
+  function addBlankAction() {
+    const c = commit(); if (!c) return
+    show(c, undefined, true)
+    setS(p => ({ ...p, actionName: freeName(c) }))
+  }
+  function removeAction() {
+    const c = commit(); if (!c) return
+    const left = Object.keys(c.actions ?? {}).filter(n => n !== s.actionName)
+    if (left.length === 0) { toast('An integration needs at least one action.'); return }
+    const { [s.actionName]: _gone, ...rest } = c.actions
+    show({ ...c, actions: rest }, left[0])
+    toast(`Removed ${s.actionName} from the form. It is deleted when you press Save.`)
+  }
+  function addActions(more: Record<string, Config>) {
+    const c = commit(); if (!c) return
+    const first = Object.keys(more)[0]
+    show({ ...c, actions: { ...c.actions, ...more } }, first)
+    setAdding(false); setIncoming(undefined)
+    toast(`Added ${Object.keys(more).length} action${Object.keys(more).length === 1 ? '' : 's'} to the form. Check them, then press Save.`)
+  }
 
   function addVariable(name: string) {
     set('vars', s.vars + (s.vars && !s.vars.endsWith('\n') ? '\n' : '') + name + '=')
@@ -254,6 +298,12 @@ export default function AddEdit() {
             {!draft.test && <li>Press <b>Test connection</b> to see whether the mapped paths exist in the real response.</li>}
             <li>Nothing is saved until you press Save.</li>
           </ul>
+          {draft.existing && draft.actions && (
+            <div className="inline" style={{ marginTop: 10 }}>
+              <span>An integration named <code>{draft.existing}</code> already exists, so this draft was named <code>{s.name}</code>.</span>
+              <Button variant="secondary" size="sm" type="button" onClick={() => nav(`/integrations/${encodeURIComponent(draft.existing!)}/edit`, { state: { incoming: draft.actions } })}>Add its actions to {draft.existing} instead</Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -274,6 +324,10 @@ export default function AddEdit() {
         </ul>
       </div>
 
+      {adding && (
+        <AddActions existing={Object.keys(parsed.config?.actions ?? {})} service={s.name || undefined} incoming={incoming}
+          onAdd={addActions} onClose={() => { setAdding(false); setIncoming(undefined) }} />
+      )}
       {suggesting && (
         <SuggestMapping schema={s.schema} current={s.map} onClose={() => setSuggesting(false)}
           onApply={(applied, recordsPath) => {
@@ -345,17 +399,18 @@ export default function AddEdit() {
           <div className="section">
             <h2><span className="step">4</span>Action</h2>
             <SectionIssues n={4} />
-            {id && (
-              <div className="actions-bar">
-                <select style={{ width: 'auto' }} value={editedAction ?? ''} onChange={e => { setRaw(null); setS(configToState(base!, e.target.value)); setEditedAction(e.target.value) }}>
-                  {editedAction === undefined && <option value="">(new action)</option>}
-                  {actionNames.map(n => <option key={n}>{n}</option>)}
-                </select>
-                <Button variant="secondary" size="sm" type="button"  onClick={() => { setRaw(null); setEditedAction(undefined); setS(p => ({ ...applyPreset(p, 'user', 'pull'), actionName: 'new_action' })) }}>+ Add action</Button>
-              </div>
-            )}
+            <div className="actions-bar">
+              <select style={{ width: 'auto' }} aria-label="Action being edited" value={s.actionName} onChange={e => switchTo(e.target.value)}>
+                {[...Object.keys(parsed.config?.actions ?? {}).filter(n => n !== s.actionName), s.actionName].sort().map(n => <option key={n}>{n}</option>)}
+              </select>
+              <Button variant="secondary" size="sm" type="button" onClick={addBlankAction}>+ Add action</Button>
+              <Button variant="secondary" size="sm" type="button" onClick={() => setAdding(v => !v)} title="Add several actions at once, from the AI or pasted YAML or JSON">+ Add several actions</Button>
+              {Object.keys(parsed.config?.actions ?? {}).length > 1 && <Button variant="secondary" size="sm" type="button" onClick={removeAction}>Remove this action</Button>}
+              <span className="muted small">{Object.keys(parsed.config?.actions ?? {}).length} in this integration</span>
+            </div>
             <div className="grid">
-              <div><label className="req">Action name</label><input type="text" className="mono" {...bind('actionName')} /></div>
+              <div><label className="req">Action name</label><input type="text" className="mono" {...bind('actionName')} />
+                {s.actionName !== editedAction && Object.keys(base?.actions ?? {}).includes(s.actionName) && <div className="hint err">This integration already has an action named <code>{s.actionName}</code>. Saving would replace it: pick another name.</div>}</div>
               <div><label className="req">Mode</label>
                 <select aria-invalid={bad.has('mode') || undefined} value={s.mode} onChange={e => { setRaw(null); setS(p => applyPreset(p, p.schema, e.target.value)) }}>
                   <option value="pull">pull (scheduled, many records)</option><option value="lookup">lookup (on demand, one record)</option></select></div>

@@ -92,7 +92,8 @@ export default function Integrations() {
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {i.actions.some(a => a.mode === 'lookup') && <><Button variant="secondary" size="sm" onClick={() => setRunning(i)}>Run</Button>{' '}</>}
                     <Button variant="secondary" size="sm" onClick={() => setTesting(i)}>Test</Button>{' '}
-                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>
+                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>{' '}
+                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit?add=1`}><Button variant="secondary" size="sm" title="Add several actions to this integration at once">+ Actions</Button></Link>
                   </td>
                 </tr>
               )
