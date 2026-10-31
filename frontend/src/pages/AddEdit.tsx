@@ -2,7 +2,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Editor from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
 import { api, ApiError, type Config, type SecretInfo, type TestResponse } from '../api/client'
@@ -15,6 +15,8 @@ type Pane = 'config' | 'validate' | 'test'
 
 export default function AddEdit() {
   const { id } = useParams()
+  const templateId = useSearchParams()[0].get('template')
+  const [requires, setRequires] = useState<Config | undefined>()   // from the template, to tell the person what to fill in
   const nav = useNavigate()
   const toast = useToast()
   const [s, setS] = useState<FormState>(defaultState)
@@ -48,6 +50,17 @@ export default function AddEdit() {
       setS(st); setEditedAction(st.actionName)
     }).catch(e => setLoadError(e.message))
   }, [id])
+
+  // "Use this template" (D-15: a template is only a starting point, so saving creates a NEW integration).
+  useEffect(() => {
+    if (id || !templateId) return
+    api.getTemplate(templateId).then(r => {
+      const c = r.config as Config
+      setBase(c); setRequires(c.requires)
+      const st = configToState(c)
+      setS(st); setEditedAction(st.actionName)
+    }).catch(e => setLoadError(e.message))
+  }, [id, templateId])
 
   // The config: from the editor text if the person typed in it, otherwise built from the form.
   const parsed = useMemo<{ config?: Config; error?: string }>(() => {
@@ -137,6 +150,13 @@ export default function AddEdit() {
         </div>
       </div>
 
+      {templateId && !id && (
+        <div className="callout">
+          <strong>Started from the {templateId} template.</strong> Saving creates a new integration; the template itself is not changed.
+          {requires?.vars && <ul>{Object.entries<any>(requires.vars).map(([k, v]) => <li key={k}>Set <code>{k}</code> in Variables: {v.label}{v.example ? <> (for example <code>{String(v.example)}</code>)</> : null}</li>)}</ul>}
+          {requires?.secrets?.length ? <div className="hint">Needs the secret <code>{requires.secrets.join(', ')}</code>: enter its value in the Authentication section.</div> : null}
+        </div>
+      )}
       <div className="callout">
         <strong>What the platform requires</strong> <span className="muted">(fields marked <span className="star">*</span>)</span>
         <ul>
@@ -283,7 +303,13 @@ export default function AddEdit() {
                   <input type="text" className="mono" placeholder="path in response" value={m.path} onChange={e => upd({ path: e.target.value })} />
                   <select value={m.transform} onChange={e => upd({ transform: e.target.value })}>{TRANSFORMS.map(t => <option key={t} value={t}>{t || 'none'}</option>)}</select>
                   <label className="inline" style={{ margin: 0, justifyContent: 'center' }}><input type="checkbox" checked={f === 'id' || m.required} disabled={f === 'id'} onChange={e => upd({ required: e.target.checked })} /></label>
-                  {en && <div className="vm"><input type="text" className="mono" placeholder="value map, e.g. ACTIVE=active, OFF=inactive" value={m.valueMap} onChange={e => upd({ valueMap: e.target.value })} /><div className="hint">Allowed values: {en.join(', ')}</div></div>}
+                  <div className="vm">
+                    <div className="inline">
+                      {en && <input type="text" className="mono" placeholder="value map, e.g. ACTIVE=active, OFF=inactive" value={m.valueMap} onChange={e => upd({ valueMap: e.target.value })} />}
+                      <input type="text" className="mono" style={{ maxWidth: en ? 220 : undefined }} placeholder={f === 'id' ? 'default (not for id)' : 'default if missing (optional)'} disabled={f === 'id'} value={m.defaultValue ?? ''} onChange={e => upd({ defaultValue: e.target.value })} />
+                    </div>
+                    {en && <div className="hint">Allowed values: {en.join(', ')}. With no path, the default is used for every record.</div>}
+                  </div>
                 </div>
               )
             })}

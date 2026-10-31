@@ -9,7 +9,7 @@ export const SCHEMAS: Record<SchemaName, { fields: string[]; enums: Record<strin
 }
 export const TRANSFORMS = ['', 'string', 'int', 'float', 'bool', 'lowercase', 'uppercase', 'datetime']
 
-export interface MapRow { path: string; transform: string; required: boolean; valueMap: string }
+export interface MapRow { path: string; transform: string; required: boolean; valueMap: string; defaultValue?: string }
 export interface InputRow { name: string; type: string; values: string; required: boolean }
 
 export interface FormState {
@@ -102,14 +102,22 @@ function parseEq(v: string): string | number | boolean {
   return v
 }
 
-/** The action built from the form. */
-export function buildAction(s: FormState): Config {
+const ACTION_KEYS = ['mode', 'target_schema', 'schedule', 'request', 'pagination', 'inputs', 'records_path', 'error_when', 'map', 'required', 'on_invalid', 'store']
+const REQUEST_KEYS = ['method', 'path', 'query']
+const TOP_KEYS = ['version', 'name', 'display_name', 'category', 'description', 'enabled', 'vars', 'requires', 'base_url', 'auth', 'actions', 'alerts']
+
+/** Keys the form has no field for (headers, body, incremental, ...), taken from the saved config so nothing is lost. */
+const extrasOf = (src: Config | undefined, known: string[]): Config =>
+  Object.fromEntries(Object.entries(src ?? {}).filter(([k]) => !known.includes(k)))
+
+/** The action built from the form. `saved` is the same action as last saved, if any; what the form cannot edit is kept. */
+export function buildAction(s: FormState, saved?: Config): Config {
   const act: Config = { mode: s.mode, target_schema: s.schema }
   if (s.mode === 'pull') act.schedule = `every ${s.schedN}${s.schedU}`
   const rq: Config = { method: s.method, path: s.path }
   const q = parseKV(s.query)
   if (Object.keys(q).length) rq.query = q
-  act.request = rq
+  act.request = { ...rq, ...extrasOf(saved?.request, REQUEST_KEYS) }
   if (s.mode === 'pull' && s.pgType !== 'none') {
     const p: Config = { type: s.pgType }
     if (s.pgType === 'next_link') { p.source = s.pgSource; if (s.pgSource === 'header') p.header = s.pgHeader; else p.path = s.pgHeader }
@@ -135,13 +143,18 @@ export function buildAction(s: FormState): Config {
   const map: Config = {}, required: string[] = []
   SCHEMAS[s.schema].fields.forEach(f => {
     const m = s.map[f]
-    if (!m || !m.path) return
+    const dflt = m?.defaultValue?.trim()
+    if (!m || (!m.path && !dflt)) return
     const vm = parseVM(m.valueMap)
-    if (!m.transform && !Object.keys(vm).length) map[f] = m.path
+    if (!dflt && !m.transform && !Object.keys(vm).length) map[f] = m.path
     else {
-      const e: Config = { path: m.path }
+      // A constant is allowed: no path, only a default (GitHub's `status: { default: active }`).
+      const e: Config = {}
+      if (m.path) e.path = m.path
       if (m.transform) e.transform = m.transform
-      if (Object.keys(vm).length) { e.value_map = vm; e.default = 'unknown' }
+      if (Object.keys(vm).length) e.value_map = vm
+      if (dflt) e.default = dflt
+      else if (Object.keys(vm).length) e.default = 'unknown'
       map[f] = e
     }
     if (m.required || f === 'id') required.push(f)
@@ -150,7 +163,7 @@ export function buildAction(s: FormState): Config {
   act.required = required
   act.on_invalid = s.onInvalid
   if (!s.store) act.store = false
-  return act
+  return { ...extrasOf(saved, ACTION_KEYS), ...act }
 }
 
 /**
@@ -166,7 +179,9 @@ export function buildConfig(s: FormState, base?: Config, editedAction?: string):
   const vars = parseKV(s.vars)
   if (Object.keys(vars).length) c.vars = vars
   const req: Config = {}
-  if (Object.keys(vars).length) { req.vars = {}; Object.keys(vars).forEach(k => (req.vars[k] = { label: k, example: String(vars[k]) })) }
+  // Keep the template's own labels and examples; make up a label only for a variable that has none.
+  const savedVars = base?.requires?.vars ?? {}
+  if (Object.keys(vars).length) { req.vars = {}; Object.keys(vars).forEach(k => (req.vars[k] = savedVars[k] ?? { label: k, example: String(vars[k]) })) }
   if (s.secret) req.secrets = [s.secret]
   if (Object.keys(req).length) c.requires = req
   c.base_url = s.base_url
@@ -180,9 +195,11 @@ export function buildConfig(s: FormState, base?: Config, editedAction?: string):
   const actions: Config = {}
   const others = base?.actions ?? {}
   Object.keys(others).forEach(k => { if (k !== editedAction) actions[k] = others[k] })
-  actions[s.actionName || 'action'] = buildAction(s)
+  actions[s.actionName || 'action'] = buildAction(s, editedAction ? others[editedAction] : undefined)
   c.actions = actions
-  return c
+  // Top-level settings the form has no field for (defaults such as headers, rate_limit, ...) stay as saved.
+  const { actions: built, ...head } = c
+  return { ...head, ...extrasOf(base, TOP_KEYS), actions: built }
 }
 
 /** Fill the form from a saved config, showing one action. */
@@ -200,7 +217,7 @@ export function configToState(c: Config, actionName?: string): FormState {
     const e = act.map?.[f]
     rows[f] = typeof e === 'string'
       ? { path: e, transform: '', required: (act.required ?? []).includes(f) || f === 'id', valueMap: '' }
-      : e ? { path: e.path ?? '', transform: e.transform ?? '', required: (act.required ?? []).includes(f) || f === 'id', valueMap: vmText(e.value_map) }
+      : e ? { path: e.path ?? '', transform: e.transform ?? '', required: (act.required ?? []).includes(f) || f === 'id', valueMap: vmText(e.value_map), defaultValue: e.default === undefined ? '' : String(e.default) }
         : { path: '', transform: '', required: false, valueMap: '' }
   })
   return {
