@@ -3,7 +3,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 log = logging.getLogger("app.secrets")
 
@@ -50,14 +50,36 @@ class StoreUnavailable(SecretError):
     """The encrypted store cannot be used (no ENCRYPTION_KEY, or it is not a valid key)."""
 
 
-def _fernet() -> Fernet:
-    key = os.environ.get("ENCRYPTION_KEY", "")
-    if not key:
+def _fernet() -> MultiFernet:
+    """S-11: ENCRYPTION_KEY may hold several keys separated by commas. The FIRST encrypts; every one can decrypt. To
+    rotate: put the new key first and keep the old one after it, restart, run `rotate-keys`, then drop the old key."""
+    raw = os.environ.get("ENCRYPTION_KEY", "")
+    keys = [k.strip() for k in raw.split(",") if k.strip()]
+    if not keys:
         raise StoreUnavailable("ENCRYPTION_KEY is not set, so the encrypted secret store is not available")
     try:
-        return Fernet(key.encode())
+        return MultiFernet([Fernet(k.encode()) for k in keys])
     except (ValueError, TypeError):
-        raise StoreUnavailable("ENCRYPTION_KEY is not a valid key (it must be 32 url-safe base64 bytes)") from None
+        raise StoreUnavailable("ENCRYPTION_KEY is not a valid key (each key must be 32 url-safe base64 bytes; separate several with commas)") from None
+
+
+def rotate_keys(session) -> int:
+    """S-11: re-encrypt every stored secret with the first key. Returns how many were rewritten. A secret that none of the
+    keys can open is left alone and raises SecretError, so nothing is lost by a wrong key list."""
+    from app.storage.models import Secret as SecretRow
+
+    f = _fernet()
+    rows = session.query(SecretRow).all()
+    fresh = {}
+    for row in rows:
+        try:
+            fresh[(row.account, row.name)] = f.rotate(row.ciphertext.encode()).decode()
+        except InvalidToken:
+            raise SecretError(f"secret {row.name} cannot be decrypted with any key in ENCRYPTION_KEY; nothing was changed") from None
+    for row in rows:
+        row.ciphertext = fresh[(row.account, row.name)]
+    session.flush()
+    return len(rows)
 
 
 def store_available() -> bool:
@@ -103,7 +125,7 @@ def _stored(session, account: str, name: str) -> Secret | None:
     try:
         value = _fernet().decrypt(row.ciphertext.encode()).decode()
     except InvalidToken:
-        raise SecretError(f"secret {name} cannot be decrypted: ENCRYPTION_KEY is not the key it was stored with. Enter the value again") from None
+        raise SecretError(f"secret {name} cannot be decrypted: ENCRYPTION_KEY is not the key it was stored with (none of its keys opens it). Enter the value again") from None
     return Secret(name=name, value=value, host=row.host)
 
 

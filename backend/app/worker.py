@@ -11,7 +11,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core.logging import setup_logging
 from app.core.settings import get_settings
-from app.scheduler import timer
+from app.scheduler import retention, timer
 from app.storage import get_engine
 
 log = logging.getLogger("worker")
@@ -24,7 +24,10 @@ def main() -> None:
     scheduler = BackgroundScheduler(timezone="UTC")
     scheduler.add_job(timer.sync, "interval", seconds=timer.SYNC_SECONDS, id=timer.SYNC_JOB_ID, args=[scheduler, engine],
                       max_instances=1, coalesce=True)
+    scheduler.add_job(retention.purge_old, "interval", seconds=retention.INTERVAL_SECONDS, id="retention", args=[engine],
+                      max_instances=1, coalesce=True)
     scheduler.start()
+    retention.purge_old(engine)  # also once at start, so a long-stopped stack tidies itself
     timer.sync(scheduler, engine)  # do not wait 15 s for the first look
     log.info("worker started; re-reading the database every %s s", timer.SYNC_SECONDS)
     stop = threading.Event()

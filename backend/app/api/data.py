@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
+from app.api.audit import record
 from app.api.deps import Account, Limit, Offset, page, session_dep
 from app.storage import repo
 
@@ -42,3 +43,11 @@ def export(s: SessionDep, account: Account, source: str | None = None, action: s
     items = repo.export_quarantine(s, account, source=source, action=action, run_id=run_id, target_schema=target_schema, reason=reason)
     return Response(json.dumps(items, indent=2), media_type="application/json",
                     headers={"Content-Disposition": 'attachment; filename="quarantine.json"'})
+
+
+@router.delete("/quarantine")
+def delete_old_quarantine(s: SessionDep, account: Account, older_than_days: Annotated[int, Query(ge=0)]) -> dict:
+    """S-10: delete this account's quarantined records older than N days."""
+    n = repo.purge_quarantine(s, repo.cutoff_iso(older_than_days), account)
+    record(s, account, "quarantine.purged", f"{n} record(s) older than {older_than_days} days")
+    return {"deleted": n}
