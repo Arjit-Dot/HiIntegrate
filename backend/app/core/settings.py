@@ -16,6 +16,37 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # log redaction knows every secret value. Variables already set in the environment win.
 load_dotenv(REPO_ROOT / ".env", override=False)
 
+# S-12: `<NAME>_FILE=/path` reads the value from a file (a Docker/Kubernetes secret), so `docker inspect` and `ps e` show only
+# a path. Allowed for the app's own keys and for SECRET_<NAME>. A value set directly wins over its _FILE.
+FILE_VARS = {"ENCRYPTION_KEY", "LLM_API_KEY", "DATABASE_URL", "POSTGRES_PASSWORD", "DASHBOARD_PASSWORD"}
+
+
+def load_file_values(environ=None) -> list[str]:
+    """Fill each NAME from NAME_FILE (when NAME is empty), then drop the NAME_FILE variable. Returns the names filled."""
+    import os
+
+    env = os.environ if environ is None else environ
+    filled = []
+    for var in [v for v in env if v.endswith("_FILE") and len(v) > 5]:
+        base = var[:-5]
+        if base not in FILE_VARS and not (base.startswith("SECRET_") and not base.endswith("_HOST")):
+            continue
+        path = env.get(var, "").strip()
+        env.pop(var, None)
+        if not path or env.get(base, "").strip():
+            continue
+        try:
+            value = Path(path).read_text(encoding="utf-8").strip("\r\n")
+        except OSError as exc:
+            raise RuntimeError(f"{var} points to {path}, which cannot be read: {exc.strerror}") from None
+        if value:
+            env[base] = value
+            filled.append(base)
+    return filled
+
+
+load_file_values()
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)

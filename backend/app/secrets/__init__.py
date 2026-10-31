@@ -19,11 +19,12 @@ from app.secrets.store import (
     check_host,
     get_secret,
     list_secrets,
+    rotate_keys,
     set_secret,
     store_available,
 )
 
 __all__ = [
     "Secret", "SecretError", "SecretHostMismatch", "SecretNotFound", "StoreUnavailable",
-    "check_host", "get_secret", "list_secrets", "set_secret", "store_available",
+    "check_host", "get_secret", "list_secrets", "rotate_keys", "set_secret", "store_available",
 ]

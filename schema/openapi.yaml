@@ -359,6 +359,30 @@ paths:
                 limit: 50
                 offset: 0
 
+    delete:
+      tags: [Runs]
+      summary: Delete finished runs older than a number of days
+      description: |
+        Retention (S-10). Deletes this account's finished runs that started more than N days ago. A run that is still running, and the newest finished run of each action (so health keeps its last result), are always kept. The worker also does this once a day, with `RETENTION_RUNS_DAYS`, `RETENTION_QUARANTINE_DAYS` and `RETENTION_AUDIT_DAYS` (default 90, 90 and 365 days; 0 keeps everything). The change is recorded in the audit log.
+      operationId: deleteOldRuns
+      parameters:
+        - { name: older_than_days, in: query, required: true, description: "0 or more. 0 means everything that can be deleted.", schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: How many were deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [deleted]
+                properties:
+                  deleted: { type: integer, minimum: 0 }
+              example: { deleted: 42 }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /runs/{run_id}:
     parameters:
       - { name: run_id, in: path, required: true, schema: { type: string } }
@@ -534,6 +558,30 @@ paths:
                 total: 2
                 limit: 50
                 offset: 0
+
+    delete:
+      tags: [Data]
+      summary: Delete quarantined records older than a number of days
+      description: |
+        Retention (S-10). Deletes this account's quarantined records created more than N days ago. Stored users, devices and alerts are not touched. The worker also does this once a day, with `RETENTION_RUNS_DAYS`, `RETENTION_QUARANTINE_DAYS` and `RETENTION_AUDIT_DAYS` (default 90, 90 and 365 days; 0 keeps everything). The change is recorded in the audit log.
+      operationId: deleteOldQuarantine
+      parameters:
+        - { name: older_than_days, in: query, required: true, description: "0 or more. 0 means everything that can be deleted.", schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: How many were deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [deleted]
+                properties:
+                  deleted: { type: integer, minimum: 0 }
+              example: { deleted: 42 }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /quarantine/export:
     get:

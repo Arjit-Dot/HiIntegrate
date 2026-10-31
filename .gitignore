@@ -25,3 +25,8 @@ build/
 .idea/
 .vscode/
 CLAUDE.md
+
+# TLS certificates and keys (S-13)
+certs/
+*.pem
+*.key

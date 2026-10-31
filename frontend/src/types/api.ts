@@ -263,7 +263,11 @@ export interface paths {
         get: operations["listRuns"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete finished runs older than a number of days
+         * @description Retention (S-10). Deletes this account's finished runs that started more than N days ago. A run that is still running, and the newest finished run of each action (so health keeps its last result), are always kept. The worker also does this once a day, with `RETENTION_RUNS_DAYS`, `RETENTION_QUARANTINE_DAYS` and `RETENTION_AUDIT_DAYS` (default 90, 90 and 365 days; 0 keeps everything). The change is recorded in the audit log.
+         */
+        delete: operations["deleteOldRuns"];
         options?: never;
         head?: never;
         patch?: never;
@@ -356,7 +360,11 @@ export interface paths {
         get: operations["listQuarantine"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete quarantined records older than a number of days
+         * @description Retention (S-10). Deletes this account's quarantined records created more than N days ago. Stored users, devices and alerts are not touched. The worker also does this once a day, with `RETENTION_RUNS_DAYS`, `RETENTION_QUARANTINE_DAYS` and `RETENTION_AUDIT_DAYS` (default 90, 90 and 365 days; 0 keeps everything). The change is recorded in the audit log.
+         */
+        delete: operations["deleteOldQuarantine"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2178,6 +2186,39 @@ export interface operations {
             };
         };
     };
+    deleteOldRuns: {
+        parameters: {
+            query: {
+                /** @description 0 or more. 0 means everything that can be deleted. */
+                older_than_days: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "deleted": 42
+                     *     }
+                     */
+                    "application/json": {
+                        deleted: number;
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     getRun: {
         parameters: {
             query?: never;
@@ -2473,6 +2514,39 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    deleteOldQuarantine: {
+        parameters: {
+            query: {
+                /** @description 0 or more. 0 means everything that can be deleted. */
+                older_than_days: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "deleted": 42
+                     *     }
+                     */
+                    "application/json": {
+                        deleted: number;
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
         };
     };
     exportQuarantine: {

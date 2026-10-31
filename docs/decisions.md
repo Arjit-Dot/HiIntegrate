@@ -85,6 +85,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | (R-14 to R-19) | Contract v4: schema drift, the AI routes, alert state | Approved by both. Tagged `contract-v4` (see R-20) |
 | D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions, **both checked and confirmed by Person B (1 Nov)**. On `main` at `f345556`; `contract-v4` is tagged after this confirmation** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
 | D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov). Merged and tagged `contract-v5` by Person B (1 Nov), since R-20 gave S-7 to S-9 to Person B. Person A has not yet confirmed.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged |
+| D-20 | Retention, key rotation, file secrets, TLS and CI (S-10 to S-13) | **Proposed by Person B (1 Nov), built on branch `feat/security-s10-s13`, not merged.** Contract impact: two new routes, `DELETE /runs` and `DELETE /quarantine`. Needs Person A's approval and `contract-v6` before it goes to `main` |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -1457,6 +1458,49 @@ D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each n
 1. Approve or list changes to the contract impact above.
 2. If approved: merge `a/audit-and-limits` to `main`, tag `contract-v5`, and tick S-7 and S-9 in `roadmap.md`.
 3. Decide whether the limits (60 / 30 / 20 a minute) suit the demo. The rehearsal script and the Finaltester steps stay well under them.
+
+---
+
+## D-20: Retention, key rotation, file-based secrets, TLS and CI (S-10 to S-13)
+
+**Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: built on branch `feat/security-s10-s13`, not merged.** S-10 changes `schema/openapi.yaml` (two `DELETE` routes), so the branch needs Person A's approval and a new tag (`contract-v6`) before it goes to `main`. S-11 to S-13 change no contract file. The order rule of D-17 (build S-6 to S-9 after Checkpoint 3) does not cover S-10 to S-13, but they are also built before Checkpoint 3 is green: they stay off `main` until the must-haves are done.
+
+| Item | What it does |
+|---|---|
+| S-10 retention | The worker deletes finished runs and quarantined records older than 90 days, and audit entries older than 365, once a day and once at start (`RETENTION_RUNS_DAYS`, `RETENTION_QUARANTINE_DAYS`, `RETENTION_AUDIT_DAYS`; 0 keeps everything). It always keeps a running run and the **newest finished run of each action**, so health keeps its last result. Stored users, devices and alerts are the product's data and are never purged |
+| S-10 routes | `DELETE /runs?older_than_days=N` and `DELETE /quarantine?older_than_days=N` (N is 0 or more) delete the signed-in account's own old rows and reply `{deleted: n}`. Counted as writes for the rate limit and recorded in the audit log |
+| S-11 key rotation | `ENCRYPTION_KEY` accepts several keys separated by commas (Fernet's `MultiFernet`): the first encrypts, all decrypt. `python -m app.cli rotate-keys` re-encrypts every stored secret with the first key. If any secret cannot be opened by any key, it changes nothing and says so. Procedure: set `<new>,<old>`, restart, run `rotate-keys`, remove `<old>` |
+| S-12 files | `<NAME>_FILE=/path` fills `<NAME>` from a file for `ENCRYPTION_KEY`, `LLM_API_KEY`, `DATABASE_URL`, `POSTGRES_PASSWORD`, `DASHBOARD_PASSWORD` and `SECRET_<NAME>`. A value set directly wins. The `_FILE` variable is removed after reading, so it is not listed as a secret and the path is not kept. Only those names work: `PATH_FILE` or `HOME_FILE` do nothing |
+| S-13 TLS | `docker-compose.tls.yml` mounts `./certs/tls.crt` and `tls.key` into the dashboard container. nginx then also listens on 443 with TLS 1.2 and 1.3, redirects http to https and sends HSTS. Without a certificate nothing changes. The container needs `DAC_READ_SEARCH` to read a key that is mode 0600 on the host. `certs/`, `*.pem` and `*.key` are git-ignored |
+| S-13 CI | `.github/workflows/ci.yml`: ruff and pytest, the contract check and Redocly lint, the frontend type check and build, `pip-audit`, `npm audit --audit-level=high`, and a Trivy scan of the backend and dashboard images (fixable HIGH and CRITICAL fail the build) |
+
+### Found by the audits and fixed
+
+| Finding | Fix |
+|---|---|
+| `cryptography` 45.0.7: 13 known vulnerabilities (it is the Fernet library behind the secret store) | `requirements.txt` now `cryptography>=50,<51`. All tests pass on 50.0.2 |
+| `pytest` 8.4.2 | `pytest>=9,<10`. All tests pass on 9.2.0 |
+| `dompurify` 3.4.15 (critical), pulled in by `monaco-editor` | `overrides` in `frontend/package.json` pin `^3.4.17`. The editor itself loads from the CDN, so this affects only the npm copy |
+| Fixable HIGH findings in the `nginx:1.27-alpine` base (pcre2, zlib, libtiff) | `RUN apk upgrade --no-cache` in `frontend/Dockerfile` |
+| `minimatch` (moderate), a dev tool inside `openapi-typescript` | Not fixed: `npm audit fix --force` would change a major version. Not shipped in any image |
+
+### Limits (said plainly)
+
+- The workflow has not run on GitHub. Its commands were run locally: `pip-audit`, `npm audit --audit-level=high` and Trivy (0 fixable HIGH or CRITICAL in both images).
+- HTTPS was tested with a self-signed certificate on the dashboard container alone (https 200, HSTS, http 301 to https, TLS 1.1 refused, TLS 1.3 negotiated), not with the whole stack.
+- `*_FILE` does not hide the Postgres password: `docker-compose.yml` builds `DATABASE_URL` with it, so it still appears in the container environment.
+- Retention does not shorten a long failure streak that the alert logic counts from old runs. Rate limits and retention counters live in one process.
+- S-6 (outgoing-request guard) and S-14 (AI hardening) are still not built.
+
+### Tests
+
+`backend/tests/test_security_s10_s12.py` (14 tests): rotation with the old key then dropped, nothing changed when a key is missing, a bad key refused, the CLI; `_FILE` fills, direct values win, unknown names ignored, an unreadable file named; purge keeps running and newest runs, one account only, quarantine and audit by age, the job's settings and `0`; the two routes remove only the caller's rows, are audited and need a sign-in and a valid number. Whole suite: 396 passed, 7 skipped.
+
+### Approval needed from Person A
+
+1. Approve or change the two `DELETE` routes.
+2. If approved: merge `feat/security-s10-s13`, tag `contract-v6`.
+3. Decide whether 90, 90 and 365 days suit the demo (nothing is old enough to be deleted before then).
 
 ---
 

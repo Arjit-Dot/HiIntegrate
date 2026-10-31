@@ -6,7 +6,7 @@ sees rows of that account. There is no way to ask for another account's rows."""
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -435,3 +435,35 @@ def list_audit(s: Session, account: str, limit: int = 50, offset: int = 0, event
     rows = s.scalars(q.order_by(Audit.id.desc()).limit(limit).offset(offset)).all()
     return [{"id": r.id, "at": r.at, "event": r.event, "target": r.target, "revision": r.revision, "request_id": r.request_id}
             for r in rows], total
+
+
+# --- retention (S-10) --------------------------------------------------------------------------------------------
+
+def cutoff_iso(days: int, now: datetime | None = None) -> str:
+    from datetime import timedelta
+
+    return ((now or datetime.now(UTC)) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def purge_runs(s: Session, before: str, account: str | None = None) -> int:
+    """Delete finished runs that started before `before`. Never a running run, and never the newest finished run of an
+    action (so health keeps its last result). `account=None` is for the worker's retention job and covers every account."""
+    newest = select(func.max(Run.pk)).where(Run.status != "running").group_by(Run.account, Run.integration, Run.action)
+    q = delete(Run).where(Run.started_at < before, Run.status != "running", Run.pk.not_in(newest))
+    if account is not None:
+        q = q.where(Run.account == account)
+    return s.execute(q).rowcount or 0
+
+
+def purge_quarantine(s: Session, before: str, account: str | None = None) -> int:
+    q = delete(Quarantine).where(Quarantine.created_at < before)
+    if account is not None:
+        q = q.where(Quarantine.account == account)
+    return s.execute(q).rowcount or 0
+
+
+def purge_audit(s: Session, before: str, account: str | None = None) -> int:
+    q = delete(Audit).where(Audit.at < before)
+    if account is not None:
+        q = q.where(Audit.account == account)
+    return s.execute(q).rowcount or 0

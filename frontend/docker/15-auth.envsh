@@ -14,4 +14,24 @@ else
   export AUTH_BASIC=off
   echo "dashboard: password protection is OFF (set DASHBOARD_PASSWORD in .env to turn it on)"
 fi
+# S-13: HTTPS when a certificate and key are mounted at /certs/tls.crt and /certs/tls.key (docker-compose.tls.yml).
+# Plain http then redirects to https, and browsers are told to use https only (HSTS). Without them nothing changes.
+TLS_CONF=/tmp/tls.conf
+: > "$TLS_CONF"
+if [ -f /certs/tls.crt ] && [ -f /certs/tls.key ]; then
+  cat > "$TLS_CONF" <<TLS
+listen 443 ssl;
+ssl_certificate /certs/tls.crt;
+ssl_certificate_key /certs/tls.key;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers off;
+ssl_session_cache shared:SSL:1m;
+ssl_session_tickets off;
+add_header Strict-Transport-Security "max-age=31536000" always;
+if (\$scheme = http) { return 301 https://\$host:${TLS_PUBLIC_PORT:-443}\$request_uri; }
+TLS
+  echo "dashboard: HTTPS is ON (port 443 inside the container)"
+else
+  echo "dashboard: HTTPS is OFF (mount a certificate at /certs to turn it on; see docker-compose.tls.yml)"
+fi
 unset DASHBOARD_PASSWORD   # not needed by nginx, so it is not kept in the running environment

@@ -90,6 +90,21 @@ def cmd_test(args, client: httpx.Client | None = None) -> int:
     return 0 if result["ok"] else 1
 
 
+def cmd_rotate_keys(_args) -> int:
+    """S-11: re-encrypt every stored secret with the first key in ENCRYPTION_KEY."""
+    from app.secrets import SecretError, StoreUnavailable, rotate_keys
+    from app.storage import session_scope
+
+    try:
+        with session_scope() as s:
+            count = rotate_keys(s)
+    except (StoreUnavailable, SecretError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Re-encrypted {count} secret(s) with the first key. You can now remove the old key from ENCRYPTION_KEY.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m app.cli", description="Check integration configs.")
     sub = p.add_subparsers(dest="command", required=True)
@@ -102,12 +117,15 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--var", action="append", metavar="KEY=VALUE", help="override a var, for example --var org=my-org")
     t.add_argument("--input", action="append", metavar="KEY=VALUE", help="a lookup input, for example --input username=octocat")
     t.add_argument("--json", action="store_true", help="print the test response as JSON")
+    sub.add_parser("rotate-keys", help="re-encrypt every stored secret with the first key in ENCRYPTION_KEY (S-11)")
     return p
 
 
 def main(argv: list[str] | None = None, client: httpx.Client | None = None) -> int:
     setup_logging("WARNING")
     args = build_parser().parse_args(argv)
+    if args.command == "rotate-keys":
+        return cmd_rotate_keys(args)
     return cmd_validate(args) if args.command == "validate" else cmd_test(args, client)
 
 

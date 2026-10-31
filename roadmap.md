@@ -245,7 +245,9 @@ The Phase 4 audit found no secret in logs, replies, the database, files or Git h
 - [ ] **S-6** Outgoing-request guard in the engine: refuse loopback, private, link-local and metadata addresses on the first request, every redirect and every next-page link, except `localhost`, `127.0.0.1` and `mock-api`. Connect to the resolved address. Reuse the check in `backend/app/ai/docs.py`. Adds one error code (`blocked_address`) to `result.schema.json`, so it needs both people's approval and a new tag. *(45)*
 - [x] **S-7 to S-9** Done 1 Nov (D-19, `contract-v5`). S-7 audit log with `GET /audit`; S-9 per-account `429` limits on write, run and AI routes plus a 10 MB response cap in the engine; S-8 was already delivered by D-18 (accounts and `401`). 17 new tests, 382 pass. Not shown in the demo flow yet. *(done)*
 
-**Not built:** S-10 retention and delete routes, S-11 key rotation, S-12 file-based secrets, S-13 TLS and CI scanning, S-14 AI hardening (including pinning the address in the documentation fetcher).
+- [x] **S-10 to S-13** Built 1 Nov on branch `feat/security-s10-s13` (D-20; **not on `main` yet**: S-10 adds two `DELETE` routes, so it needs approval and `contract-v6`). S-10 daily retention in the worker plus `DELETE /runs` and `DELETE /quarantine`; S-11 several keys in `ENCRYPTION_KEY` and `rotate-keys`; S-12 `*_FILE` for the app's keys and `SECRET_<NAME>`; S-13 optional HTTPS in nginx (tested with a self-signed certificate: TLS 1.3 works, TLS 1.1 refused, http redirects) and `.github/workflows/ci.yml`. The audits found and fixed `cryptography` 45 (13 known issues, now 50), `pytest` 8, a critical `dompurify` and fixable packages in the nginx base image. 14 new tests, 396 pass. *(done on the branch)*
+
+**Not built:** S-6 (outgoing-request guard) and S-14 (AI hardening, including pinning the address in the documentation fetcher). The CI workflow has not run on GitHub yet; its audit and scan commands were run locally.
 
 ### Checkpoint 3 at 3:30am: feature freeze · logged 1 Nov: **not passed** (10 of 11 requirements shown, 9 of 14 other items done, 2 partial, 3 open)
 From a clean clone, `docker compose up`, then tick every item.

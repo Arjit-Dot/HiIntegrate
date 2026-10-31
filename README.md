@@ -87,7 +87,13 @@ The API needs a sign-in (D-18): create an account on the dashboard, and each per
 - **Headers (S-2):** nginx sends a Content-Security-Policy, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy`, and hides its version. The policy allows only this site and the editor's CDN (`cdn.jsdelivr.net`). If you change where scripts or fonts come from, change `frontend/nginx.conf` too.
 - **Containers (S-4):** every service runs with a read-only filesystem, no Linux capabilities (only the few nginx and Postgres need to start), and `no-new-privileges`.
 - **Commits (S-5):** turn on the secret scan once per clone with `git config core.hooksPath .githooks`. Each commit is then scanned with gitleaks (a local install, or its Docker image) and stopped if a secret is found. To scan the whole history: `docker run --rm -v "$PWD":/repo:ro zricethezav/gitleaks:latest git --redact --no-banner /repo`. `.gitleaks.toml` allows the fake values in the two tests that check the redactor, and nothing else.
-- Secrets are encrypted, pinned to a host, and kept out of logs. What is not done yet is listed in `docs/decisions.md` D-17 (S-6 to S-14).
+- **Audit log and limits (S-7, S-9):** `GET /audit` lists who changed what (names and revisions, never values). Writes, runs and AI calls are limited per account per minute (`RATE_LIMIT_WRITE`, `RATE_LIMIT_RUN`, `RATE_LIMIT_AI`; 0 turns one off) and answer `429` with `Retry-After`. The engine refuses a response over `MAX_RESPONSE_BYTES` (default 10 MB).
+- **Retention (S-10):** the worker deletes run history and quarantined records older than 90 days and audit entries older than 365, once a day (`RETENTION_RUNS_DAYS`, `RETENTION_QUARANTINE_DAYS`, `RETENTION_AUDIT_DAYS`; 0 keeps everything). The newest finished run of each action and any running run are always kept. `DELETE /runs?older_than_days=N` and `DELETE /quarantine?older_than_days=N` do it by hand for your own account.
+- **Key rotation (S-11):** `ENCRYPTION_KEY` may hold several keys separated by commas. The first encrypts, all of them decrypt. To rotate: generate a new key, set `ENCRYPTION_KEY=<new>,<old>`, restart, run `docker compose exec backend python -m app.cli rotate-keys`, then remove `<old>`.
+- **Secrets from files (S-12):** `ENCRYPTION_KEY_FILE=/run/secrets/key` (also `LLM_API_KEY_FILE`, `DATABASE_URL_FILE`, `POSTGRES_PASSWORD_FILE`, `DASHBOARD_PASSWORD_FILE` and `SECRET_<NAME>_FILE`) reads the value from a file, so `docker inspect` shows only a path. A value set directly wins. Mount the files with Compose `secrets:`. The Postgres password is also inside `DATABASE_URL` in `docker-compose.yml`, so it still appears in the container environment until that is changed.
+- **HTTPS (S-13):** `docker compose -f docker-compose.yml -f docker-compose.tls.yml up --build` serves the dashboard over TLS 1.2/1.3 on `127.0.0.1:5443` from `./certs/tls.crt` and `./certs/tls.key` (the file header shows a one-line self-signed certificate for testing), redirects http to https and sends HSTS. Use a real certificate, and a password, before listening on any other address (`TLS_BIND=0.0.0.0`).
+- **CI (S-13):** `.github/workflows/ci.yml` runs the tests, the contract check, `pip-audit`, `npm audit` (high and above) and a Trivy scan of both images on every push and pull request.
+- Secrets are encrypted, pinned to a host, and kept out of logs. What is not done yet is listed in `docs/decisions.md` D-17 (S-6 and S-14).
 
 ## Tests and checks
 ```bash
@@ -128,6 +134,10 @@ Put these in `.env` (never committed). The list shows **names only**. Real value
 | `LLM_API_KEY`, `LLM_MODEL` | The AI extras, which use Google Gemini (a key from Google AI Studio). The model defaults to `gemini-3.5-flash`. Without a key the `/ai/*` routes answer 501 and everything else works |
 | `SECRET_<NAME>` | A token or password for a service, such as `SECRET_GITHUB_TOKEN`, `SECRET_JIRA_TOKEN`, `SECRET_OKTA_TOKEN`, `SECRET_SMTP_PASSWORD` |
 | `SECRET_<NAME>_HOST` | Optional. The host that secret is pinned to, such as `SECRET_GITHUB_TOKEN_HOST=api.github.com` |
+| `RATE_LIMIT_WRITE`, `RATE_LIMIT_RUN`, `RATE_LIMIT_AI`, `MAX_RESPONSE_BYTES` | Optional limits (S-9). Defaults 60, 30 and 20 requests a minute, and 10,000,000 bytes |
+| `RETENTION_RUNS_DAYS`, `RETENTION_QUARANTINE_DAYS`, `RETENTION_AUDIT_DAYS` | Optional (S-10). Defaults 90, 90, 365. 0 keeps everything |
+| `<NAME>_FILE` | Optional (S-12). Read `<NAME>` from this file instead (`ENCRYPTION_KEY`, `LLM_API_KEY`, `DATABASE_URL`, `POSTGRES_PASSWORD`, `DASHBOARD_PASSWORD`, `SECRET_<NAME>`) |
+| `TLS_BIND`, `TLS_PORT` | Optional, with `docker-compose.tls.yml` (S-13). Default `127.0.0.1` and `5443` |
 | `DASHBOARD_USER`, `DASHBOARD_PASSWORD` | Optional. A password in front of the dashboard and the API when you run Docker Compose (user defaults to `admin`). Leave the password out for no password |
 
 Service settings that are not secret (a Jira site, an email address, an Okta domain) are not environment variables. They are typed into the Add integration form.
