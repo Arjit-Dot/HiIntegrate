@@ -779,6 +779,9 @@ components:
       properties:
         config: { $ref: "integration.schema.json" }
         health: { $ref: "result.schema.json#/$defs/health" }
+        revision: { type: integer, minimum: 1, description: "1 when created, plus 1 on every save (D-15). Editing in place never creates a second integration." }
+        created_at: { type: string }
+        updated_at: { type: string }
     SecretInfo:
       type: object
       required: [name, set, host, updated_at]

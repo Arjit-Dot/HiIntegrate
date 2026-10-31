@@ -3,12 +3,12 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.storage.models import RECORD_TABLES, ActionState, Integration, Quarantine, Run
+from app.storage.models import RECORD_TABLES, ActionState, Integration, Quarantine, Run, User
 
 RECORD_FIELDS = {
     "user": ["id", "name", "email", "status", "last_login"],
@@ -108,8 +108,13 @@ def record_dict(target: str, row: Any, *, with_raw: bool = False) -> dict:
 
 
 def get_results(s: Session, filter: dict | None = None) -> list[dict]:
-    """The D-8 handoff for the AI summary: records of one type, newest first."""
-    items, _ = list_results(s, **(filter or {}))
+    """The D-8 handoff for the AI summary: records of one type, newest first.
+    Pass {"unified": True} for people merged across services (D-16)."""
+    f = dict(filter or {})
+    if f.pop("unified", False):
+        items, _ = list_unified_users(s, **{k: v for k, v in f.items() if k in ("source", "limit", "offset")})
+        return items
+    items, _ = list_results(s, **f)
     return items
 
 
@@ -121,6 +126,40 @@ def list_results(s: Session, target: str = "user", source: str | None = None, li
     total = s.scalar(select(func.count()).select_from(q.subquery()))
     rows = s.scalars(q.order_by(model.fetched_at.desc(), model.source, model.id).limit(limit).offset(offset))
     return [record_dict(target, r) for r in rows], total
+
+
+# ---------------------------------------------------------------- unified users (D-16, built per request, nothing stored)
+
+def _person_key():
+    """The lowercased email, or source:id when a user has no email (such a user is never merged)."""
+    return case(((User.email.is_not(None)) & (User.email != ""), func.lower(User.email)), else_=User.source + ":" + User.id)
+
+
+def list_unified_users(s: Session, source: str | None = None, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
+    key = _person_key()
+    groups = select(key.label("k"), func.max(User.fetched_at).label("newest")).group_by(key)
+    if source:  # keep people who appear in this service, but still list all of their services
+        groups = groups.where(key.in_(select(key).where(User.source == source)))
+    total = s.scalar(select(func.count()).select_from(groups.subquery()))
+    page_keys = [r.k for r in s.execute(groups.order_by(func.max(User.fetched_at).desc(), key).limit(limit).offset(offset))]
+    if not page_keys:
+        return [], total
+    rows = list(s.scalars(select(User).where(key.in_(page_keys)).order_by(User.source, User.id)))
+    by_key: dict[str, list] = {k: [] for k in page_keys}
+    for r in rows:
+        by_key[(r.email.lower() if r.email else f"{r.source}:{r.id}")].append(r)
+    people = []
+    for k in page_keys:
+        members = by_key[k]
+        logins = [m.last_login for m in members if m.last_login]
+        people.append({
+            "key": k,
+            "email": k if "@" in k and members[0].email else None,
+            "name": next((m.name for m in members if m.name), None),
+            "last_login": max(logins) if logins else None,
+            "sources": [{"source": m.source, "id": m.id, "status": m.status, "last_login": m.last_login, "fetched_at": m.fetched_at} for m in members],
+        })
+    return people, total
 
 
 # ---------------------------------------------------------------- quarantine (D-4)

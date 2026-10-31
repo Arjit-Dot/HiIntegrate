@@ -29,6 +29,25 @@ def _code_for_status(status: int) -> str:
 
 
 def install_error_handlers(app: FastAPI) -> None:
+    from app.scheduler.runner import InputsInvalid, UnknownAction
+    from app.storage.repo import Conflict, NotFound
+
+    @app.exception_handler(NotFound)
+    async def not_found(_: Request, exc: NotFound):
+        return JSONResponse(error_body("not_found", str(exc)), status_code=404)
+
+    @app.exception_handler(UnknownAction)
+    async def unknown_action(_: Request, exc: UnknownAction):
+        return JSONResponse(error_body("not_found", str(exc)), status_code=404)
+
+    @app.exception_handler(Conflict)
+    async def conflict(_: Request, exc: Conflict):
+        return JSONResponse(error_body("conflict", str(exc), exc.details), status_code=409)
+
+    @app.exception_handler(InputsInvalid)
+    async def inputs_invalid(_: Request, exc: InputsInvalid):
+        return JSONResponse(error_body("validation_error", "The inputs are not valid", {"errors": exc.issues}), status_code=400)
+
     @app.exception_handler(ApiError)
     async def api_error(_: Request, exc: ApiError):
         return JSONResponse(error_body(exc.code, exc.message, exc.details), status_code=exc.status)

@@ -104,6 +104,13 @@ def next_link(request: Request, page: int = 1, per_page: int = 10):
     return JSONResponse(USERS[start:start + per_page], headers=headers)
 
 
+@app.get("/users/{user_id}")
+def one_user(user_id: str):
+    """A lookup target: u-1 to u-25 exist, anything else is a 404."""
+    found = next((u for u in USERS if u["id"] == user_id), None)
+    return found if found else JSONResponse({"error": "not found"}, status_code=404)
+
+
 # ---------------------------------------------------------------- data for the other schemas
 
 @app.get("/devices")

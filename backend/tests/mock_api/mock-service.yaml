@@ -149,6 +149,26 @@ actions:
     map: *user_map
     required: [id]
 
+  get_user:
+    mode: lookup
+    target_schema: user
+    inputs:
+      id: { type: string, required: true }
+    request: { method: GET, path: "/users/{{input.id}}" }
+    records_path: "@"
+    map: *user_map
+    required: [id]
+
+  get_user_wrong_key:
+    mode: lookup
+    target_schema: user
+    inputs:
+      id: { type: string, required: true }
+    request: { method: GET, path: /wrong-key }
+    records_path: "@"
+    map: *user_map
+    required: [id]
+
   slow:
     mode: pull
     target_schema: user
