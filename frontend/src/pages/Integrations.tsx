@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api, ApiError, type IntegrationSummary, type TestResponse } from '../api/client'
 import { ErrorBox, Modal, Pill, useToast } from '../components/common'
 import { TestResult } from '../components/TestResult'
+import { RunLookup } from '../components/RunLookup'
 
 const CATEGORIES = ['identity', 'threat_intel', 'ticketing', 'alerting', 'other']
 const STATUSES = ['healthy', 'degraded', 'failing', 'never_run', 'disabled']
@@ -14,6 +15,7 @@ export default function Integrations() {
   const [error, setError] = useState('')
   const [q, setQ] = useState(''); const [category, setCategory] = useState(''); const [status, setStatus] = useState(''); const [mode, setMode] = useState('')
   const [testing, setTesting] = useState<IntegrationSummary | null>(null)
+  const [running, setRunning] = useState<IntegrationSummary | null>(null)
   const toast = useToast()
   const nav = useNavigate()
 
@@ -86,6 +88,7 @@ export default function Integrations() {
                   </td>
                   <td><Switch checked={i.enabled} onCheckedChange={v => toggle(i, v)} aria-label={`Enable ${i.name}`} /></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
+                    {i.actions.some(a => a.mode === 'lookup') && <><Button variant="secondary" size="sm" onClick={() => setRunning(i)}>Run</Button>{' '}</>}
                     <Button variant="secondary" size="sm" onClick={() => setTesting(i)}>Test</Button>{' '}
                     <Link to={`/integrations/${encodeURIComponent(i.name)}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>
                   </td>
@@ -96,6 +99,7 @@ export default function Integrations() {
         </table>
       </div>
       <p className="note"><Pill kind="pull">pull</Pill> runs on a schedule and fetches many records. <Pill kind="lookup">lookup</Pill> runs on demand and returns one record. One integration can have both.</p>
+      {running && <RunLookup integ={running} onClose={() => setRunning(null)} />}
       {testing && <TestModal integ={testing} onClose={() => setTesting(null)} />}
     </section>
   )

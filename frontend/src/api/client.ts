@@ -79,6 +79,19 @@ export const api = {
   },
   listRuns: (p: { status?: string; integration?: string; limit?: number; offset?: number }) =>
     call<{ items: RunRecord[]; total: number; limit: number; offset: number }>('GET', `/runs?${qs(p)}`),
+  /** Run one action now. A lookup answers 200 with the mapped record; a pull answers 202 with a run id. */
+  runAction: async (id: string, action: string, inputs?: Record<string, unknown>) => {
+    let res: Response
+    try {
+      res = await fetch(`${API_BASE}/integrations/${encodeURIComponent(id)}/actions/${encodeURIComponent(action)}/run`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inputs ? { inputs } : {}),
+      })
+    } catch { throw new ApiError(0, 'unreachable', `Cannot reach the API at ${API_BASE}. Is the mock or backend running?`) }
+    const text = await res.text()
+    const data = text ? JSON.parse(text) : undefined
+    if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? `Request failed (${res.status})`, data?.error?.details)
+    return { status: res.status, runId: res.headers.get('X-Run-Id') ?? (data?.run_id as string | undefined) ?? null, body: data as Record<string, unknown> }
+  },
   listSecrets: () => call<{ items: SecretInfo[] }>('GET', '/secrets'),
   setSecret: (name: string, value: string, host: string) =>
     call<void>('PUT', `/secrets/${encodeURIComponent(name)}`, { value, host }),
