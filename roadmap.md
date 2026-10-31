@@ -192,7 +192,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 
 ### Person A (about 100 minutes, then help B or take the stretch item)
 - [ ] **Scheduler** in its own `worker` process (APScheduler). It registers each enabled pull, skips a run that is still going, and picks up config changes. `[FR-4]` *(20)*
-- [ ] **Health** per connection, with `consecutive_failures`, from the latest finished `schedule` or `manual` run. `[FR-10]` *(10)*
+- [ ] **Health** per connection, with `consecutive_failures`, from the latest finished `schedule` or `manual` run **of each action**, so a failing action cannot hide behind a healthy one. `[FR-10]` *(10)*
 - [ ] **Email alert**: one email at the threshold, reset on success, sent through SMTP. A failed send is logged and never fails the run. `[B-4]` *(15)*
 - [ ] **Incremental sync**: keep `last_success_at` per action and send it as the configured parameter. `[B-1]` *(15)*
 - [ ] **`engine.remap_records(config, action, raw_records)`**: map stored quarantined `raw` records with a candidate config. Pure function: no database, no network, saves nothing. B's propose-fix route needs it by 12:45am (D-14). *(10)*

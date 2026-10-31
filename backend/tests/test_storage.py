@@ -92,6 +92,45 @@ def test_health_rules(s):
     assert repo.health(s, repo.get_integration(s, "github"))["status"] == "disabled"
 
 
+def test_a_failing_action_cannot_hide_behind_a_healthy_one(s):
+    """The bug found on real Okta: list_alerts failed, then list_devices succeeded and the connection looked healthy."""
+    integ = repo.create_integration(s, GH)
+    finish(s, repo.start_run(s, "github", "list_members", "pull", "schedule"), "failed")
+    finish(s, repo.start_run(s, "github", "get_user", "lookup", "manual"), "success")  # a later success on ANOTHER action
+    h = repo.health(s, integ)
+    assert h["status"] == "failing" and h["consecutive_failures"] == 1 and h["last_error"]["code"] == "auth_failed"
+    finish(s, repo.start_run(s, "github", "list_members", "pull", "schedule"), "success")  # the failing action recovers
+    h = repo.health(s, integ)
+    assert h["status"] == "healthy" and h["consecutive_failures"] == 0 and h["last_error"] is None
+
+
+def test_health_counts_failures_per_action_and_uses_the_worst(s):
+    integ = repo.create_integration(s, GH)
+    for _ in range(3):
+        finish(s, repo.start_run(s, "github", "list_members", "pull", "schedule"), "failed")
+    finish(s, repo.start_run(s, "github", "get_user", "lookup", "manual"), "failed")
+    finish(s, repo.start_run(s, "github", "get_user", "lookup", "manual"), "success")
+    h = repo.health(s, integ)
+    assert h["status"] == "failing" and h["consecutive_failures"] == 3  # list_members has 3 in a row, get_user recovered
+
+
+def test_degraded_when_any_actions_latest_run_quarantined_records(s):
+    integ = repo.create_integration(s, GH)
+    finish(s, repo.start_run(s, "github", "list_members", "pull", "schedule"), "success")
+    finish(s, repo.start_run(s, "github", "get_user", "lookup", "manual"), "success", invalid=1)
+    assert repo.health(s, integ)["status"] == "degraded"
+
+
+def test_a_removed_action_no_longer_counts(s):
+    integ = repo.create_integration(s, GH)
+    finish(s, repo.start_run(s, "github", "old_action", "pull", "schedule"), "failed")  # an action that is not in the config
+    finish(s, repo.start_run(s, "github", "list_members", "pull", "schedule"), "success")
+    assert repo.health(s, integ)["status"] == "healthy"
+    only_old = repo.create_integration(s, {**GH, "name": "gh2"})
+    finish(s, repo.start_run(s, "gh2", "old_action", "pull", "schedule"), "failed")
+    assert repo.health(s, only_old)["status"] == "never_run"
+
+
 def test_engine_state(s):
     assert repo.get_state(s, "github", "list_members") == {}
     repo.set_last_success(s, "github", "list_members", "2026-01-01T09:00:00Z")

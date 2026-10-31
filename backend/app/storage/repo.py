@@ -249,24 +249,41 @@ def list_runs(s: Session, integration: str | None = None, status: str | None = N
 # ---------------------------------------------------------------- health (D-5.2)
 
 def health(s: Session, integration: Integration) -> dict:
-    runs = list(s.scalars(select(Run).where(Run.integration == integration.name, Run.trigger.in_(COUNTED_TRIGGERS),
-                                            Run.status != "running").order_by(Run.pk.desc()).limit(50)))
-    consecutive = 0
-    for r in runs:
-        if r.status != "failed":
-            break
-        consecutive += 1
-    last = runs[0] if runs else None
+    """D-5.2 (revised): judged by the latest finished run of EACH action, so a failing action cannot hide
+    behind a healthy one. Only schedule and manual runs count, and only actions still in the config."""
+    actions = list(integration.config.get("actions") or {})
+    runs = list(s.scalars(select(Run).where(
+        Run.integration == integration.name, Run.trigger.in_(COUNTED_TRIGGERS), Run.status != "running", Run.action.in_(actions),
+    ).order_by(Run.pk.desc()).limit(1000)))
+    by_action: dict[str, list[Run]] = {}
+    for r in runs:  # newest first
+        by_action.setdefault(r.action, []).append(r)
+    latest = [rs[0] for rs in by_action.values()]
+    failing = [r for r in latest if r.status == "failed"]
+
+    def trailing_failures(rs: list[Run]) -> int:
+        n = 0
+        for r in rs:
+            if r.status != "failed":
+                break
+            n += 1
+        return n
+
+    newest = runs[0] if runs else None
     if not integration.enabled:
         status = "disabled"
-    elif last is None:
+    elif not runs:
         status = "never_run"
-    elif last.status == "failed":
+    elif failing:
         status = "failing"
+    elif any(r.records_invalid for r in latest):
+        status = "degraded"
     else:
-        status = "degraded" if last.records_invalid else "healthy"
-    return {"status": status, "last_run_at": last.finished_at if last else None, "records_pulled": last.records_pulled if last else 0,
-            "last_error": last.error if last and last.status == "failed" else None, "consecutive_failures": consecutive}
+        status = "healthy"
+    worst = max(failing, key=lambda r: r.pk) if failing else None
+    return {"status": status, "last_run_at": newest.finished_at if newest else None, "records_pulled": newest.records_pulled if newest else 0,
+            "last_error": worst.error if worst else None,
+            "consecutive_failures": max((trailing_failures(rs) for rs in by_action.values()), default=0)}
 
 
 # ---------------------------------------------------------------- engine state ({{state.x}})

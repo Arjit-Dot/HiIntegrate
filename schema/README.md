@@ -49,7 +49,7 @@ The validator (`config_loader.validate_config`) must enforce these as well. `too
 - **Saving:** records are saved page by page. If page 7 fails, pages 1 to 6 stay stored and the run is `failed` with its partial counts.
 - **Identity:** a record is identified by `(source, id)`, so re-running a pull updates records instead of duplicating them. `source` is the integration `name`. Do not rename an integration after records exist.
 - **Secrets are pinned to a host (D-7.6):** a secret may be sent only to the host stored with it, and the engine checks that on **every** request, including next-page links and redirects. A mismatch sends nothing and fails the run with `secret_host_mismatch`. `PUT /secrets/{name}` takes `{value, host}`. A secret from the environment may carry `SECRET_<NAME>_HOST`; without it the engine logs a warning.
-- **Health:** one label per connection from the latest finished `schedule` or `manual` run. `test` runs are ignored, and `disabled` overrides the rest.
+- **Health:** one label per connection, from the latest finished `schedule` or `manual` run **of each action**: `failing` if any action's latest run failed, `degraded` if one quarantined records. `consecutive_failures` is the worst single action's failures in a row. `test` runs are ignored, and `disabled` overrides the rest.
 
 ## Names that were fixed when these files were written
 These were open in `docs/decisions.md` and are now settled here. They are the first thing to review at sign-off.
