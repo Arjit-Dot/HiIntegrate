@@ -1,21 +1,21 @@
-# Roadmap: finish the whole project by 2:00am
+# Roadmap: finish the whole project by 5:00am
 
-Two people, one monorepo, one contract. Everything below is in scope: all 11 must-haves, all 5 bonuses, the AI layer, Docker, tests, and the demo.
+Two people, one monorepo, one contract. Everything below is in scope: all 11 must-haves, all 5 bonuses, the AI layer (summary, config authoring, and verified AI fixes), Docker, tests, and the demo.
 
-**Clock:** Saturday 31 Oct, 6:20pm to Sunday 1 Nov, 2:00am (IST). That is **7 hours 40 minutes**.
+**Clock:** Saturday 31 Oct, 6:20pm to Sunday 1 Nov, **5:00am** (IST). That is **10 hours 40 minutes**. The deadline was 2:00am and was extended by 3 hours. The extra time goes to the AI layer (Phase 3), packaging, and a longer rehearsal.
 
-**Where we start:** the contract is written and checked (`schema/`, `templates/`, `samples/`, `docs/examples/`). There is no backend or frontend code yet. `docs/decisions.md` has every decision and its reason. If this file and `docs/decisions.md` disagree, `docs/decisions.md` wins.
+**Where we start:** the contract is written and checked (`schema/`, `templates/`, `samples/`, `docs/examples/`). There is no backend or frontend code yet. `docs/decisions.md` has every decision and its reason, including D-14 (the AI propose-fix route, still a draft). If this file and `docs/decisions.md` disagree, `docs/decisions.md` wins.
 
 ## Read this first: how tight this is
 
-The earlier plan gave 21 hours for everything after the contract. This plan gives 7 hours 40 minutes, so the work is compressed to about a third of the time. That is only realistic if:
+The earlier plan gave 21 hours for everything after the contract. This plan gives 10 hours 40 minutes, so the work is compressed to about half of the time. That is only realistic if:
 
 - Both people build with an AI coding assistant for most of the code, and review it instead of typing it.
 - The contract files are the tests. The backend is "done" when it reproduces `docs/examples/expected/` from `samples/`. The frontend is "done" when it works against the Prism mock and then the real API.
 - Access to GitHub, Jira, Okta and email is sorted in the first 30 minutes. A signup that stalls is the biggest risk to the whole plan.
 - Nobody waits on the other. The mock servers exist so neither person has to.
 
-The estimates below add up for each person, but there is **about 15 minutes of slack in total**. D-7.6 (host pinning) added about 10 minutes to Person A's Phase 2 and 5 to Person B's, and that comes out of the slack. Section 13 says what to do at a checkpoint if you are behind.
+The estimates below add up for each person, but there is **about 15 minutes of slack in total** outside the buffer at the end. D-7.6 (host pinning) added about 10 minutes to Person A's Phase 2 and 5 to Person B's, and that comes out of the slack. Section 13 says what to do at a checkpoint if you are behind.
 
 ## 1. Who owns what
 
@@ -47,7 +47,7 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 **What the prototype does not show, and the app still needs:**
 - A Monaco YAML/JSON editor with a toggle. The prototype shows a read-only YAML preview.
 - Editing an existing integration (loading its saved config), and several actions per integration with a "+ Add action" button.
-- The "Generate with AI" and "Summarize" buttons, the alert state on a failing connection, and the visual mapping builder.
+- The "Generate with AI", "Summarize" and "Fix with AI" (Quarantine page) buttons, the alert state on a failing connection, and the AI mapping suggestions (they replace the visual mapping builder).
 - Inputs built from a template's `requires` block.
 - Loading, empty and error states, paging on the tables, and dark mode.
 
@@ -61,11 +61,11 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 | **8:30pm** | **Checkpoint 1** | Demo: validate, test connection, retries, 429 |
 | 8:30 to 11:00pm | **2. Core features** | Pagination, mapping, storage, secrets, API, every screen. Bonus B-5 |
 | **11:00pm** | **Checkpoint 2** | Frontend on the real backend. GitHub, Jira and Okta each complete a real pull |
-| 11:00pm to 12:30am | **3. Reliability and AI** | Scheduler, health, email alert, tests, the AI layer. Bonuses B-4 and B-1 |
-| 12:30 to 1:15am | **4. Packaging** | Docker, a clean-machine run, the audit |
-| **1:15am** | **Checkpoint 3** | Feature freeze. Every requirement ticked |
-| 1:15 to 1:45am | **5. Rehearse** | The demo, twice. Bug fixes only |
-| 1:45 to 2:00am | **Buffer** | Final push and tag. Leave it empty |
+| 11:00pm to 1:45am | **3. Reliability and AI** | Scheduler, health, email alert, tests, the AI layer (authoring loop, propose-fix, summary, mapping suggestions). Bonuses B-4 and B-1 |
+| 1:45 to 2:45am | **4. Packaging** | Docker, a clean-machine run, the audit |
+| **2:45am** | **Checkpoint 3** | Feature freeze. Every requirement ticked |
+| 2:45 to 4:30am | **5. Rehearse** | The demo, three times. Cache the AI outputs. Bug fixes only |
+| 4:30 to 5:00am | **Buffer** | Final push and tag. Leave it empty |
 
 ## 3. What each person needs from the other
 
@@ -78,7 +78,8 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 | A needs from B | By | Fallback |
 |---|---|---|
 | Real captured samples to replace the synthetic ones | 9:30pm | The synthetic samples still pass `npm run check` |
-| The AI endpoints' shape | 11:00pm | Already in `openapi.yaml` |
+| The AI endpoints' shape (`/ai/generate-config`, `/ai/summarize`, `/ai/propose-fix`) | 11:00pm | Already in `openapi.yaml` (D-14) |
+| `engine.remap_records` for the AI fix check | 12:00am | B shows the proposal without a rescue count until it lands |
 
 The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `http://localhost:4010` for the mock, `http://localhost:8000/api/v1` for the backend. Prism serves routes without `/api/v1`.
 
@@ -99,7 +100,8 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] **A:** the SMTP account and its settings, and Docker plus Postgres running locally.
 - [ ] Both people read `schema/README.md`.
 - [ ] `cd schema/tools && npm install && npm run check` passes on both machines.
-- [ ] Merge `docs/phase0-contract` into `main`, then `git tag contract-v1 && git push origin contract-v1`.
+- [ ] Merge `docs/phase0-contract` into `main`, then `git tag contract-v1 && git push origin contract-v1`. *(Done.)*
+- [ ] **Both:** approve D-14 (`POST /ai/propose-fix`, decided on the privacy question: raw records go to the model as they are, or masked) and tag the contract with D-7.6 (`contract-v1.1`).
 
 ## 5. Phase 1: foundations (6:50 to 8:30pm)
 
@@ -164,42 +166,48 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] A key typed into the Add form, and one set on the Secrets screen, are each used by a real run.
 - [ ] A secret pinned to `api.github.com` is refused for a config that points somewhere else (`secret_host_mismatch`), and nothing is sent.
 
-## 7. Phase 3: reliability and AI (11:00pm to 12:30am)
+## 7. Phase 3: reliability and AI (11:00pm to 1:45am)
 
 **Bonus targets: B-4 (alerts) and B-1 (incremental sync).**
 
-### Person A (about 90 minutes)
+### Person A (about 100 minutes, then help B or take the stretch item)
 - [ ] **Scheduler** in its own `worker` process (APScheduler). It registers each enabled pull, skips a run that is still going, and picks up config changes. `[FR-4]` *(20)*
 - [ ] **Health** per connection, with `consecutive_failures`, from the latest finished `schedule` or `manual` run. `[FR-10]` *(10)*
 - [ ] **Email alert**: one email at the threshold, reset on success, sent through SMTP. A failed send is logged and never fails the run. `[B-4]` *(15)*
 - [ ] **Incremental sync**: keep `last_success_at` per action and send it as the configured parameter. `[B-1]` *(15)*
-- [ ] **Tests** (`pytest`): each pagination style, retry and backoff, 429, quarantine, mapping and transforms, validation, health, the alert firing once, a config with no `defaults` block. *(25)*
+- [ ] **`engine.remap_records(config, action, raw_records)`**: map stored quarantined `raw` records with a candidate config. Pure function: no database, no network, saves nothing. B's propose-fix route needs it by 12:00am (D-14). *(10)*
+- [ ] **Tests** (`pytest`): each pagination style, retry and backoff, 429, quarantine, mapping and transforms, validation, health, the alert firing once, a config with no `defaults` block, and `remap_records`. *(25)*
 - [ ] Edge cases: an empty page, a missing `Retry-After`, `max_pages`. *(5)*
+- [ ] **Stretch, only if ahead:** schema drift check. If a mapped path vanishes from the response, mark the connection degraded and name the path. *(30)*
 
-### Person B (about 90 minutes)
-- [ ] `ai/client.py`: the LLM wrapper, with the key from `LLM_API_KEY` and the model from a setting. *(5)*
+### Person B (about 155 minutes)
+- [ ] `ai/client.py`: the LLM wrapper, with the key from `LLM_API_KEY` and the model from a setting. Redacts secrets and auth headers, returns `501` when no key is set. *(5)*
 - [ ] **Summary**: the stored records in, a plain-language overview out, using `storage.get_results`. *(20)*
-- [ ] **Config authoring**: docs, curl or a sample response in, a draft config out, checked with `validate_config` and retried once with the errors. Secrets are removed before anything reaches the model. The templates are the examples. *(25)*
-- [ ] "Generate with AI" and "Summarize" buttons. The draft opens in the editor for a person to review. *(10)*
+- [ ] **Config authoring with a repair loop**: docs, curl or a sample response in, a draft config out. Run `validate_config` and feed the errors back (up to 2 retries), then run `test_action` and feed any missing paths back. The UI shows each step ("attempt 1: 3 errors, attempt 2: valid, test: all paths found"). Secrets are removed before anything reaches the model. The templates are the examples. *(30)*
+- [ ] **AI propose-fix (D-14), the headline AI feature.** `POST /ai/propose-fix` with `kind: quarantine` (cluster the rejects by reason and propose a `value_map` entry, a new `map` path or a transform) and `kind: run_failure` (explain the cause, propose a patch). Validate the proposal, retry the model once with the errors, then dry-run it with `engine.remap_records` and return `rescued` of `checked`. Cap at 20 raw records to the model and 200 re-checked. Nothing is saved. *(40)*
+- [ ] **Buttons and panels:** "Generate with AI", "Summarize", and on the Quarantine page "Fix with AI", which shows the change, "rescues N of M", mapped samples, and an Apply button that sends `proposed_config` to `PUT /integrations/{id}`. The draft opens in the editor for a person to review. *(20)*
+- [ ] **AI mapping suggestions** (replaces the visual mapping builder): paste a sample, the model suggests a JMESPath for each target field with a confidence label, the person accepts or edits each, and the existing preview shows the mapped record. *(25)*
 - [ ] **Alert settings** in the form and a visible alert state on failing connections. *(10)*
-- [ ] **Visual mapping builder**: paste a sample, click fields, generate the `map`. *(25)*
 - [ ] Dark mode. *(5)*
 
-## 8. Phase 4: packaging (12:30 to 1:15am)
+**AI rules (apply to every feature above):** a person approves every change, the model never writes to the database or a config by itself, secrets and auth headers are never sent, and the product still demos fully with AI switched off. Cache one good output per feature for the demo.
 
-### Person A (about 45 minutes)
+## 8. Phase 4: packaging (1:45 to 2:45am)
+
+### Person A (about 60 minutes)
 - [ ] `docker-compose.yml` with `postgres`, `backend`, `worker`, `frontend` and `mock-api`, and a database volume. *(25)*
 - [ ] Clone to a clean folder, run `docker compose up`, and complete the demo. *(20)*
 - [ ] **Audit:** no secret appears in logs, API responses, the database, the repository or the Git history. Run gitleaks, which is not installed yet. `[FR-6]`
 - [ ] **Failure rehearsal script** that runs the four organizer tests in order: wrong key, network off, 429, missing field.
 
-### Person B (about 45 minutes)
+### Person B (about 60 minutes)
 - [ ] Frontend Dockerfile and nginx, with `/api` forwarded to the backend. *(10)*
 - [ ] Walk through every screen and fix what is wrong. *(15)*
 - [ ] `README.md` (how to run, how to add a service, the API has no login), and `docs/demo-script.md`. *(10)*
 - [ ] Record a screen capture of the full demo as a fallback. *(10)*
+- [ ] Save cached AI outputs (authoring, propose-fix, summary) as a fallback for the demo. *(5)*
 
-### Checkpoint 3 at 1:15am: feature freeze
+### Checkpoint 3 at 2:45am: feature freeze
 From a clean clone, `docker compose up`, then tick every item:
 
 | ID | Requirement | Verified by |
@@ -221,16 +229,17 @@ Also tick:
 - [ ] Three real sources each pull.
 - [ ] All three schemas hold real records.
 - [ ] B-2 validation, B-3 test, B-4 email, B-5 form, B-1 incremental all work in the packaged build.
-- [ ] The AI summary and the AI draft both work, and the product demos fully with them switched off.
+- [ ] The AI summary, the AI draft (with its repair loop) and AI propose-fix all work. Propose-fix shows a real "rescued N of M" count on the dirty dataset, and Apply saves the change through `PUT /integrations/{id}`.
+- [ ] The product demos fully with all AI switched off (`LLM_API_KEY` unset gives `501`, and nothing else breaks).
 - [ ] `cd schema/tools && npm run check` still passes.
 
-## 9. Phase 5: rehearse (1:15 to 1:45am)
+## 9. Phase 5: rehearse (2:45 to 4:30am)
 
-- Both people run the full demo twice, one driving and one watching for rough spots.
+- Both people run the full demo three times, one driving and one watching for rough spots. Run it once with AI off.
 - **Bug fixes only.** No new features.
 - Fallbacks ready: the screen recording, the saved samples, and a cached AI output.
 
-**1:45 to 2:00am: buffer.** Final `git push`, tag, and nothing else.
+**4:30 to 5:00am: buffer.** Final `git push`, tag, and nothing else.
 
 ## 10. Demo path
 1. The dashboard with working connections and health status.
@@ -240,8 +249,10 @@ Also tick:
 5. Run a lookup from the Run panel.
 6. Run the four failure tests: wrong key, network off, a 429 wait, and a quarantined bad record. Open Quarantine and export it.
 7. Break a connection on purpose and show the email alert. `[B-4]`
-8. Click Summarize for the AI overview.
-9. Mention what comes next: OAuth2, more templates, a shared config library.
+8. Generate a config with AI from a pasted sample and show the repair loop fixing its own errors.
+9. On the Quarantine page, click **Fix with AI**: show the proposed change and "rescues N of M", then Apply, and run again to show the quarantined count drop.
+10. Click Summarize for the AI overview.
+11. Mention what comes next: OAuth2, more templates, a shared config library.
 
 ## 11. Bonus tracker
 
@@ -268,16 +279,17 @@ Also tick:
 | A service signup or token stalls | Say so at 6:50pm. Switch to the other services early. The mock API proves behavior but does not count as a source. |
 | Okta has no device or events | Enroll a device and sign in and out a few times in Phase 0. |
 | The email account will not send | Try a different provider. The alert logic can be demonstrated against any SMTP server. |
-| `docker compose up` fails on a clean machine | Start the Docker work earlier than 12:30am if the images are ready. Test from a clean clone once before the checkpoint, not at it. |
+| `docker compose up` fails on a clean machine | Start the Docker work earlier than 1:45am if the images are ready. Test from a clean clone once before the checkpoint, not at it. |
 | The real API differs from the synthetic samples | Capture real samples early (B, Phase 1) and fix the templates in Phase 2. |
 
-**If you are more than 30 minutes behind at a checkpoint,** use this order. These are the things the earlier plan said to give up first, and they are not part of the plan:
+**If you are more than 30 minutes behind at a checkpoint,** use this order:
 1. Dark mode.
-2. The visual mapping builder.
+2. AI mapping suggestions.
 3. Incremental sync (B-1).
+4. The AI summary. Keep the authoring loop and propose-fix, which are the AI features that stand out.
 
 Everything else stays. If you are still behind after those, say so at that checkpoint. Do not quietly cut a must-have.
 
 ## 14. Done means
 
-At 2:00am, a person who has never seen the project can clone the repository, run `docker compose up`, add a new service from a template or the form, watch records appear in the common format, break a key and see the failure handled and the alert sent, and read the decisions behind it.
+At 5:00am, a person who has never seen the project can clone the repository, run `docker compose up`, add a new service from a template or the form, watch records appear in the common format, break a key and see the failure handled and the alert sent, and read the decisions behind it.
