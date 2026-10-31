@@ -2,6 +2,7 @@
 
 import copy
 import threading
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -492,3 +493,14 @@ def test_the_dashboard_routes_carry_the_alert_state(engine, mock, monkeypatch):
     assert one["alert"]["after_failures"] == 1 and one["alert"]["last_attempt"]["outcome"] == "sent"
     listed = {i["name"]: i for i in api.get("/api/v1/integrations").json()["items"]}
     assert listed["alerted"]["alert"]["last_attempt"]["outcome"] == "sent" and listed["quiet"]["alert"] is None
+
+
+# ---------------------------------------------------------------- B-1 on a real template
+
+def test_the_okta_system_log_asks_only_for_what_is_new_after_the_first_run(monkeypatch):
+    monkeypatch.setenv("SECRET_OKTA_TOKEN", "okta-test-token-123")
+    cfg = parse_config((REPO_ROOT / "templates" / "okta.yaml").read_text())
+    first = build_request(cfg, "list_alerts", state={}, now=datetime(2026, 1, 2, 9, 0, 0, tzinfo=UTC))
+    assert first.request.url.params["since"] == "2026-01-01T09:00:00Z"  # no success yet: the template's 24 hour window
+    later = build_request(cfg, "list_alerts", state={"last_success_at": "2026-01-02T08:55:00Z"}, now=datetime(2026, 1, 2, 9, 0, 0, tzinfo=UTC))
+    assert later.request.url.params["since"] == "2026-01-02T08:55:00Z" and later.request.url.params["limit"] == "100"

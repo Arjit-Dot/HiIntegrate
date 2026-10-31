@@ -71,6 +71,8 @@ actions:
       method: GET
       path: /api/v1/logs
       query: { since: "{{now - 24h}}", limit: 100 }
+    # B-1: after the first run, ask only for events since the last successful run (the first run keeps the 24 hour window above).
+    incremental: { param: since, value: "{{state.last_success_at}}" }
     pagination: { type: next_link, source: header, header: Link, max_pages: 100 }
     records_path: "@"
     map:

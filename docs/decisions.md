@@ -1539,6 +1539,12 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 |---|---|---|---|
 | `POST /ai/suggest-mapping` | None | Paste a sample response: the platform finds the records, the model suggests a JMESPath per field of the target schema (with transform, `value_map`, confidence), and the platform checks every suggestion against the real sample records (`found` of `of`, an example value, a preview of the first record as the mapper would save it). With `mapping` it only checks the person's own entries, with no model call, so that part works with AI switched off. Nothing is saved; records sent to the model are masked (D-14) | The roadmap's replacement for a visual mapping builder: the person accepts or edits each suggestion and sees the mapped record. The model proposes, the platform proves. New route, additive |
 
+### R-19: B-1 incremental sync is used by the Okta template (1 Nov)
+
+| Item | Before | Now | Why |
+|---|---|---|---|
+| `templates/okta.yaml`, `list_alerts` | A fixed `since: now - 24h` on every run | Also `incremental: { param: since, value: "{{state.last_success_at}}" }`. The first run keeps the 24 hour window. Later runs ask only for events since the previous successful run | The roadmap verifies B-1 with "the second run sends `last_success_at`", and no shipped config used it. Run on the real Okta org: the first run fetched 238 events over 4 pages, the second sent `since` = the first run's start and fetched nothing new. The description of `incremental` in `integration.schema.json` no longer says that no service uses it (text only) |
+
 ---
 
 ## Open items
