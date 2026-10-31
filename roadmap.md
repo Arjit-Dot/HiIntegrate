@@ -156,6 +156,7 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] **`runner`** in `scheduler/`: run an action, save results and the run record, return the result. *(15)*
 - [ ] **API**: every route in `schema/openapi.yaml`. Pull runs return `202` and lookups return `200`. A repeat returns `409`, and a failed lookup returns `502 run_failed`. Templates load from `templates/`. *(40)*
 - [ ] Run GitHub, Jira and Okta for real, and fix the three configs in `templates/` where the real API differs. *(5, then continuing)*
+- [ ] **Jira re-test (added 8:35pm):** every Jira request returned 404, even the public server-info page, so the site in `JIRA_BASE_URL` is wrong or has no Jira. Fix the site, then run `cd backend && LIVE_TESTS=1 .venv/bin/pytest tests/live -v` until `test_jira_list_users` passes. Enroll an Okta device too, so `test_okta_list_devices` passes.
 - **Acceptance test:** the engine reproduces every file in `docs/examples/expected/` from `samples/`.
 
 ### Person B (about 150 minutes)

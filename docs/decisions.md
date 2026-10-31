@@ -1403,4 +1403,5 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | Access: a GitHub token, a Jira token, an Okta org with an API token and **one enrolled device**, and an SMTP account | Real pulls and the alert | Phase 0, in the first 20 minutes |
 | The raw samples in `samples/` are synthetic, not captured live | Test realism | Replace when access is confirmed |
 | `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 1 and 2 |
+| Jira answers 404 for every request (8:35pm), so the site in `JIRA_BASE_URL` is wrong or has no Jira. Okta has no enrolled device. Re-run `LIVE_TESTS=1 pytest tests/live` after fixing both | Real Jira and device data at Checkpoint 2 | Before Checkpoint 2 |
 | Rate-limit state (`min_interval_ms`) is per process in v1, so it needs shared storage before running more than one worker (D-10) | Scaling out | After v1 |

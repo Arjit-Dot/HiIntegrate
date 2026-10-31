@@ -1,0 +1,160 @@
+# A config for the local mock API (D-9). One action per failure case and paging style.
+# Needs SECRET_MOCK_TOKEN=mock-secret-123 in the environment (a test value, not a real key).
+version: 1
+name: mock-service
+display_name: "Mock service"
+category: other
+description: "Local mock API for failure tests. Not a real source."
+enabled: false
+
+requires:
+  secrets: [mock_token]
+
+base_url: "http://localhost:8001"
+
+auth: { type: api_key, in: header, name: Authorization, prefix: "SSWS ", secret: mock_token }
+
+defaults:
+  timeout_seconds: 3
+
+actions:
+  users_page_number:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /pages/page-number, query: { per_page: 10 } }
+    pagination: { type: page_number, param: page, start: 1, stop_when_empty: true }
+    records_path: "@"
+    map: &user_map
+      id: id
+      name: name
+      email: { path: email, transform: lowercase }
+      status: { path: status, value_map: { active: active, disabled: inactive }, default: unknown }
+      last_login: { path: last_login, transform: datetime }
+    required: [id]
+
+  users_offset:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /pages/offset }
+    pagination: { type: offset, offset_param: offset, limit_param: limit, limit: 10, total_path: meta.total }
+    records_path: items
+    map: *user_map
+    required: [id]
+
+  users_cursor:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /pages/cursor, query: { limit: 10 } }
+    pagination: { type: cursor, cursor_param: after, next_cursor_path: meta.next }
+    records_path: items
+    map: *user_map
+    required: [id]
+
+  users_next_link:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /pages/next-link, query: { per_page: 10 } }
+    pagination: { type: next_link, source: header, header: Link }
+    records_path: "@"
+    map: *user_map
+    required: [id]
+
+  devices:
+    mode: pull
+    target_schema: device
+    schedule: every 5m
+    request: { method: GET, path: /devices }
+    records_path: "@"
+    map:
+      id: id
+      hostname: hostname
+      ip: ip_address
+      os: os
+      owner: owner
+      last_seen: { path: last_seen, transform: datetime }
+    required: [id]
+
+  alerts:
+    mode: pull
+    target_schema: alert
+    schedule: every 1m
+    request: { method: GET, path: /alerts, query: { since: "{{now - 24h}}" } }
+    records_path: items
+    map:
+      id: id
+      type: type
+      severity: { path: severity, value_map: { info: low, warning: medium, error: high, critical: critical }, default: unknown }
+      timestamp: { path: created_at, transform: datetime }
+      description: message
+    required: [id, timestamp]
+
+  dirty_users:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /dirty/users }
+    records_path: "@"
+    map: *user_map
+    required: [id]
+    on_invalid: quarantine
+
+  flaky:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /flaky, query: { fail: 2 } }
+    records_path: "@"
+    map: *user_map
+    required: [id]
+
+  rate_limited:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /rate-limited, query: { times: 1, retry_after: 1 } }
+    records_path: "@"
+    map: *user_map
+    required: [id]
+
+  wrong_key:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /wrong-key }
+    records_path: "@"
+    map: *user_map
+    required: [id]
+
+  error_body:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /error-body }
+    records_path: "@"
+    error_when: { path: ok, equals: false, message_path: error }
+    map: *user_map
+    required: [id]
+
+  network_drop:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /drop }
+    records_path: "@"
+    retry: { max_retries: 1, backoff_seconds: [0.2] }
+    map: *user_map
+    required: [id]
+
+  slow:
+    mode: pull
+    target_schema: user
+    schedule: every 1m
+    request: { method: GET, path: /slow, query: { seconds: 5 } }
+    records_path: "@"
+    retry: { max_retries: 1, backoff_seconds: [0.2] }
+    map: *user_map
+    required: [id]
