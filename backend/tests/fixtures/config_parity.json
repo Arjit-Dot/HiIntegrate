@@ -1,0 +1,5805 @@
+{
+ "api_key_no_in_name": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "auth.in",
+    "message": "is required",
+    "severity": "error"
+   },
+   {
+    "path": "auth.name",
+    "message": "is required",
+    "severity": "error"
+   }
+  ]
+ },
+ "basic_no_username": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "basic",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "auth.username",
+    "message": "is required",
+    "severity": "error"
+   }
+  ]
+ },
+ "bearer_with_prefix": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "bearer",
+    "secret": "okta_token",
+    "prefix": "X "
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "auth.prefix",
+    "message": "is not allowed here (wrong mode or auth type)",
+    "severity": "error"
+   }
+  ]
+ },
+ "next_link_header_and_path": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100,
+      "path": "a.b"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_users.pagination.path",
+    "message": "is not allowed here (wrong mode or auth type)",
+    "severity": "error"
+   }
+  ]
+ },
+ "offset_missing_limit_param": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "offset",
+      "offset_param": "o",
+      "limit": 10
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_users.pagination.limit_param",
+    "message": "is required",
+    "severity": "error"
+   }
+  ]
+ },
+ "cursor_with_offset_param": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "cursor",
+      "cursor_param": "a",
+      "next_cursor_path": "b",
+      "offset_param": "x"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_users.pagination.offset_param",
+    "message": "is not allowed here (wrong mode or auth type)",
+    "severity": "error"
+   }
+  ]
+ },
+ "enum_no_values": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "enum"
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.get_user.inputs.id.values",
+    "message": "is required",
+    "severity": "error"
+   }
+  ]
+ },
+ "values_on_string": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "values": [
+        "a"
+       ]
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.get_user.inputs.id.values",
+    "message": "is not allowed here (wrong mode or auth type)",
+    "severity": "error"
+   }
+  ]
+ },
+ "format_without_datetime": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "lowercase",
+       "format": "%Y"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_users.map.last_login.transform",
+    "message": "must be \"datetime\"",
+    "severity": "error"
+   }
+  ]
+ },
+ "entry_no_path_no_default": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": {
+       "transform": "lowercase"
+      },
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_users.map.name",
+    "message": "needs a path (or a default)",
+    "severity": "error"
+   }
+  ]
+ },
+ "undefined_var": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/x/{{vars.nope}}",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_users.request.path",
+    "message": "{{vars.nope}} is not defined in vars or requires.vars",
+    "severity": "error"
+   }
+  ]
+ },
+ "lookup_with_schedule": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false,
+     "schedule": "every 1m"
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.get_user.schedule",
+    "message": "is not allowed here (wrong mode or auth type)",
+    "severity": "error"
+   }
+  ]
+ },
+ "webhook_mode": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "webhook",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_users.mode",
+    "message": "webhook is reserved and not implemented yet",
+    "severity": "error"
+   }
+  ]
+ },
+ "csv_format": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "response_format": "csv"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_users.response_format",
+    "message": "csv is reserved and not implemented yet. Only json works",
+    "severity": "error"
+   }
+  ]
+ },
+ "bad_email": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   },
+   "alerts": {
+    "to": [
+     "nope"
+    ]
+   }
+  },
+  "expected": [
+   {
+    "path": "alerts.to.0",
+    "message": "must match format \"email\"",
+    "severity": "error"
+   }
+  ]
+ },
+ "version_2": {
+  "config": {
+   "version": 2,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "version",
+    "message": "must be 1",
+    "severity": "error"
+   }
+  ]
+ },
+ "capital_name": {
+  "config": {
+   "version": 1,
+   "name": "Okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "name",
+    "message": "must be a slug: lowercase letters, digits, - or _",
+    "severity": "error"
+   }
+  ]
+ },
+ "no_actions": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {}
+  },
+  "expected": [
+   {
+    "path": "actions",
+    "message": "must NOT have fewer than 1 properties",
+    "severity": "error"
+   }
+  ]
+ },
+ "device_email_field": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      },
+      "email": "x"
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "actions.list_devices.map.email",
+    "message": "is not a field of the target schema",
+    "severity": "error"
+   }
+  ]
+ },
+ "retry_4xx": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "retry": {
+     "retry_on": [
+      "4xx"
+     ]
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "defaults.retry.retry_on.0",
+    "message": "must be one of: timeout, connection_error, 5xx",
+    "severity": "error"
+   }
+  ]
+ },
+ "secret_not_in_requires": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "other_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "requires.secrets",
+    "message": "auth.secret okta_token is not listed in requires.secrets",
+    "severity": "warning"
+   }
+  ]
+ },
+ "missing_base_url_and_auth": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   }
+  },
+  "expected": [
+   {
+    "path": "base_url",
+    "message": "is required",
+    "severity": "error"
+   },
+   {
+    "path": "auth",
+    "message": "is required",
+    "severity": "error"
+   }
+  ]
+ },
+ "two_unknown_keys": {
+  "config": {
+   "version": 1,
+   "name": "okta",
+   "display_name": "Okta",
+   "category": "identity",
+   "description": "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account.",
+   "enabled": true,
+   "vars": {
+    "domain": "acme"
+   },
+   "requires": {
+    "vars": {
+     "domain": {
+      "label": "Okta domain (the part before .okta.com)",
+      "example": "acme"
+     }
+    },
+    "secrets": [
+     "okta_token"
+    ]
+   },
+   "base_url": "https://{{vars.domain}}.okta.com",
+   "auth": {
+    "type": "api_key",
+    "in": "header",
+    "name": "Authorization",
+    "prefix": "SSWS ",
+    "secret": "okta_token"
+   },
+   "defaults": {
+    "headers": {
+     "Accept": "application/json"
+    }
+   },
+   "actions": {
+    "list_users": {
+     "mode": "pull",
+     "target_schema": "user",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "speed": 3
+    },
+    "list_devices": {
+     "mode": "pull",
+     "target_schema": "device",
+     "schedule": "every 15m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices",
+      "query": {
+       "limit": 200
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "list_alerts": {
+     "mode": "pull",
+     "target_schema": "alert",
+     "schedule": "every 5m",
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/logs",
+      "query": {
+       "since": "{{now - 24h}}",
+       "limit": 100
+      }
+     },
+     "pagination": {
+      "type": "next_link",
+      "source": "header",
+      "header": "Link",
+      "max_pages": 100
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "uuid",
+       "transform": "string"
+      },
+      "type": "eventType",
+      "severity": {
+       "path": "severity",
+       "value_map": {
+        "DEBUG": "low",
+        "INFO": "low",
+        "WARN": "medium",
+        "ERROR": "high"
+       },
+       "default": "unknown"
+      },
+      "timestamp": {
+       "path": "published",
+       "transform": "datetime"
+      },
+      "description": "displayMessage"
+     },
+     "required": [
+      "id",
+      "timestamp"
+     ],
+     "on_invalid": "quarantine"
+    },
+    "get_user": {
+     "mode": "lookup",
+     "target_schema": "user",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/users/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "name": "profile.displayName || profile.login",
+      "email": {
+       "path": "profile.email",
+       "transform": "lowercase"
+      },
+      "status": {
+       "path": "status",
+       "value_map": {
+        "ACTIVE": "active",
+        "RECOVERY": "active",
+        "PASSWORD_EXPIRED": "active",
+        "SUSPENDED": "suspended",
+        "LOCKED_OUT": "suspended",
+        "STAGED": "inactive",
+        "PROVISIONED": "inactive",
+        "DEPROVISIONED": "inactive"
+       },
+       "default": "unknown"
+      },
+      "last_login": {
+       "path": "lastLogin",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    },
+    "get_device": {
+     "mode": "lookup",
+     "target_schema": "device",
+     "inputs": {
+      "id": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "request": {
+      "method": "GET",
+      "path": "/api/v1/devices/{{input.id}}"
+     },
+     "records_path": "@",
+     "map": {
+      "id": {
+       "path": "id",
+       "transform": "string"
+      },
+      "hostname": "profile.displayName",
+      "os": "profile.platform",
+      "last_seen": {
+       "path": "lastUpdated",
+       "transform": "datetime"
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "on_invalid": "quarantine",
+     "store": false
+    }
+   },
+   "colour": "red"
+  },
+  "expected": [
+   {
+    "path": "colour",
+    "message": "is not a known key",
+    "severity": "error"
+   },
+   {
+    "path": "actions.list_users.speed",
+    "message": "is not a known key",
+    "severity": "error"
+   }
+  ]
+ }
+}
