@@ -224,8 +224,16 @@ def _semantic_issues(cfg: dict) -> list[Issue]:
         add("base_url", "must use https:// (http:// is allowed only for localhost, 127.0.0.1 and mock-api)")
 
     auth = cfg.get("auth") or {}
-    if auth.get("username"):
-        check("auth.username", auth["username"])
+    for key in ("username", "client_id", "token_url", "audience"):
+        if auth.get(key):
+            check(f"auth.{key}", auth[key])
+    token_url = auth.get("token_url") or ""
+    if auth.get("type") == "oauth2_client_credentials" and token_url.startswith("http://"):
+        local = re.match(r"^http://([^/:{}\s]+)", token_url)
+        if not (local and local.group(1) in _LOCAL_HTTP_HOSTS):
+            add("auth.token_url", "must use https:// (http:// is allowed only for localhost, 127.0.0.1 and mock-api)")
+    elif auth.get("type") == "oauth2_client_credentials" and token_url and not token_url.startswith(("https://", "{{")):
+        add("auth.token_url", "must start with https://")
     for p, s in _strings(cfg.get("defaults") or {}, "defaults", []):
         check(p, s)
     for p, s in _strings(cfg.get("vars") or {}, "vars", []):
@@ -250,8 +258,6 @@ def _semantic_issues(cfg: dict) -> list[Issue]:
         if mode in ("pull", "lookup") and amap and not amap.get("id"):
             add(f"{base}.map.id", "id must be mapped")
 
-    if auth.get("type") == "oauth2_client_credentials":
-        add("auth.type", "oauth2_client_credentials is reserved and not supported yet")
     secrets = (cfg.get("requires") or {}).get("secrets")
     if secrets and auth.get("secret") and auth["secret"] not in secrets:
         add("requires.secrets", f"auth.secret {auth['secret']} is not listed in requires.secrets", "warning")

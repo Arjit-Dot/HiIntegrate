@@ -86,6 +86,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions, **both checked and confirmed by Person B (1 Nov)**. On `main` at `f345556`; `contract-v4` is tagged after this confirmation** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
 | D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov). Merged and tagged `contract-v5` by Person B (1 Nov), since R-20 gave S-7 to S-9 to Person B. Person A has not yet confirmed.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged |
 | D-20 | Retention, key rotation, file secrets, TLS and CI (S-10 to S-13) | **Proposed by Person B (1 Nov), merged and tagged `contract-v6` by Person B; Person A to confirm.** Contract impact: two new routes, `DELETE /runs` and `DELETE /quarantine` |
+| D-21 | OAuth2 client credentials | **Proposed by Person B (1 Nov), built on branch `feat/oauth2-client-credentials`.** `integration.schema.json` gains `client_id`, `token_url`, `scope`, `audience` under `auth`; the engine fetches, caches and refreshes the token. Needs `contract-v7`. Person A to confirm |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -97,7 +98,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-1 | Product scope | `pull` and `lookup` modes; GitHub, Jira and Okta first; `user`, `device`, `alert` schemas | FR-1, FR-3, FR-11 | changes-v2 |
 | D-2.1 | Top-level fields | 5 required (`version`, `name`, `base_url`, `auth`, `actions`), the rest optional | FR-2, B-4 | Roadmap |
 | D-2.2 | `target_schema` | Set per action; values `user`, `device`, `alert` | FR-11 | Extends roadmap |
-| D-2.3 | Auth types | `api_key` (optional `prefix`), `bearer`, `basic`; `oauth2_client_credentials` reserved; secrets by name | FR-1, FR-6 | Roadmap |
+| D-2.3 | Auth types | `api_key` (optional `prefix`), `bearer`, `basic`; `oauth2_client_credentials` (built in D-21); secrets by name | FR-1, FR-6 | Roadmap |
 | D-2.4 | Action fields | Common, pull-only and lookup-only sets; `store` and `incremental` kept | FR-2, FR-9, B-1 | Roadmap |
 | D-2.5 | Placeholders | `{{vars.x}}`, `{{input.x}}` (lookups only), `{{state.x}}` | FR-2, B-1 | Roadmap |
 | D-2.6 | Path language | JMESPath everywhere; `"@"` is the whole response | FR-5 | Roadmap |
@@ -237,7 +238,7 @@ File: `schema/integration.schema.json`. Twenty-two points, each locked. Points 1
 
 **Decision**
 - Implemented: `api_key` (header or query parameter), `bearer`, `basic`.
-- Reserved, not implemented: `oauth2_client_credentials`. A config using it is rejected with a "not supported yet" error.
+- `oauth2_client_credentials` was reserved here and is built in D-21 (client id and client secret, plus an optional scope and audience). Not built: private-key JWT (Okta service apps).
 - No `none` type in v1.
 - Every auth block names its secret with `secret: <name>`. Secret values never appear in configs.
 - `basic` has a plain `username` field next to `secret`. The username is not a secret.
@@ -614,7 +615,7 @@ Beyond the JSON Schema, the validator enforces:
 | Kind | Item | Status |
 |---|---|---|
 | Reserved | `response_format` | Accepted name. Only `json` is implemented |
-| Reserved | `auth.type: oauth2_client_credentials` | Already reserved in D-2.3 |
+| Reserved | `auth.type: oauth2_client_credentials` | Built in D-21 (`contract-v7`) |
 | Reserved | `mode: webhook` | Push ingestion. `mode` is the extension point for new action styles |
 | Reserved | Fan-out | Fetch a list, then call a detail endpoint for each item. **Open:** the key name |
 | Stretch | `pagination.param_in` (`query`, `body` or `header`) | Not in v1. Medium cost, because the engine must inject the value into the body |
@@ -1500,6 +1501,37 @@ D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each n
 
 1. Confirm or change the two `DELETE` routes.
 2. Decide whether 90, 90 and 365 days suit the demo (nothing is old enough to be deleted before then).
+
+---
+
+## D-21: OAuth2 client credentials
+
+**Covers:** FR-1, FR-6 · **Source:** the reserved `oauth2_client_credentials` of D-2.3, and the question of showing OAuth2 with a free service (Auth0). **Proposed by Person B, 1 Nov. Status: built on branch `feat/oauth2-client-credentials`.** It changes `schema/integration.schema.json`, so it needs a new tag (`contract-v7`) and Person A's confirmation.
+
+| Part | Behaviour |
+|---|---|
+| Config | `auth: {type: oauth2_client_credentials, client_id, token_url, scope?, audience?, secret}`. `secret` is the **client secret** (an ordinary secret name, write-only, pinned to a host). `client_id`, `token_url` and `audience` may use `{{vars.x}}`. `client_id` and `token_url` are required. These keys are refused on the other auth types |
+| Token request | `POST token_url`, form body `grant_type=client_credentials`, `client_id`, `client_secret`, plus `scope` and `audience` when set. Reads `access_token` and `expires_in` (default 300 s) from the reply |
+| Use | `Authorization: Bearer <access_token>` on every request of the action, including next-page links |
+| Cache | In memory per process, keyed by token URL, client id, scope, audience and a hash of the secret, so two accounts never share a token. A token counts as expired 60 s before its real expiry |
+| Refresh | After a `401` from the API, the cached token is dropped and **one** new token is fetched and the page retried once. A second `401` fails the run as `auth_failed`. No loops |
+| Where the secret may go | The token request is refused (`secret_host_mismatch`, nothing sent) unless `token_url`'s host is the host the client secret is pinned to. The normal host check then keeps the access token on that same host, so base URL and token URL must share one host (true for Auth0 and Okta, not for Google or Spotify) |
+| Errors | A refused token request is `auth_failed` ("the token request was refused (401: access_denied). Check the client id, the client secret and the scopes or audience"), showing the service's `error` code only, never the secret. No `access_token` in the reply is `auth_failed`; a timeout or connection failure is `timeout` or `connection_error`. No new error codes |
+| Validation | Both validators (Python and the Node reference) check the placeholders and that `token_url` is `https://` (`http://` only for localhost, 127.0.0.1 and mock-api). The invalid sample `reserved-oauth2.yaml` became `oauth2-missing-fields.yaml` |
+| Template | `templates/auth0.yaml`: `list_users` and `list_alerts` (log events) through the Management API. Needs a Machine-to-Machine app with `read:users` and `read:logs` and the secret `auth0_client_secret` pinned to the tenant domain |
+| Frontend | The Add and Edit form keeps `client_id`, `token_url`, `scope` and `audience` when it saves an OAuth2 config. It has no fields for them yet: edit them in the YAML |
+
+**Contract impact:** `integration.schema.json` only (four optional `auth` properties and one conditional). `openapi.yaml` and `result.schema.json` are unchanged.
+
+**Not built (said plainly):** private-key JWT (`private_key_jwt`), which Okta service apps require; the authorization-code flow; DPoP; token requests with the secret in a Basic header; different hosts for the token and the API; sharing a token between processes (each API or worker process fetches its own).
+
+**Tests:** `backend/tests/test_oauth2.py` (17 tests): the form body and the Bearer header; reuse of a token; a short-lived token fetched again; a revoked token replaced once, and a second 401 failing without a loop; a wrong secret named without printing it; a secret never sent to an unpinned host or a hostile token URL; two secrets not sharing a token; a reply without `access_token`; a connection failure; a whole run; the validator rules. Suite: 414 passed, 7 skipped. The contract check (both validators) passes.
+
+**Live check:** against the real Auth0 tenant, see `roadmap.md`. Until that is logged there, the template is unverified like the others were.
+
+### Still wanted from Person A
+
+Confirm or change the four `auth` fields. If a change is needed it needs `contract-v8`, not a moved tag.
 
 ---
 

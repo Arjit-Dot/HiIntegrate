@@ -1,0 +1,69 @@
+version: 1
+name: auth0
+display_name: "Auth0"
+category: identity
+description: "Lists the users and the log events of an Auth0 tenant through its Management API. Signs in with OAuth2 client credentials (a Machine-to-Machine app with the read:users and read:logs scopes). Not yet verified against a live tenant."
+enabled: true
+
+vars:
+  domain: "dev-example.us.auth0.com"
+  client_id: "your-client-id"
+
+requires:
+  vars:
+    domain: { label: "Auth0 domain (the whole host, for example dev-abc123.us.auth0.com)", example: "dev-abc123.us.auth0.com" }
+    client_id: { label: "Client ID of your Machine-to-Machine app", example: "Ab12Cd34Ef56" }
+  secrets: [auth0_client_secret]
+
+base_url: "https://{{vars.domain}}"
+
+# D-21: the engine trades the client id and the client secret for an access token at token_url, keeps it until it is about to
+# expire and sends it as a Bearer token. Pin the secret to the same host as the domain (Secrets page, host = your domain).
+auth:
+  type: oauth2_client_credentials
+  client_id: "{{vars.client_id}}"
+  token_url: "https://{{vars.domain}}/oauth/token"
+  audience: "https://{{vars.domain}}/api/v2/"
+  secret: auth0_client_secret
+
+defaults:
+  headers: { Accept: "application/json" }
+
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    schedule: every 15m
+    request: { method: GET, path: /api/v2/users, query: { per_page: 50 } }
+    pagination: { type: page_number, param: page, start: 0, stop_when_empty: true, max_pages: 100 }
+    records_path: "@"
+    map:
+      id: { path: user_id, transform: string }
+      name: "name || nickname || email"
+      email: { path: email, transform: lowercase }
+      status:
+        path: blocked
+        value_map: { "true": suspended, "false": active }
+        default: active
+      last_login: { path: last_login, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
+
+  list_alerts:
+    mode: pull
+    target_schema: alert
+    schedule: every 5m
+    request: { method: GET, path: /api/v2/logs, query: { per_page: 100 } }
+    pagination: { type: page_number, param: page, start: 0, stop_when_empty: true, max_pages: 10 }
+    records_path: "@"
+    map:
+      id: { path: log_id, transform: string }
+      type: type
+      severity:
+        path: type
+        value_map: { f: medium, fp: medium, fu: medium, fcp: medium, fco: medium, limit_wc: high, limit_mu: high, pwd_leak: high }
+        default: low
+      timestamp: { path: date, transform: datetime }
+      description: "description || type"
+    required: [id, timestamp]
+    on_invalid: quarantine

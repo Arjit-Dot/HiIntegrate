@@ -101,7 +101,7 @@
         "type",
         "secret"
       ],
-      "description": "How the engine logs in. Every type names its secret with 'secret'. oauth2_client_credentials is reserved: it passes the schema and the validator rejects it as not implemented yet.",
+      "description": "How the engine logs in. Every type names its secret with 'secret'. oauth2_client_credentials (D-21) fetches an access token from token_url with the client id and the secret (the client secret), caches it, and sends it as a Bearer token.",
       "properties": {
         "type": {
           "enum": [
@@ -134,6 +134,26 @@
         },
         "secret": {
           "$ref": "#/$defs/secretName"
+        },
+        "client_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "oauth2_client_credentials: the client id. Not a secret. May use {{vars.x}}."
+        },
+        "token_url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "oauth2_client_credentials: where to get the token. https only (http for localhost, 127.0.0.1 and mock-api). Its host must be the host the secret is pinned to. May use {{vars.x}}."
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "description": "oauth2_client_credentials: optional, space-separated scopes."
+        },
+        "audience": {
+          "type": "string",
+          "minLength": 1,
+          "description": "oauth2_client_credentials: optional audience, which some services (Auth0) require. May use {{vars.x}}."
         }
       },
       "allOf": [
@@ -154,7 +174,11 @@
               "name"
             ],
             "properties": {
-              "username": false
+              "username": false,
+              "client_id": false,
+              "token_url": false,
+              "scope": false,
+              "audience": false
             }
           }
         },
@@ -174,7 +198,11 @@
               "in": false,
               "name": false,
               "prefix": false,
-              "username": false
+              "username": false,
+              "client_id": false,
+              "token_url": false,
+              "scope": false,
+              "audience": false
             }
           }
         },
@@ -196,7 +224,35 @@
             "properties": {
               "in": false,
               "name": false,
-              "prefix": false
+              "prefix": false,
+              "client_id": false,
+              "token_url": false,
+              "scope": false,
+              "audience": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "oauth2_client_credentials"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "client_id",
+              "token_url"
+            ],
+            "properties": {
+              "in": false,
+              "name": false,
+              "prefix": false,
+              "username": false
             }
           }
         }

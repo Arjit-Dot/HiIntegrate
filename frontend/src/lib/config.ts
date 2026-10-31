@@ -15,7 +15,7 @@ export interface InputRow { name: string; type: string; values: string; required
 export interface FormState {
   name: string; display_name: string; category: string; description: string; enabled: boolean
   vars: string; base_url: string
-  authType: string; authIn: string; authName: string; authPrefix: string; authUser: string; secret: string; secretValue: string
+  authType: string; authIn: string; authName: string; authPrefix: string; authUser: string; authExtra: Config; secret: string; secretValue: string
   actionName: string; mode: string; schema: SchemaName; method: string; path: string; query: string; records: string
   schedN: string; schedU: string
   pgType: string; pgSource: string; pgHeader: string; pgOffset: string; pgLimitParam: string; pgLimit: string; pgTotal: string
@@ -51,7 +51,7 @@ export function defaultState(): FormState {
   return {
     name: '', display_name: '', category: pr.category, description: '', enabled: true,
     vars: '', base_url: 'https://{{vars.domain}}.example.com',
-    authType: 'bearer', authIn: 'header', authName: 'Authorization', authPrefix: '', authUser: '', secret: '', secretValue: '',
+    authType: 'bearer', authIn: 'header', authName: 'Authorization', authPrefix: '', authUser: '', authExtra: {}, secret: '', secretValue: '',
     actionName: pr.name, mode: 'pull', schema: 'user', method: 'GET', path: pr.path, query: pr.query, records: pr.records,
     schedN: '15', schedU: 'm',
     pgType: 'offset', pgSource: 'header', pgHeader: 'Link', pgOffset: 'offset', pgLimitParam: 'limit', pgLimit: '100', pgTotal: '',
@@ -188,6 +188,7 @@ export function buildConfig(s: FormState, base?: Config, editedAction?: string):
   const a: Config = { type: s.authType }
   if (s.authType === 'api_key') { a.in = s.authIn; a.name = s.authName; if (s.authPrefix) a.prefix = s.authPrefix }
   if (s.authType === 'basic') a.username = s.authUser
+  if (s.authType === 'oauth2_client_credentials') Object.assign(a, s.authExtra) // client_id, token_url, scope, audience (D-21): the form has no fields for them yet, so keep them
   a.secret = s.secret
   c.auth = a
   const to = s.recipients.split(',').map(x => x.trim()).filter(Boolean)
@@ -224,7 +225,7 @@ export function configToState(c: Config, actionName?: string): FormState {
     ...s,
     name: c.name ?? '', display_name: c.display_name ?? '', category: c.category ?? 'other', description: c.description ?? '', enabled: c.enabled ?? true,
     vars: kvText(c.vars), base_url: c.base_url ?? '',
-    authType: auth.type ?? 'bearer', authIn: auth.in ?? 'header', authName: auth.name ?? 'Authorization', authPrefix: auth.prefix ?? '', authUser: auth.username ?? '', secret: auth.secret ?? '',
+    authType: auth.type ?? 'bearer', authIn: auth.in ?? 'header', authName: auth.name ?? 'Authorization', authPrefix: auth.prefix ?? '', authUser: auth.username ?? '', authExtra: Object.fromEntries(['client_id', 'token_url', 'scope', 'audience'].filter(k => auth[k] !== undefined).map(k => [k, auth[k]])), secret: auth.secret ?? '',
     actionName: an ?? 'action', mode: act.mode ?? 'pull', schema, method: act.request?.method ?? 'GET', path: act.request?.path ?? '', query: kvText(act.request?.query), records: act.records_path ?? '@',
     schedN: m ? m[1] : '15', schedU: m ? m[2] : 'm',
     pgType: pg.type ?? 'none', pgSource: pg.source ?? 'header', pgHeader: pg.header ?? pg.path ?? 'Link',

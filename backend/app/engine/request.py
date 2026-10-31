@@ -22,7 +22,7 @@ class Prepared:
 
 def build_request(cfg: dict, action_name: str, *, inputs: dict | None = None, state: dict | None = None,
                   now: datetime | None = None, url: str | None = None, extra_params: dict | None = None,
-                  secret_lookup: Callable[[str], Secret] | None = None) -> Prepared:
+                  secret_lookup: Callable[[str], Secret] | None = None, access_token: str | None = None) -> Prepared:
     """`url` overrides the address (a next-page link). Its host is checked against the secret later.
     `extra_params` adds paging parameters (offset, page, cursor) to the query.
     `secret_lookup` finds a secret by name. The engine has no database, so the runner passes one that
@@ -48,7 +48,7 @@ def build_request(cfg: dict, action_name: str, *, inputs: dict | None = None, st
         url = fill(cfg["base_url"], vars=vars_).rstrip("/") + fill(req["path"], **ctx)
 
     auth = cfg["auth"]
-    secret = (secret_lookup or get_secret)(auth["secret"]) if auth.get("type") in ("api_key", "bearer", "basic") else None
+    secret = (secret_lookup or get_secret)(auth["secret"]) if auth.get("type") in ("api_key", "bearer", "basic", "oauth2_client_credentials") else None
     if auth["type"] == "api_key":
         token = (auth.get("prefix") or "") + secret.value
         if auth["in"] == "header":
@@ -57,6 +57,8 @@ def build_request(cfg: dict, action_name: str, *, inputs: dict | None = None, st
             params[auth["name"]] = token
     elif auth["type"] == "bearer":
         headers["Authorization"] = f"Bearer {secret.value}"
+    elif auth["type"] == "oauth2_client_credentials":
+        headers["Authorization"] = f"Bearer {access_token}"  # fetch_page gets the token first (D-21)
     elif auth["type"] == "basic":
         user = fill(auth["username"], vars=vars_)
         headers["Authorization"] = "Basic " + base64.b64encode(f"{user}:{secret.value}".encode()).decode()

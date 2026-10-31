@@ -77,7 +77,7 @@ export function checkConfig(cfg) {
   if (/^http:\/\//.test(cfg.base_url) && !(plain && ['localhost', '127.0.0.1', 'mock-api'].includes(plain[1]))) {
     issues.push({ path: 'base_url', message: 'must use https:// (http:// is allowed only for localhost, 127.0.0.1 and mock-api)', severity: 'error' });
   }
-  if (cfg.auth && cfg.auth.username) check('auth.username', cfg.auth.username, {});
+  for (const k of ['username', 'client_id', 'token_url', 'audience']) if (cfg.auth && cfg.auth[k]) check('auth.' + k, cfg.auth[k], {});
   strings(cfg.defaults || {}, 'defaults', []).forEach(([p, s]) => check(p, s, {}));
   strings(cfg.vars || {}, 'vars', []).forEach(([p, s]) => check(p, s, {}));
   for (const [name, a] of Object.entries(cfg.actions)) {
@@ -92,7 +92,13 @@ export function checkConfig(cfg) {
     if (a.mode === 'pull' && a.map && !a.map.id) issues.push({ path: base + '.map.id', message: 'id must be mapped', severity: 'error' });
     if (a.mode === 'lookup' && a.map && !a.map.id) issues.push({ path: base + '.map.id', message: 'id must be mapped', severity: 'error' });
   }
-  if (cfg.auth && cfg.auth.type === 'oauth2_client_credentials') issues.push({ path: 'auth.type', message: 'oauth2_client_credentials is reserved and not supported yet', severity: 'error' });
+  if (cfg.auth && cfg.auth.type === 'oauth2_client_credentials' && typeof cfg.auth.token_url === 'string') {
+    const t = cfg.auth.token_url;
+    if (t.startsWith('http://')) {
+      const m = t.match(/^http:\/\/([^/:{}\s]+)/);
+      if (!(m && ['localhost', '127.0.0.1', 'mock-api'].includes(m[1]))) issues.push({ path: 'auth.token_url', message: 'must use https:// (http:// is allowed only for localhost, 127.0.0.1 and mock-api)', severity: 'error' });
+    } else if (!t.startsWith('https://') && !t.startsWith('{{')) issues.push({ path: 'auth.token_url', message: 'must start with https://', severity: 'error' });
+  }
   if (cfg.requires && cfg.requires.secrets && cfg.auth && cfg.auth.secret && !cfg.requires.secrets.includes(cfg.auth.secret)) issues.push({ path: 'requires.secrets', message: `auth.secret ${cfg.auth.secret} is not listed in requires.secrets`, severity: 'warning' });
   return issues;
 }

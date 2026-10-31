@@ -262,7 +262,7 @@ export default function AddEdit() {
 
   const known = secrets.find(x => x.name === s.secret)
   const host = hostOf(s.base_url, s.vars)
-  const secretLabel = ({ bearer: 'Token', api_key: 'API key', basic: 'Password or API token' } as Record<string, string>)[s.authType] ?? 'Token'
+  const secretLabel = ({ bearer: 'Token', api_key: 'API key', basic: 'Password or API token', oauth2_client_credentials: 'Client secret' } as Record<string, string>)[s.authType] ?? 'Token'
   const actionNames = Object.keys(base?.actions ?? {})
   const pull = s.mode === 'pull'
 
@@ -374,6 +374,7 @@ export default function AddEdit() {
               <div><label className="req">Type</label>
                 <select {...bind('authType')}>
                   <option value="bearer">bearer (Authorization: Bearer …)</option><option value="api_key">api_key (header or query)</option><option value="basic">basic (username and token)</option>
+                  {s.authType === 'oauth2_client_credentials' && <option value="oauth2_client_credentials">oauth2 client credentials (client id and token URL are kept as they are)</option>}
                 </select></div>
               <div><label className="req">Secret name</label><input type="text" className="mono" {...bind('secret')} /><div className="hint">The <b>name</b> goes in the config. The value never does.</div></div>
               <div className="full"><label>{secretLabel}</label>

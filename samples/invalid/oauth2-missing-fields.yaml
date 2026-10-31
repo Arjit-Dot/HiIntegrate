@@ -1,4 +1,4 @@
-# INVALID ON PURPOSE. A reserved auth type. Accepted by the schema, rejected as not supported yet.
+# INVALID ON PURPOSE. oauth2_client_credentials without a client_id and a token_url (D-21).
 # Expected errors are in expected-errors.json.
 version: 1
 name: generic-user

@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 import jmespath
 
+from app.engine import oauth
 from app.engine.errors import RunError
 from app.engine.http import Policy, send
 from app.engine.mapping import FIELDS, map_record
@@ -37,21 +38,37 @@ def extract_records(cfg: dict, action_name: str, body: Any) -> list:
 
 def fetch_page(client: httpx.Client, cfg: dict, action_name: str, *, inputs=None, state=None, now=None, url=None,
                extra_params: dict | None = None, secret_lookup=None, sleep: Callable[[float], None] | None = None) -> tuple[Any, httpx.Response, int, int]:
-    """One page: build, check the secret's host, send with retries. Returns (body, response, retries, latency_ms)."""
-    try:
-        prepared = build_request(cfg, action_name, inputs=inputs, state=state, now=now, url=url, extra_params=extra_params,
-                                 secret_lookup=secret_lookup)
-    except PlaceholderError as exc:
-        raise RunError("client_error", str(exc)) from None
-    except SecretNotFound as exc:
-        raise RunError("auth_failed", str(exc)) from None
+    """One page: build, check the secret's host, send with retries. Returns (body, response, retries, latency_ms).
+    With OAuth2 client credentials (D-21) the access token is fetched first, and fetched once more after a 401."""
+
+    def build(token: str | None = None):
+        try:
+            return build_request(cfg, action_name, inputs=inputs, state=state, now=now, url=url, extra_params=extra_params,
+                                 secret_lookup=secret_lookup, access_token=token)
+        except PlaceholderError as exc:
+            raise RunError("client_error", str(exc)) from None
+        except SecretNotFound as exc:
+            raise RunError("auth_failed", str(exc)) from None
+
+    prepared = build()
     if prepared.secret is not None:
         try:
             check_host(prepared.secret, prepared.host)
         except SecretHostMismatch as exc:
             raise RunError("secret_host_mismatch", str(exc)) from None
+    oauth_flow = oauth.is_oauth(cfg)
+    if oauth_flow:
+        prepared = build(oauth.access_token(client, cfg, prepared.secret))
     policy = Policy.from_config(cfg, cfg["actions"][action_name])
-    sent = send(client, prepared.request, policy, **({"sleep": sleep} if sleep else {}))
+    kwargs = {"sleep": sleep} if sleep else {}
+    try:
+        sent = send(client, prepared.request, policy, **kwargs)
+    except RunError as exc:
+        if not (oauth_flow and exc.code == "auth_failed" and exc.status == 401):
+            raise
+        oauth.forget(cfg, prepared.secret)  # the token may have been revoked or expired early: one fresh try
+        prepared = build(oauth.access_token(client, cfg, prepared.secret))
+        sent = send(client, prepared.request, policy, **kwargs)
     try:
         body = sent.response.json()
     except ValueError:

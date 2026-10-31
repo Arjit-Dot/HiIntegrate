@@ -311,7 +311,7 @@ Also tick:
 9. On the Quarantine page, click **Fix with AI**: show the proposed change and "rescues N of M", then Apply, and run again to show the quarantined count drop.
 10. Click Summarize for the AI overview.
 11. Say plainly what v1 protects and what it leaves out: secrets are encrypted, pinned to a host and absent from logs (the audit proved it), and v1 has no API login by design (D-6). Name the next steps from D-17 (login, a guard on outgoing requests, an audit log, retention).
-12. Mention what comes next: OAuth2 (Okta needs a private-key JWT for service apps), more templates, a shared config library.
+12. OAuth2 client credentials is built (D-21, shown with the Auth0 template). Mention what comes next: private-key JWT (Okta service apps need it), the authorization-code flow, more templates, a shared config library.
 
 ## 11. Bonus tracker
 
