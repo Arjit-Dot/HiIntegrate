@@ -13,6 +13,7 @@ export type SecretInfo = S['SecretInfo']
 export type TemplateSummary = S['TemplateSummary']
 export type RunRecord = S['run_record']
 export type QuarantineRecord = S['quarantine_record']
+export type UnifiedUser = S['unified_user']
 export type Config = Record<string, any>
 
 export class ApiError extends Error {
@@ -67,6 +68,8 @@ export const api = {
   getTemplate: (id: string) => call<{ id: string; config: Config; yaml: string }>('GET', `/templates/${encodeURIComponent(id)}`),
   listResults: (p: { target: string; source?: string; limit?: number; offset?: number }) =>
     call<{ items: Record<string, unknown>[]; total: number; limit: number; offset: number }>('GET', `/results?${qs(p)}`),
+  listUnifiedUsers: (p: { source?: string; limit?: number; offset?: number }) =>
+    call<{ items: UnifiedUser[]; total: number; limit: number; offset: number }>('GET', `/users/unified?${qs(p)}`),
   listQuarantine: (p: { reason?: string; target_schema?: string; source?: string; limit?: number; offset?: number }) =>
     call<{ items: QuarantineRecord[]; total: number; limit: number; offset: number }>('GET', `/quarantine?${qs(p)}`),
   /** Every quarantined record with the same filters, as the JSON text of the file. */
