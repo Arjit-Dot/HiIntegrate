@@ -54,6 +54,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 13. [D-11: Golden fixtures](#d-11-golden-fixtures)
 14. [D-12: Build-speed decisions](#d-12-build-speed-decisions-closing-phase-0)
 15. [D-14: AI propose-fix](#d-14-ai-propose-fix)
+16. [D-15: Configs live in the database](#d-15-configs-live-in-the-database-and-changes-update-them-in-place)
 16. [Revision log](#revision-log)
 17. [Open items](#open-items)
 
@@ -75,6 +76,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-12 | Build-speed decisions (closing Phase 0) | Locked (decided on the team's behalf) |
 | D-13 | The frontend visual | Locked |
 | D-14 | `POST /ai/propose-fix` | Locked (approved by both, 31 Oct 7:40pm) |
+| D-15 | Configs live in the database, updated in place | Agreed by Person A. Person B to confirm |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -123,6 +125,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-12 | Build-speed decisions | `https` only (local `http` allowed); no API login; any SMTP server; hash is 32/40/64 hex; Claude model from `LLM_MODEL`; worker syncs every 15 s; run IDs `run-<n>` | None directly | Claude, on the team's behalf |
 | D-13 | The frontend visual | `docs/ui-prototype.html` is the final visual; Person B builds the app to match it | FR-10, B-2, B-3, B-5 | agreed |
 | D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | agreed |
+| D-15 | Configs in the database | One row per integration with a `revision`; adding to an existing service edits that row with `PUT`; templates are starting points only | FR-2, B-5 | Person A, B to confirm |
 
 ---
 
@@ -1231,6 +1234,24 @@ One shared set of examples that both people treat as the truth:
 - **Ownership:** the route is Person B's (`api/ai.py`). `engine.remap_records` is Person A's, about 10 minutes, due by 12:45am.
 - **Contract tag:** D-7.6 and D-14 are tagged together as **`contract-v2`**. The docs earlier said `contract-v1.1`. `contract-v2` is the name in use.
 
+## D-15: Configs live in the database, and changes update them in place
+
+**Covers:** FR-2, B-5 · **Source:** Person A's request (31 Oct, after the kickoff sync). **Person B to confirm** at the next sync. It does not change `schema/`, so `contract-v2` still holds.
+
+**Decision**
+- **The database is the only source of truth for configs.** The `integrations` table holds one row per integration: the validated config (JSON), a `revision` number (1 on create, plus 1 on every save), `created_at` and `updated_at`. The engine, the scheduler and the API read configs from this table only.
+- **Adding to an existing service updates its existing config.** A new action, a new endpoint, a changed mapping, schedule, auth or alert all go into the same row with `PUT /integrations/{id}`. The config is validated first and its `name` must stay the same. No second integration, no copy, no new file.
+- **A new row is created only for a genuinely different service**, meaning a different base URL or a different login, with `POST /integrations`.
+- **Files in `templates/` are starting points only.** The gallery reads them, and "Use this template" creates a new row. They are never read at run time and never written to. Editing an integration never changes its template.
+- **After a save,** the worker picks up the change within 15 seconds (D-12). Stored records keep their identity, because `source` (the integration `name`) does not change.
+- **Not in v1:** a history of past configs with rollback, and detection of two people saving the same integration at once (the last save wins). Keeping each previous config in an `integration_revisions` table, so a change can be undone, is a stretch item.
+
+**Why**
+- One place to look and one place to change. A config that exists as a row and a file at the same time drifts.
+- Two configs for the same service would pull the same records twice and split their health and alerts.
+- Editing in place keeps `source` and run history unchanged, so the records, quarantine and health stay attached to the integration.
+- No contract change is needed: `PUT /integrations/{id}` already replaces the whole config, and the openapi already forbids changing `name`.
+
 ---
 
 ## Revision log
@@ -1364,6 +1385,14 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | Branches | `checkpoint1`, `docs/phase0-contract` and `contract/ai-propose-fix` were merged and deleted |
 | Alignment check | `catchup.md` lets either person's AI verify that both machines match this state |
 
+### R-12: Configs in the database (D-15), credentials rotated
+
+| Item | Outcome |
+|---|---|
+| Config storage | Added D-15. Configs live only in the `integrations` table. Changes to an existing service update its row in place with a `revision` number. Templates are starting points only. No change to `schema/` |
+| Leaked credentials | Person A reports they have been revoked and replaced |
+| Python | Python 3.12 is installed on Person A's machine (`python3.12`; `python3` is still 3.9) |
+
 ---
 
 ## Open items
@@ -1375,4 +1404,3 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | The raw samples in `samples/` are synthetic, not captured live | Test realism | Replace when access is confirmed |
 | `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 1 and 2 |
 | Rate-limit state (`min_interval_ms`) is per process in v1, so it needs shared storage before running more than one worker (D-10) | Scaling out | After v1 |
-| **Rotate every credential that was in the old `.env.example`** (GitHub token, Jira token and email, Okta token and domain, Slack webhook, VirusTotal key, AbuseIPDB key). Removing it from Git history does not undo the exposure | Security | Now, by the person who owns each credential |

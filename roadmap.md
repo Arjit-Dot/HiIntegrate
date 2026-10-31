@@ -19,7 +19,7 @@ The earlier plan gave 21 hours for everything after the contract. This plan give
 - Access to GitHub, Jira, Okta and email is sorted in the first 30 minutes. A signup that stalls is the biggest risk to the whole plan.
 - Nobody waits on the other. The mock servers exist so neither person has to.
 
-The estimates below add up for each person, but there is **about 15 minutes of slack in total** outside the buffer at the end. D-7.6 (host pinning) added about 10 minutes to Person A's Phase 2 and 5 to Person B's, and that comes out of the slack. Section 13 says what to do at a checkpoint if you are behind.
+The estimates below add up for each person, but there is **about 15 minutes of slack in total** outside the buffer at the end. D-15 (configs in the database, edited in place) added about 10 minutes to Person A's Phase 2 and 20 to Person B's. D-7.6 (host pinning) added about 10 minutes to Person A's Phase 2 and 5 to Person B's, and that comes out of the slack. Section 13 says what to do at a checkpoint if you are behind.
 
 ## 1. Who owns what
 
@@ -50,7 +50,7 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 
 **What the prototype does not show, and the app still needs:**
 - A Monaco YAML/JSON editor with a toggle. The prototype shows a read-only YAML preview.
-- Editing an existing integration (loading its saved config), and several actions per integration with a "+ Add action" button.
+- Editing an existing integration (loading its saved config), and several actions per integration with a "+ Add action" button. **Required by D-15:** changes to an existing service update its config in place.
 - The "Generate with AI", "Summarize" and "Fix with AI" (Quarantine page) buttons, the alert state on a failing connection, and the AI mapping suggestions (they replace the visual mapping builder).
 - Inputs built from a template's `requires` block.
 - Loading, empty and error states, paging on the tables, and dark mode.
@@ -150,6 +150,7 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 ### Person A (about 150 minutes)
 - [ ] **Pagination**, all four styles, with the stop rules in `schema/README.md`. Pages are saved as they arrive, so a failure on page 7 keeps pages 1 to 6. `[FR-3]` *(25)*
 - [ ] **Normalizer** complete: every transform, `value_map`, `datetime`, `default`. **Quarantine** with the three reasons. `error_when`, `{{now - 24h}}`, `rate_limit.min_interval_ms`. `[FR-5]` `[FR-9]` *(25)*
+- [ ] **Configs in the database (D-15):** the `integrations` table is the only source of truth, one row per integration with the config (JSON), `revision`, `created_at` and `updated_at`. `PUT /integrations/{id}` validates and updates that row in place (same `name`, `revision` plus 1). The engine, worker and API read configs only from here. `templates/` is read only for the gallery. *(10)*
 - [ ] **Storage** with SQLAlchemy: integrations, `users`, `devices`, `alerts` (upsert on `(source, id)`), quarantine and runs, plus the unique index that allows one `running` run per action. Postgres, with SQLite for tests. `[FR-11]` *(25)*
 - [ ] **Secrets**: the Fernet store and `PUT /secrets/{name}` (which takes `{value, host}`), checked before the environment. `GET /secrets` lists names, `set` and `host`, never values. **Pin each secret to its host (D-7.6):** the engine checks the host on every request, including next-page links and redirects, and fails with `secret_host_mismatch`. A secret from `.env` may carry `SECRET_<NAME>_HOST`. `[FR-6]` *(25)*
 - [ ] **`runner`** in `scheduler/`: run an action, save results and the run record, return the result. *(15)*
@@ -160,7 +161,8 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 ### Person B (about 150 minutes)
 - [ ] Add/Edit page complete: auth fields that change with the type, pull and lookup fields, pagination for each style, the inputs table, the mapping table for the chosen schema, `error_when`, alerts, and the inputs built from the template's `requires` block. `[B-5]` *(30)*
 - [ ] **Token and password entry** (D-7.5): a password-type value field next to each secret name in the Add/Edit form (**API key**, **Token**, or **Password or API token**, by auth type; one per name in a template's `requires.secrets`). It is write-only, shows `set` or `not set` from `GET /secrets`, and stores the value with `PUT /secrets/{name}` before it saves the integration, sending the host of the `base_url` so the secret is pinned to it (D-7.6). On `501` it says to set `SECRET_<NAME>` in the environment and still saves. `[FR-6]` `[B-5]` *(15)*
-- [ ] Template gallery, with a "use this template" button that fills the form. `[B-5]` *(15)*
+- [ ] Template gallery, with a "use this template" button that fills the form. Saving it creates a **new** integration (`POST`). `[B-5]` *(15)*
+- [ ] **Edit an existing integration (D-15):** Edit loads the saved config into the form and editor. "+ Add action" adds an action to the **same** config. Save sends `PUT /integrations/{id}`, so the same integration (same name, same records) changes in place. The name field is locked when editing. *(20)*
 - [ ] Results page: a schema selector, a source filter, and a table or JSON view. *(15)*
 - [ ] Quarantine page with filters and **Export all**. `[FR-9]` *(15)*
 - [ ] Run history. `[FR-10]` *(10)*
@@ -178,6 +180,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] Validation and Test run against the real API.
 - [ ] A key typed into the Add form, and one set on the Secrets screen, are each used by a real run.
 - [ ] A secret pinned to `api.github.com` is refused for a config that points somewhere else (`secret_host_mismatch`), and nothing is sent.
+- [ ] Add a new action to the existing GitHub integration through **Edit**. The same integration now has it, its `revision` went up by one, its records are unchanged, and no second GitHub integration appears.
 
 ## 7. Phase 3: reliability and AI (11:45pm to 2:30am)
 

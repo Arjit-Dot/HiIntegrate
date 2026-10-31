@@ -17,6 +17,10 @@ Add a new security tool by writing a config file, not code. One generic engine r
 - `docs/`: the decision log and the expected-output examples
 - `backend/`, `frontend/`: not started
 
+## Where configs live
+
+Configs are stored in the **database**, one per integration. To add an action, an endpoint or anything else to a service you already have, **edit that integration**: its existing config is updated in place and keeps its name, records and history. A new integration is only for a different service. The files in `templates/` are starting points for the gallery, and the platform never runs from them (D-15).
+
 ## Secrets and tokens
 
 The platform logs in to GitHub, Jira, Okta and others with tokens and passwords. These are the most sensitive things in the project.

@@ -14,7 +14,8 @@
 - `main` contains the commit **"Kickoff sync: roles, approvals, shifted clock, catch-up check"**.
 - The contract to build against is the tag **`contract-v2`** (commit `ac3cb1a`). It covers host pinning (D-7.6) and AI propose-fix (D-14).
 - `schema/` on `main` is identical to `contract-v2`.
-- Every decision D-1 to D-14 is **Locked** in `docs/decisions.md`.
+- Every decision D-1 to D-14 is **Locked** in `docs/decisions.md`. D-15 (configs live in the database and are updated in place) is agreed by Person A and waits for Person B to confirm.
+- `main` contains the commit **"Configs live in the database and are updated in place (D-15)"**.
 - The roadmap's **Checkpoint 1 is at 9:15pm**, and the deadline is **5:00am**.
 - The only remote branch is `main`.
 - The leaked commit `79c3a3f` does not exist anywhere.
@@ -28,6 +29,7 @@ git status --short                                   # expect: nothing
 git branch --show-current                            # expect: main
 test "$(git rev-parse main)" = "$(git rev-parse origin/main)" && echo "main matches origin" || echo "main differs from origin"
 git log origin/main --format=%s | grep -c "Kickoff sync: roles, approvals, shifted clock, catch-up check"   # expect: 1
+git log origin/main --format=%s | grep -c "Configs live in the database and are updated in place (D-15)"   # expect: 1
 git ls-remote --heads origin | awk '{print $2}'      # expect: refs/heads/main only
 ```
 
@@ -45,6 +47,7 @@ npx --yes @redocly/cli@1 lint schema/openapi.yaml 2>&1 | tail -1               #
 ```bash
 grep -E "^\| D-([0-9]|1[0-4]) \|" docs/decisions.md | head -14 | awk -F'|' '{print $2 "|" $4}'   # expect: every row says Locked
 grep -c "Draft" docs/decisions.md                     # any hit must be historical text, not a status row
+grep -E "^\| D-15 \|" docs/decisions.md | head -1     # expect: "Agreed by Person A. Person B to confirm". Ask Person B whether they agree
 grep -n "Checkpoint 1 at 9:15pm" roadmap.md           # expect: 1 line
 grep -n "Person A is \*\*Arjit\*\*" roadmap.md        # expect: 1 line
 grep -c "^- \[ \]" <(sed -n '/^## 4. Phase 0/,/^## 5. Phase 1/p' roadmap.md)   # expect: 0 (Phase 0 all ticked)
@@ -73,12 +76,12 @@ What each person needs set (the README lists every name):
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_FROM`, `SECRET_SMTP_PASSWORD` | yes, by Phase 3 | no |
 | `LLM_API_KEY`, `LLM_MODEL` | no | yes, by Phase 3 |
 
-**Ask the person (you cannot check this):** have the credentials that leaked in commit `79c3a3f` been revoked and replaced? They were a GitHub token, a Jira token, an Okta token, a Slack webhook, a VirusTotal key and an AbuseIPDB key.
+**Ask the person (you cannot check this):** have the credentials that leaked in commit `79c3a3f` been revoked and replaced? They were a GitHub token, a Jira token, an Okta token, a Slack webhook, a VirusTotal key and an AbuseIPDB key. Person A has replaced theirs. If Person B's `.env` holds shared credentials, check that it has the **new** values.
 
 ### 6. Tools
 ```bash
 node --version         # need 18 or newer
-python3 --version      # need 3.12 (both people: A for the backend, B for backend/app/ai)
+python3.12 --version   # need 3.12 (both people: A for the backend, B for backend/app/ai). `python3` may still be an older version; use python3.12 for the venv
 docker info >/dev/null 2>&1 && echo "docker running" || echo "docker not running"   # A needs it; B optional
 ```
 
@@ -94,7 +97,7 @@ kill %1
 - **Person B:** the Vite/React app matching `docs/ui-prototype.html`, the API client with one base-URL setting pointed at the Prism mock, the Integrations list, and the Add page with the validation and test panels.
 - **Checkpoint 1 (9:15pm):** validate and test work end to end. A on the command line, B on the mock.
 
-## What Person A's machine showed when this file was written (7:45pm)
+## What Person A's machine showed when this file was written (7:45pm, updated after D-15)
 | Check | Result |
 |---|---|
 | `main` matches `origin/main`, working tree clean | PASS |
@@ -107,7 +110,8 @@ kill %1
 | SMTP settings | **EMPTY** (to fill before Phase 3) |
 | `LLM_API_KEY` | EMPTY (Person A does not need it) |
 | Postgres | running in Docker as `hiintegrate-db` |
-| Python | **3.9.6** (needs 3.12) |
+| Python | 3.12.13 installed as `python3.12` (`python3` is still 3.9) |
+| Leaked credentials | Person A reports they are revoked and replaced |
 
 ## Report format
 | # | Check | Result | Fix |
