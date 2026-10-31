@@ -2247,8 +2247,11 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    text: string;
-                };
+                    /** @description Pasted docs, a curl example or a sample response. With `url`, extra instructions. */
+                    text?: string;
+                    /** @description AI mode: an https documentation page (or an OpenAPI file). The server reads it. Private addresses and non-text pages are refused with 422. */
+                    url?: string;
+                } | unknown | unknown;
             };
         };
         responses: {
@@ -2264,6 +2267,15 @@ export interface operations {
                             [key: string]: unknown;
                         };
                         errors: components["schemas"]["ValidationIssue"][];
+                        /** @description Present when `url` was sent: the page that was read. */
+                        source?: {
+                            /** @description The final address, after redirects. */
+                            url: string;
+                            /** @description Readable characters on the page. */
+                            chars: number;
+                            /** @description True when only the first 50,000 characters went to the model. */
+                            truncated: boolean;
+                        };
                         /** @description One entry per try: the first draft and up to two corrections after the validator's complaints. */
                         attempts?: {
                             attempt: number;
@@ -2273,6 +2285,7 @@ export interface operations {
                     };
                 };
             };
+            422: components["responses"]["ValidationError"];
             501: components["responses"]["Unsupported"];
         };
     };
