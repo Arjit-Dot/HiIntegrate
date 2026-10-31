@@ -303,7 +303,13 @@ export default function AddEdit() {
                   <input type="text" className="mono" placeholder="path in response" value={m.path} onChange={e => upd({ path: e.target.value })} />
                   <select value={m.transform} onChange={e => upd({ transform: e.target.value })}>{TRANSFORMS.map(t => <option key={t} value={t}>{t || 'none'}</option>)}</select>
                   <label className="inline" style={{ margin: 0, justifyContent: 'center' }}><input type="checkbox" checked={f === 'id' || m.required} disabled={f === 'id'} onChange={e => upd({ required: e.target.checked })} /></label>
-                  {en && <div className="vm"><input type="text" className="mono" placeholder="value map, e.g. ACTIVE=active, OFF=inactive" value={m.valueMap} onChange={e => upd({ valueMap: e.target.value })} /><div className="hint">Allowed values: {en.join(', ')}</div></div>}
+                  <div className="vm">
+                    <div className="inline">
+                      {en && <input type="text" className="mono" placeholder="value map, e.g. ACTIVE=active, OFF=inactive" value={m.valueMap} onChange={e => upd({ valueMap: e.target.value })} />}
+                      <input type="text" className="mono" style={{ maxWidth: en ? 220 : undefined }} placeholder={f === 'id' ? 'default (not for id)' : 'default if missing (optional)'} disabled={f === 'id'} value={m.defaultValue ?? ''} onChange={e => upd({ defaultValue: e.target.value })} />
+                    </div>
+                    {en && <div className="hint">Allowed values: {en.join(', ')}. With no path, the default is used for every record.</div>}
+                  </div>
                 </div>
               )
             })}
