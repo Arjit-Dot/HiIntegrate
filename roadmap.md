@@ -63,7 +63,7 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 | 6:20 to 7:40pm | **0. Close Phase 0** (together) | Sign-off, access to every service, tag the contract. **Done** |
 | 7:40 to 9:15pm | **1. Foundations** | Validation, the request engine, the UI shell. Bonuses B-2 and B-3 |
 | **9:15pm** | **Checkpoint 1** | Demo: validate, test connection, retries, 429 |
-| 9:15 to 11:45pm | **2. Core features** | Pagination, mapping, storage, secrets, API, every screen. Bonus B-5 |
+| 9:15 to 11:45pm | **2. Core features** | Pagination, mapping, storage, cross-service user aggregation, secrets, API, every screen. Bonus B-5 |
 | **11:45pm** | **Checkpoint 2** | Frontend on the real backend. GitHub, Jira and Okta each complete a real pull |
 | 11:45pm to 2:30am | **3. Reliability and AI** | Scheduler, health, email alert, tests, the AI layer (authoring loop, propose-fix, summary, mapping suggestions). Bonuses B-4 and B-1 |
 | 2:30 to 3:30am | **4. Packaging** | Docker, a clean-machine run, the audit |
@@ -154,6 +154,7 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] **Normalizer** complete: every transform, `value_map`, `datetime`, `default`. **Quarantine** with the three reasons. `error_when`, `{{now - 24h}}`, `rate_limit.min_interval_ms`. `[FR-5]` `[FR-9]` *(25)*
 - [ ] **Configs in the database (D-15):** the `integrations` table is the only source of truth, one row per integration with the config (JSON), `revision`, `created_at` and `updated_at`. `PUT /integrations/{id}` validates and updates that row in place (same `name`, `revision` plus 1). The engine, worker and API read configs only from here. `templates/` is read only for the gallery. *(10)*
 - [ ] **Storage** with SQLAlchemy: integrations, `users`, `devices`, `alerts` (upsert on `(source, id)`), quarantine and runs, plus the unique index that allows one `running` run per action. Postgres, with SQLite for tests. `[FR-11]` *(25)*
+- [ ] **Cross-service user aggregation (added 31 Oct, changes D-3.4):** the same person on several services is shown as **one** unified user with the list of services they appear in, instead of one separate row per service. Records still upsert on `(source, id)`, so each service keeps its own record and history. A unified view groups users by lowercased `email` (D-3.1) and returns `email`, `name`, the `sources` list, and each source's `status` and `last_login`. A user with no email stays on their own. Exposed as an aggregated users result (`storage.get_results` option plus a route), with the dashboard Results page showing one row per person and a "Services" column. Tests: the same email on GitHub, Jira and Okta gives one row with three sources; a re-run does not duplicate it. **Contract: D-16 in `docs/decisions.md` (D-3.4 revised), `GET /users/unified` in `openapi.yaml`, `unified_user` in `result.schema.json`, tagged `contract-v3`. Person B to confirm.** `[FR-11]` *(20)*
 - [ ] **Secrets**: the Fernet store and `PUT /secrets/{name}` (which takes `{value, host}`), checked before the environment. `GET /secrets` lists names, `set` and `host`, never values. **Pin each secret to its host (D-7.6):** the engine checks the host on every request, including next-page links and redirects, and fails with `secret_host_mismatch`. A secret from `.env` may carry `SECRET_<NAME>_HOST`. `[FR-6]` *(25)*
 - [ ] **`runner`** in `scheduler/`: run an action, save results and the run record, return the result. *(15)*
 - [ ] **API**: every route in `schema/openapi.yaml`. Pull runs return `202` and lookups return `200`. A repeat returns `409`, and a failed lookup returns `502 run_failed`. Templates load from `templates/`. *(40)*
@@ -247,6 +248,7 @@ Also tick:
 - [ ] The four failure tests pass in the rehearsal script.
 - [ ] Three real sources each pull.
 - [ ] All three schemas hold real records.
+- [ ] Cross-service aggregation: one person who exists on two or more real services appears as one row listing each service.
 - [ ] B-2 validation, B-3 test, B-4 email, B-5 form, B-1 incremental all work in the packaged build.
 - [ ] The AI summary, the AI draft (with its repair loop) and AI propose-fix all work. Propose-fix shows a real "rescued N of M" count on the dirty dataset, and Apply saves the change through `PUT /integrations/{id}`.
 - [ ] The product demos fully with all AI switched off (`LLM_API_KEY` unset gives `501`, and nothing else breaks).

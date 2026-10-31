@@ -77,6 +77,90 @@
         }
       }
     },
+    "unified_user_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "id"
+      ],
+      "description": "One service's view of a person inside a unified_user (D-16).",
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "active",
+            "inactive",
+            "suspended",
+            "unknown",
+            null
+          ]
+        },
+        "last_login": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+        },
+        "fetched_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+        }
+      }
+    },
+    "unified_user": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "sources"
+      ],
+      "description": "One person across services (D-16). Not stored: built from the users table when asked. People are matched by lowercased email. A user with no email is their own entry.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The lowercased email, or source:id when the user has no email."
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[^A-Z]*$"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The first non-empty name, in source order."
+        },
+        "last_login": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "The most recent last_login across sources, or null."
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/unified_user_source"
+          }
+        }
+      }
+    },
     "device": {
       "type": "object",
       "additionalProperties": false,
