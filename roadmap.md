@@ -229,7 +229,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] Record a screen capture of the full demo as a fallback. *(10)*
 - [ ] Save cached AI outputs (authoring, propose-fix, summary) as a fallback for the demo. *(5)*
 
-### Security hardening (added 1 Nov, D-17: proposed, Person A to confirm)
+### Security hardening (added 1 Nov, D-17: confirmed by both)
 
 The Phase 4 audit found no secret in logs, replies, the database, files or Git history. A review of the running stack found the rest of the exposure: **no API login (D-6), ports published on every interface, no check on where the engine sends requests, no audit log and no retention.** `docs/decisions.md` D-17 has the full list (S-1 to S-14) with owners and contract impact. Nothing below is built yet.
 
@@ -273,7 +273,7 @@ Also tick:
 - [ ] The AI summary, the AI draft (with its repair loop) and AI propose-fix all work. Propose-fix shows a real "rescued N of M" count on the dirty dataset, and Apply saves the change through `PUT /integrations/{id}`.
 - [ ] The product demos fully with all AI switched off (`LLM_API_KEY` unset gives `501`, and nothing else breaks).
 - [ ] `cd schema/tools && npm run check` still passes.
-- [ ] **If D-17 is confirmed:** S-1 to S-5 are applied, and the clean-clone test and the secret audit pass again on the hardened stack. If D-17 is not confirmed, say at the checkpoint that v1 has no login by design (D-6).
+- [ ] **D-17 is confirmed:** S-1 to S-5 are applied, and the clean-clone test and the secret audit pass again on the hardened stack. S-8 (the login) is not built unless it is approved and tagged, so say at the checkpoint that v1 has no login by design (D-6).
 
 ## 9. Phase 5: rehearse (3:30 to 4:30am)
 

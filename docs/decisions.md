@@ -80,7 +80,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-14 | `POST /ai/propose-fix` | Locked (approved by both, 31 Oct 7:40pm) |
 | D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
-| D-17 | Security hardening | Proposed by Person B (1 Nov). Person A to confirm. No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
+| D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -131,7 +131,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | agreed |
 | D-15 | Configs in the database | One row per integration with a `revision`; adding to an existing service edits that row with `PUT`; templates are starting points only | FR-2, B-5 | approved by both |
 | D-16 | Unified users | `GET /users/unified` merges users across services by lowercased email into one entry listing each service. Stored records are unchanged | FR-11 | approved by both |
-| D-17 | Security hardening | Shrink what a stranger on the network, a hostile config or a leaked file can reach: ports and headers first (S-1 to S-5), then a guard on the engine's outgoing requests, an audit log, an API login and rate limits (S-6 to S-9), then retention and key handling (S-10 to S-14) | FR-6 | Person B, A to confirm |
+| D-17 | Security hardening | Shrink what a stranger on the network, a hostile config or a leaked file can reach: ports and headers first (S-1 to S-5), then a guard on the engine's outgoing requests, an audit log, an API login and rate limits (S-6 to S-9), then retention and key handling (S-10 to S-14) | FR-6 | Person B, confirmed by A |
 
 ---
 
@@ -1289,7 +1289,7 @@ One shared set of examples that both people treat as the truth:
 
 ## D-17: Security hardening
 
-**Covers:** FR-6 · **Source:** Person B's security review of the running stack (1 Nov, after the Phase 4 audit). **Person A to confirm.** Nothing here is built yet. Items S-1 to S-5 and S-11 to S-13 change no file under `schema/`. S-6 adds one error code to `result.schema.json`. S-7 to S-10 add a route, a response code or a security scheme to `openapi.yaml`. Each of those needs both people's approval and a new tag before it is built.
+**Covers:** FR-6 · **Source:** Person B's security review of the running stack (1 Nov, after the Phase 4 audit). **Confirmed by Person A on 1 Nov** (see "Confirmation" below). Nothing here is built yet. Items S-1 to S-5 and S-11 to S-13 change no file under `schema/`. S-6 adds one error code to `result.schema.json`. S-7 to S-10 add a route, a response code or a security scheme to `openapi.yaml`. Each of those needs both people's approval and a new tag before it is built.
 
 **What already protects the product (checked, not assumed)**
 - Secrets are write-only, stored encrypted (Fernet) and **pinned to a host**, checked on every request including redirects and next-page links (D-7).
@@ -1312,7 +1312,7 @@ One shared set of examples that both people treat as the truth:
 | No pre-commit hook and no CI | A future leak is not caught before it is committed |
 | Plain http, secrets in container environment variables | Fine on localhost. `docker inspect` shows them to anyone with Docker access |
 
-**Decision (proposed): the items, with owner and contract impact**
+**Decision (confirmed by Person A, 1 Nov): the items, with owner and contract impact**
 
 | ID | Item | Owner | Changes a contract file? |
 |---|---|---|---|
@@ -1345,6 +1345,12 @@ One shared set of examples that both people treat as the truth:
 - `docker inspect`, a process dump and anyone with the `.env` file can still read secrets. S-12 narrows this, it does not remove it.
 - A real hostile network needs S-13 (TLS) as well.
 - OAuth2 (reserved in D-2.3) is not part of this decision. If it is built later, note that Okta's management API accepts only a private-key JWT, not a client secret, for service apps (see Okta's "Implement OAuth for Okta with a service app").
+
+**Confirmation (Person A, 1 Nov).** Person A confirms the plan as written, with these conditions, which restate rules already in this document:
+- **S-1 to S-5** go in before the freeze (deployment files only, no contract change).
+- **S-6 to S-9** are built only when Checkpoint 3's list is already green. Confirming D-17 does **not** approve their contract changes: S-6 (`blocked_address`), S-7 (audit route), S-8 (security scheme and `401`) and S-9 (`429`) each still need both people's approval and a new tag before they are built.
+- **S-10 to S-14** are named as next steps, not built.
+- Person A takes S-6 to S-12 as owner, and S-8 and S-13 jointly with Person B, as the table says.
 
 ---
 
@@ -1530,5 +1536,5 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 1 and 2 |
 | Jira answers 404 for every request (8:35pm), so the site in `JIRA_BASE_URL` is wrong or has no Jira. Okta has no enrolled device. Re-run `LIVE_TESTS=1 pytest tests/live` after fixing both | Real Jira and device data at Checkpoint 2 | Before Checkpoint 2 |
 | Rate-limit state (`min_interval_ms`) is per process in v1, so it needs shared storage before running more than one worker (D-10) | Scaling out | After v1 |
-| D-17 security plan: which items go in before the freeze (S-1 to S-5 are the proposed minimum), and Person A's confirmation | Checkpoint 3 | Before the freeze |
+| ~~D-17 security plan~~ confirmed by Person A on 1 Nov: S-1 to S-5 go in before the freeze. S-6 to S-9 still need their own contract approval and a tag | Checkpoint 3 | Done for the plan; per item for S-6 to S-9 |
 | The AI documentation fetcher checks an address and then connects by name, so a changing DNS answer could slip through (its own comment says so). Fine for a local single-user tool, to be fixed before the API is exposed (D-17 S-6 and S-14) | Exposing the API | Before any non-local use |
