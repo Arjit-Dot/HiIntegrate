@@ -26,6 +26,7 @@ import httpx
 import jmespath
 
 from app.engine.core import extract_records, fetch_page, now_iso
+from app.engine.drift import DriftTracker
 from app.engine.errors import RunError
 from app.engine.mapping import map_records
 
@@ -52,6 +53,7 @@ class RunResult:
     notes: list[str] = field(default_factory=list)
     record: dict | None = None  # a lookup's mapped record
     quarantined: dict | None = None  # a lookup's quarantine entry, if its record was rejected
+    seen_paths: set[str] = field(default_factory=set)  # mapped paths found in this run's records (drift baseline)
 
 
 def _throttle(cfg: dict, action: dict, sleep: Callable[[float], None]) -> None:
@@ -68,7 +70,7 @@ def _throttle(cfg: dict, action: dict, sleep: Callable[[float], None]) -> None:
 def run_action(cfg: dict, action_name: str, inputs: dict | None = None, trigger: str = "manual", *,
                state: dict | None = None, client: httpx.Client | None = None, on_page: OnPage | None = None,
                sleep: Callable[[float], None] = time.sleep, now: datetime | None = None, run_id: str = "run",
-               secret_lookup=None) -> RunResult:
+               secret_lookup=None, baseline: set[str] | None = None) -> RunResult:
     action = cfg["actions"][action_name]
     started = time.monotonic()
     started_at = now or datetime.now(UTC)
@@ -78,6 +80,7 @@ def run_action(cfg: dict, action_name: str, inputs: dict | None = None, trigger:
     own = client is None
     client = client or httpx.Client(timeout=(cfg.get("defaults") or {}).get("timeout_seconds", 30), follow_redirects=False)
 
+    drift = DriftTracker(action, baseline) if action["mode"] == "pull" else None
     url: str | None = None
     extra: dict = {}
     if pg and pg["type"] == "offset":
@@ -93,6 +96,8 @@ def run_action(cfg: dict, action_name: str, inputs: dict | None = None, trigger:
             result.retries += retries
             result.pages_fetched += 1
             raws = extract_records(cfg, action_name, body)
+            if drift:
+                drift.add(raws)
             records, quarantine = map_records(cfg, action_name, raws, run_id=run_id, fetched_at=now_iso(now))
             result.records_pulled += len(raws)
             result.records_valid += len(records)
@@ -133,6 +138,10 @@ def run_action(cfg: dict, action_name: str, inputs: dict | None = None, trigger:
                     break
                 extra = {pg["cursor_param"]: cursor}
         result.status = "success"
+        if drift:
+            result.seen_paths = drift.seen
+            if found := drift.report():
+                result.error = found  # a success that names the vanished path; health turns degraded
     except RunError as exc:
         result.status = "failed"
         result.retries += exc.retries

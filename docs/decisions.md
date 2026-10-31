@@ -806,7 +806,7 @@ Three points. Points 1 and 2 were agreed one by one. Point 3 was set by default.
 |---|---|
 | `never_run` | The connection has no counted runs yet |
 | `healthy` | The latest finished run of **every action** succeeded with no invalid records |
-| `degraded` | No action's latest run failed, but at least one quarantined records |
+| `degraded` | No action's latest run failed, but at least one quarantined records, or named a mapped field that vanished from the response (schema drift) |
 | `failing` | The latest finished run of **any action** failed |
 | `disabled` | The connection is turned off. This overrides every other status |
 
@@ -1430,6 +1430,13 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | D-5.2 health | The latest finished run of the whole connection | The latest finished run of **each action**. `consecutive_failures` is the worst single action | On real Okta, `list_alerts` failed and a later `list_devices` success made the connection look healthy |
 | Next-link paging stop rule (`schema/README.md`) | Stops when there is no next link | Also stops on a page with no records | The Okta System Log returns a next link on every page, so a run reached `max_pages` and then hit the 429 limit |
 | `GET /integrations/{id}` | `config` and `health` | Also `revision`, `created_at`, `updated_at` | The dashboard can show that an edit changed the integration in place (D-15). Additive in `openapi.yaml` |
+
+### R-14: Schema drift check (1 Nov) · awaiting Person B
+
+| Item | Before | Now | Why |
+|---|---|---|---|
+| Vanished mapped path | Fields silently came out empty and the connection stayed `healthy` | A pull run in which a mapped plain path (`profile.email`) that **appeared in an earlier successful run** is now missing from **every** record still succeeds, but its run `error` is `{code: schema_drift, message: names the path and field}`. Health becomes `degraded` and `last_error` carries it | The roadmap stretch: a service that renames a field should show up on the dashboard, with the path named. The runner keeps the paths seen per action in a `path_baseline` table (paths are only added, a failed or empty run changes nothing), so a field the service never sends is never flagged and the first run only sets the baseline. A null value is real data and does not count. Pointing the map at the new name ends the drift. Filters and functions in a path are not checked |
+| `schema/result.schema.json` | `error.code` had 9 codes, and run `error` was null unless the run failed | Adds the code `schema_drift`, and a run `error` may be set on a success. Additive | Needs Person B's approval: the run table may show a note on a successful run, and the frontend types need regenerating |
 
 ---
 

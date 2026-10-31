@@ -543,7 +543,7 @@ export interface components {
         };
         error: {
             /** @enum {unknown} */
-            code: "auth_failed" | "connection_error" | "timeout" | "server_error" | "rate_limited" | "bad_response" | "api_error" | "client_error" | "secret_host_mismatch";
+            code: "auth_failed" | "connection_error" | "timeout" | "server_error" | "rate_limited" | "bad_response" | "api_error" | "client_error" | "secret_host_mismatch" | "schema_drift";
             message: string;
         };
         /** @description One label per connection, from the latest finished scheduled or manual run. Test runs are ignored. 'disabled' overrides the rest. */
@@ -1062,7 +1062,7 @@ export interface components {
                 };
                 error: {
                     /** @enum {unknown} */
-                    code: "auth_failed" | "connection_error" | "timeout" | "server_error" | "rate_limited" | "bad_response" | "api_error" | "client_error" | "secret_host_mismatch";
+                    code: "auth_failed" | "connection_error" | "timeout" | "server_error" | "rate_limited" | "bad_response" | "api_error" | "client_error" | "secret_host_mismatch" | "schema_drift";
                     message: string;
                 };
                 /** @description A record that failed the rules, kept with the reason. The run carried on without it. */
@@ -1102,7 +1102,7 @@ export interface components {
                     records_valid: number;
                     records_invalid: number;
                     retries: number;
-                    /** @description Null unless the run failed. */
+                    /** @description Null unless the run failed, or succeeded but a mapped field vanished from the response (code schema_drift). */
                     error: null | components["schemas"]["error"];
                 };
                 /** @description One label per connection, from the latest finished scheduled or manual run. Test runs are ignored. 'disabled' overrides the rest. */
@@ -1138,7 +1138,7 @@ export interface components {
             records_valid: number;
             records_invalid: number;
             retries: number;
-            /** @description Null unless the run failed. */
+            /** @description Null unless the run failed, or succeeded but a mapped field vanished from the response (code schema_drift). */
             error: null | components["schemas"]["error"];
         };
         /** @description One person across services (D-16). Not stored: built from the users table when asked. People are matched by lowercased email. A user with no email is their own entry. */

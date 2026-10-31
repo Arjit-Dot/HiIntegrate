@@ -7,7 +7,7 @@ from datetime import datetime
 
 import httpx
 
-from app.engine.placeholders import fill
+from app.engine.placeholders import PlaceholderError, fill
 from app.secrets import Secret, get_secret
 
 USER_AGENT = "HiIntegrate/1.0"
@@ -35,6 +35,13 @@ def build_request(cfg: dict, action_name: str, *, inputs: dict | None = None, st
     # Some services (GitHub) refuse a request with no User-Agent, and httpx.Request alone sends none.
     headers = {"User-Agent": USER_AGENT, **((cfg.get("defaults") or {}).get("headers") or {}), **fill(req.get("headers") or {}, **ctx)}
     params = {k: str(v) for k, v in fill(req.get("query") or {}, **ctx).items()} if url is None else {}
+    inc = action.get("incremental")
+    if inc and url is None:
+        # B-1: send "changed since" only when there is a previous success. The first run is a full pull.
+        try:
+            params[inc["param"]] = str(fill(inc["value"], **ctx))
+        except PlaceholderError:
+            pass
     params.update({k: str(v) for k, v in (extra_params or {}).items()})
     body = fill(req.get("body"), **ctx)
     if url is None:

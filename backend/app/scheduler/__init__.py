@@ -1,4 +1,4 @@
-"""Runs actions (D-8). The runner is here; the timed scheduler (APScheduler) comes in Phase 3."""
+"""Runs actions (D-8): the runner, the timed scheduler (timer.py, APScheduler) and the email alert (alerts.py)."""
 
 from app.scheduler import runner
 
