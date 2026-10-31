@@ -1,0 +1,49 @@
+"""The API process (D-10): stateless FastAPI app under /api/v1.
+
+Run:  cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
+"""
+
+import logging
+import uuid
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api import health
+from app.core.errors import install_error_handlers
+from app.core.logging import request_id_var, setup_logging
+from app.core.settings import get_settings
+
+log = logging.getLogger("app")
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    setup_logging(settings.log_level)
+    app = FastAPI(title="Integration Platform API", version="1.0.0", docs_url=f"{settings.api_prefix}/docs", openapi_url=f"{settings.api_prefix}/openapi.json")
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-Request-Id", "X-Run-Id"],
+    )
+
+    @app.middleware("http")
+    async def request_id(request: Request, call_next):
+        rid = request.headers.get("X-Request-Id") or uuid.uuid4().hex[:12]
+        token = request_id_var.set(rid)
+        try:
+            response = await call_next(request)
+        finally:
+            request_id_var.reset(token)
+        response.headers["X-Request-Id"] = rid
+        return response
+
+    install_error_handlers(app)
+    app.include_router(health.router, prefix=settings.api_prefix)
+    return app
+
+
+app = create_app()
