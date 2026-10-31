@@ -85,7 +85,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | (R-14 to R-19) | Contract v4: schema drift, the AI routes, alert state | Approved by both. Tagged `contract-v4` (see R-20) |
 | D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions, **both checked and confirmed by Person B (1 Nov)**. On `main` at `f345556`; `contract-v4` is tagged after this confirmation** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
 | D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov). Merged and tagged `contract-v5` by Person B (1 Nov), since R-20 gave S-7 to S-9 to Person B. Person A has not yet confirmed.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged |
-| D-20 | Retention, key rotation, file secrets, TLS and CI (S-10 to S-13) | **Proposed by Person B (1 Nov), built on branch `feat/security-s10-s13`, not merged.** Contract impact: two new routes, `DELETE /runs` and `DELETE /quarantine`. Needs Person A's approval and `contract-v6` before it goes to `main` |
+| D-20 | Retention, key rotation, file secrets, TLS and CI (S-10 to S-13) | **Proposed by Person B (1 Nov), merged and tagged `contract-v6` by Person B; Person A to confirm.** Contract impact: two new routes, `DELETE /runs` and `DELETE /quarantine` |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -1463,7 +1463,7 @@ D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each n
 
 ## D-20: Retention, key rotation, file-based secrets, TLS and CI (S-10 to S-13)
 
-**Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: built on branch `feat/security-s10-s13`, not merged.** S-10 changes `schema/openapi.yaml` (two `DELETE` routes), so the branch needs Person A's approval and a new tag (`contract-v6`) before it goes to `main`. S-11 to S-13 change no contract file. The order rule of D-17 (build S-6 to S-9 after Checkpoint 3) does not cover S-10 to S-13, but they are also built before Checkpoint 3 is green: they stay off `main` until the must-haves are done.
+**Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: merged to `main` and tagged `contract-v6` by Person B, on Person B's own call (R-20 gave S-7 to S-13 security work to Person B). Person A has not yet read D-20 and should confirm or ask for changes; a change after that needs a new tag, not a moved one.** S-10 changes `schema/openapi.yaml` (two `DELETE` routes). S-11 to S-13 change no contract file. The order rule of D-17 (build S-6 to S-9 after Checkpoint 3) does not cover S-10 to S-13, but they are also built before Checkpoint 3 is green: they stay off `main` until the must-haves are done.
 
 | Item | What it does |
 |---|---|
@@ -1496,11 +1496,10 @@ D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each n
 
 `backend/tests/test_security_s10_s12.py` (14 tests): rotation with the old key then dropped, nothing changed when a key is missing, a bad key refused, the CLI; `_FILE` fills, direct values win, unknown names ignored, an unreadable file named; purge keeps running and newest runs, one account only, quarantine and audit by age, the job's settings and `0`; the two routes remove only the caller's rows, are audited and need a sign-in and a valid number. Whole suite: 396 passed, 7 skipped.
 
-### Approval needed from Person A
+### Still wanted from Person A
 
-1. Approve or change the two `DELETE` routes.
-2. If approved: merge `feat/security-s10-s13`, tag `contract-v6`.
-3. Decide whether 90, 90 and 365 days suit the demo (nothing is old enough to be deleted before then).
+1. Confirm or change the two `DELETE` routes.
+2. Decide whether 90, 90 and 365 days suit the demo (nothing is old enough to be deleted before then).
 
 ---
 
