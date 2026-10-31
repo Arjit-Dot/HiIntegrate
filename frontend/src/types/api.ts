@@ -2264,6 +2264,12 @@ export interface operations {
                             [key: string]: unknown;
                         };
                         errors: components["schemas"]["ValidationIssue"][];
+                        /** @description One entry per try: the first draft and up to two corrections after the validator's complaints. */
+                        attempts?: {
+                            attempt: number;
+                            valid: boolean;
+                            error_count: number;
+                        }[];
                     };
                 };
             };

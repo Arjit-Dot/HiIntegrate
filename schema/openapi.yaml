@@ -565,6 +565,16 @@ paths:
                   yaml: { type: string }
                   config: { type: object, additionalProperties: true }
                   errors: { type: array, items: { $ref: "#/components/schemas/ValidationIssue" } }
+                  attempts:
+                    type: array
+                    description: "One entry per try: the first draft and up to two corrections after the validator's complaints."
+                    items:
+                      type: object
+                      required: [attempt, valid, error_count]
+                      properties:
+                        attempt: { type: integer, minimum: 1 }
+                        valid: { type: boolean }
+                        error_count: { type: integer, minimum: 0 }
         "501": { $ref: "#/components/responses/Unsupported" }
 
   /ai/summarize:

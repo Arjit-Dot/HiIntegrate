@@ -95,7 +95,7 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - `base_url` must be `https`, except `localhost`, `127.0.0.1` and `mock-api`.
 - No API login in v1. The README says so.
 - The alert email goes through any SMTP server (a Gmail account with an app password is the suggested one).
-- AI uses the Claude API, with the model in `LLM_MODEL` (default `claude-sonnet-5-5`).
+- AI uses Google Gemini (changed from Claude, see R-15), with the model in `LLM_MODEL` (default `gemini-3.5-flash`).
 - Build choices: Python 3.12 with `requirements.txt`, and npm with plain React state on the frontend. The worker re-reads the database every 15 seconds. Run IDs are `run-<n>`.
 
 **Still to do (people, in parallel, about 20 minutes):**
