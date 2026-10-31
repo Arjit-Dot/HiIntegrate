@@ -1,16 +1,17 @@
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import Editor from '@monaco-editor/react'
+import Editor, { type OnMount } from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
 import { api, ApiError, type Config, type SecretInfo, type TestResponse } from '../api/client'
 import { applyPreset, buildConfig, configToState, defaultState, hostOf, SCHEMAS, TRANSFORMS, type FormState, type SchemaName } from '../lib/config'
 import { ErrorBox, Pill, useToast } from '../components/common'
 import { TestResult } from '../components/TestResult'
+import { lineOf, locate, missingVar } from '../lib/validation'
 
-type Issue = { path: string; message: string; severity: 'error' | 'warning' }
+type Issue = { path: string; message: string; severity: 'error' | 'warning'; line?: number }
 type Pane = 'config' | 'validate' | 'test'
 
 export default function AddEdit() {
@@ -39,6 +40,7 @@ export default function AddEdit() {
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => { setRaw(null); setS(p => ({ ...p, [k]: v })) }
   const bind = (k: keyof FormState) => ({
     value: s[k] as string,
+    'aria-invalid': bad.has(k) || undefined,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => set(k, e.target.value as never),
   })
 
@@ -96,6 +98,49 @@ export default function AddEdit() {
   }, [parsed])
   useEffect(() => { const t = setTimeout(runValidate, 500); return () => clearTimeout(t) }, [runValidate])
   const errors = issues.filter(i => i.severity === 'error')
+
+  // Show each problem where it belongs: the field goes red, the message is listed in its section,
+  // and the config editor gets a marker on the line (the Validation tab keeps the full list).
+  const placed = useMemo(() => issues.map(i => ({ i, p: locate(i.path, s.actionName) })), [issues, s.actionName])
+  const bad = useMemo(() => new Set(placed.filter(x => x.i.severity === 'error' && x.p.key).map(x => x.p.key as string)), [placed])
+  const editorRef = useRef<Parameters<OnMount> | null>(null)
+  const [editorTick, setEditorTick] = useState(0)
+  useEffect(() => {
+    if (pane !== 'config') { editorRef.current = null; return }
+    const ed = editorRef.current, model = ed?.[0].getModel()
+    if (!ed || !model) return
+    const monaco = ed[1]
+    monaco.editor.setModelMarkers(model, 'hiintegrate', issues.map(i => {
+      const line = Math.min(i.line ?? lineOf(text, i.path, fmt) ?? 1, model.getLineCount())
+      return {
+        severity: i.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+        message: `${i.path}: ${i.message}`,
+        startLineNumber: line, endLineNumber: line, startColumn: 1, endColumn: model.getLineMaxColumn(line),
+      }
+    }))
+  }, [issues, text, fmt, pane, editorTick])
+
+  function addVariable(name: string) {
+    set('vars', s.vars + (s.vars && !s.vars.endsWith('\n') ? '\n' : '') + name + '=')
+  }
+  const SectionIssues = ({ n }: { n: number }) => {
+    const list = placed.filter(x => x.p.section === n)
+    if (!list.length) return null
+    return (
+      <div style={{ margin: '0 0 12px' }}>
+        {list.map(({ i, p }, k) => {
+          const v = missingVar(i.message)
+          const where = n === 0 ? i.path : p.elsewhere ? `action ${p.elsewhere}: ${i.path}` : p.label
+          return (
+            <div className="hint err" key={k} style={i.severity === 'warning' ? { color: '#b45309' } : undefined}>
+              {where ? `${where}: ` : ''}{i.message}
+              {v && !p.elsewhere && !s.vars.split('\n').some(l => l.trim().startsWith(v + '=')) && <> <Button variant="secondary" size="sm" type="button" onClick={() => addVariable(v)}>Add {v} to Variables</Button></>}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   async function persist(): Promise<string | null> {
     if (!(await runValidate())) { setPane('validate'); return null }
@@ -164,6 +209,7 @@ export default function AddEdit() {
           {requires?.secrets?.length ? <div className="hint">Needs the secret <code>{requires.secrets.join(', ')}</code>: enter its value in the Authentication section.</div> : null}
         </div>
       )}
+      {placed.some(x => x.p.section === 0) && <div className="callout"><strong>Problems with settings this form has no field for</strong> <span className="muted">(see the marked lines in the config editor)</span><SectionIssues n={0} /></div>}
       <div className="callout">
         <strong>What the platform requires</strong> <span className="muted">(fields marked <span className="star">*</span>)</span>
         <ul>
@@ -177,6 +223,7 @@ export default function AddEdit() {
         <form className="card" autoComplete="off" onSubmit={e => e.preventDefault()}>
           <div className="section">
             <h2><span className="step">1</span>Identity</h2>
+            <SectionIssues n={1} />
             <div className="grid">
               <div><label className="req">Name</label><input type="text" {...bind('name')} disabled={!!id} /><div className="hint">Slug: lowercase letters, digits, - or _. It becomes the <code>source</code> on every record.{id && ' Cannot change after creation.'}</div>
                 {!id && !exists && taken.includes(s.name) && <div className="hint err">An integration named <code>{s.name}</code> already exists. Pick another name, or <Link to={`/integrations/${encodeURIComponent(s.name)}/edit`}>edit that one</Link>.</div>}</div>
@@ -192,6 +239,7 @@ export default function AddEdit() {
 
           <div className="section">
             <h2><span className="step">2</span>Connection</h2>
+            <SectionIssues n={2} />
             <div className="grid">
               <div className="full"><label className="req">Base URL</label><input type="text" className="mono" {...bind('base_url')} /><div className="hint">May contain <code>{'{{vars.x}}'}</code>, so one template works for any tenant. No other placeholders here.</div></div>
               <div className="full"><label>Variables</label><textarea className="mono" placeholder="domain=acme" {...bind('vars')} /><div className="hint">One <code>name=value</code> per line. These are plain settings, not secrets.</div></div>
@@ -200,6 +248,7 @@ export default function AddEdit() {
 
           <div className="section">
             <h2><span className="step">3</span>Authentication</h2>
+            <SectionIssues n={3} />
             <div className="grid">
               <div><label className="req">Type</label>
                 <select {...bind('authType')}>
@@ -228,6 +277,7 @@ export default function AddEdit() {
 
           <div className="section">
             <h2><span className="step">4</span>Action</h2>
+            <SectionIssues n={4} />
             {id && (
               <div className="actions-bar">
                 <select style={{ width: 'auto' }} value={editedAction ?? ''} onChange={e => { setRaw(null); setS(configToState(base!, e.target.value)); setEditedAction(e.target.value) }}>
@@ -240,10 +290,10 @@ export default function AddEdit() {
             <div className="grid">
               <div><label className="req">Action name</label><input type="text" className="mono" {...bind('actionName')} /></div>
               <div><label className="req">Mode</label>
-                <select value={s.mode} onChange={e => { setRaw(null); setS(p => applyPreset(p, p.schema, e.target.value)) }}>
+                <select aria-invalid={bad.has('mode') || undefined} value={s.mode} onChange={e => { setRaw(null); setS(p => applyPreset(p, p.schema, e.target.value)) }}>
                   <option value="pull">pull (scheduled, many records)</option><option value="lookup">lookup (on demand, one record)</option></select></div>
               <div><label className="req">Target schema</label>
-                <select value={s.schema} onChange={e => { setRaw(null); setS(p => applyPreset(p, e.target.value as SchemaName)) }}>
+                <select aria-invalid={bad.has('schema') || undefined} value={s.schema} onChange={e => { setRaw(null); setS(p => applyPreset(p, e.target.value as SchemaName)) }}>
                   <option>user</option><option>device</option><option>alert</option></select></div>
               <div><label className="req">Method</label><select {...bind('method')}><option>GET</option><option>POST</option></select></div>
               <div className="full"><label className="req">Path</label><input type="text" className="mono" {...bind('path')} /><div className="hint">Lookups may use <code>{'{{input.name}}'}</code>. Pulls may not.</div></div>
@@ -299,6 +349,7 @@ export default function AddEdit() {
 
           <div className="section">
             <h2><span className="step">5</span>Field mapping <Pill kind="schema">{s.schema}</Pill></h2>
+            <SectionIssues n={5} />
             <div className="hint" style={{ margin: '-6px 0 10px' }}>Left: our field. Right: where to find it in the response (JMESPath). <code>||</code> means "use the first that exists".</div>
             <div className="maphead"><span>Our field</span><span>Path in response</span><span>Transform</span><span>Required</span></div>
             {SCHEMAS[s.schema].fields.map(f => {
@@ -308,7 +359,7 @@ export default function AddEdit() {
               return (
                 <div className="maprow" key={f}>
                   <div className="field">{f}{f === 'id' && <span className="tag">always required</span>}</div>
-                  <input type="text" className="mono" placeholder="path in response" value={m.path} onChange={e => upd({ path: e.target.value })} />
+                  <input type="text" className="mono" aria-invalid={bad.has(`map:${f}`) || undefined} placeholder="path in response" value={m.path} onChange={e => upd({ path: e.target.value })} />
                   <select value={m.transform} onChange={e => upd({ transform: e.target.value })}>{TRANSFORMS.map(t => <option key={t} value={t}>{t || 'none'}</option>)}</select>
                   <label className="inline" style={{ margin: 0, justifyContent: 'center' }}><input type="checkbox" checked={f === 'id' || m.required} disabled={f === 'id'} onChange={e => upd({ required: e.target.checked })} /></label>
                   <div className="vm">
@@ -325,6 +376,7 @@ export default function AddEdit() {
 
           <div className="section">
             <h2><span className="step">6</span>Errors and alerts</h2>
+            <SectionIssues n={6} />
             <div className="grid">
               <div><label>When a record is invalid</label>
                 <select {...bind('onInvalid')}><option value="quarantine">quarantine (save it with the reason)</option><option value="skip">skip (drop it, count it)</option></select></div>
@@ -367,6 +419,7 @@ export default function AddEdit() {
               </div>
               {raw !== null && <div className="hint" style={{ marginBottom: 8 }}>You are editing the config directly. Changing the form resets it.</div>}
               <Editor height="520px" language={fmt} value={text} onChange={v => v !== undefined && v !== text && setRaw(v)}
+                onMount={(editor, monaco) => { editorRef.current = [editor, monaco]; setEditorTick(n => n + 1) }}
                 options={{ minimap: { enabled: false }, fontSize: 12.5, scrollBeyondLastLine: false, wordWrap: 'on' }} />
             </div>
           )}
