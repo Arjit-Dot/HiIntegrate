@@ -198,7 +198,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] **`engine.remap_records(config, action, raw_records)`**: map stored quarantined `raw` records with a candidate config. Pure function: no database, no network, saves nothing. B's propose-fix route needs it by 12:45am (D-14). *(10)*
 - [ ] **Tests** (`pytest`): each pagination style, retry and backoff, 429, quarantine, mapping and transforms, validation, health, the alert firing once, a config with no `defaults` block, and `remap_records`. *(25)*
 - [ ] Edge cases: an empty page, a missing `Retry-After`, `max_pages`. *(5)*
-- [ ] **Stretch, only if ahead:** schema drift check. If a mapped path vanishes from the response, mark the connection degraded and name the path. *(30)*
+- [x] **Stretch, only if ahead:** schema drift check. If a mapped path vanishes from the response, mark the connection degraded and name the path. *(30)*
 
 ### Person B (about 155 minutes)
 - [ ] `ai/client.py`: the LLM wrapper, with the key from `LLM_API_KEY` and the model from a setting. Redacts secrets and auth headers, returns `501` when no key is set. *(5)*

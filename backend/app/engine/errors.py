@@ -6,7 +6,7 @@ class RunError(Exception):
 
     CODES: ClassVar[set[str]] = {
         "auth_failed", "connection_error", "timeout", "server_error", "rate_limited",
-        "bad_response", "api_error", "client_error", "secret_host_mismatch",
+        "bad_response", "api_error", "client_error", "secret_host_mismatch", "schema_drift",
     }
 
     def __init__(self, code: str, message: str, *, status: int | None = None, retries: int = 0):

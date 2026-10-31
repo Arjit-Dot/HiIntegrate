@@ -8,7 +8,7 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.storage.models import RECORD_TABLES, ActionState, Integration, Quarantine, Run, User
+from app.storage.models import RECORD_TABLES, ActionState, Integration, PathBaseline, Quarantine, Run, User
 
 RECORD_FIELDS = {
     "user": ["id", "name", "email", "status", "last_login"],
@@ -80,6 +80,9 @@ def set_enabled(s: Session, name: str, enabled: bool) -> Integration:
 
 def delete_integration(s: Session, name: str) -> None:
     s.delete(get_integration(s, name))
+    for model in (ActionState, PathBaseline):  # its history goes with it, so a new integration of the same name starts fresh
+        for row in s.scalars(select(model).where(model.integration == name)):
+            s.delete(row)
     s.flush()
 
 
@@ -260,6 +263,7 @@ def health(s: Session, integration: Integration) -> dict:
         by_action.setdefault(r.action, []).append(r)
     latest = [rs[0] for rs in by_action.values()]
     failing = [r for r in latest if r.status == "failed"]
+    drifted = [r for r in latest if r.status == "success" and r.error]  # a success that names a vanished path
 
     def trailing_failures(rs: list[Run]) -> int:
         n = 0
@@ -276,14 +280,30 @@ def health(s: Session, integration: Integration) -> dict:
         status = "never_run"
     elif failing:
         status = "failing"
-    elif any(r.records_invalid for r in latest):
+    elif drifted or any(r.records_invalid for r in latest):
         status = "degraded"
     else:
         status = "healthy"
     worst = max(failing, key=lambda r: r.pk) if failing else None
     return {"status": status, "last_run_at": newest.finished_at if newest else None, "records_pulled": newest.records_pulled if newest else 0,
-            "last_error": worst.error if worst else None,
+            "last_error": worst.error if worst else (max(drifted, key=lambda r: r.pk).error if drifted else None),
             "consecutive_failures": max((trailing_failures(rs) for rs in by_action.values()), default=0)}
+
+
+def has_run(s: Session, integration: str, action: str) -> bool:
+    return s.scalar(select(Run.pk).where(Run.integration == integration, Run.action == action).limit(1)) is not None
+
+
+def failure_streak(s: Session, integration: str, action: str) -> int:
+    """Failed schedule/manual runs of this action in a row, newest first (D-5.3). A success ends the streak."""
+    n = 0
+    for status in s.scalars(select(Run.status).where(
+        Run.integration == integration, Run.action == action, Run.trigger.in_(COUNTED_TRIGGERS), Run.status != "running",
+    ).order_by(Run.pk.desc()).limit(1000)):
+        if status != "failed":
+            break
+        n += 1
+    return n
 
 
 # ---------------------------------------------------------------- engine state ({{state.x}})
@@ -296,4 +316,19 @@ def get_state(s: Session, integration: str, action: str) -> dict:
 def set_last_success(s: Session, integration: str, action: str, when: str) -> None:
     row = s.get(ActionState, (integration, action)) or ActionState(integration=integration, action=action)
     row.last_success_at = when
+    s.add(row)
+
+
+# ---------------------------------------------------------------- schema drift baseline
+
+def get_baseline(s: Session, integration: str, action: str) -> set[str]:
+    row = s.get(PathBaseline, (integration, action))
+    return set(row.paths) if row else set()
+
+
+def add_to_baseline(s: Session, integration: str, action: str, paths: set[str]) -> None:
+    """Paths are only ever added: one that vanished stays remembered, so the drift stays visible until it returns
+    or the config stops mapping it."""
+    row = s.get(PathBaseline, (integration, action)) or PathBaseline(integration=integration, action=action, paths=[])
+    row.paths = sorted(set(row.paths) | paths)
     s.add(row)

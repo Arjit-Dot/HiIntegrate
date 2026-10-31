@@ -15,6 +15,7 @@ from sqlalchemy import Engine
 from app.engine import RunError, RunResult, run_action, test_action
 from app.engine.core import now_iso
 from app.engine.inputs import validate_inputs
+from app.scheduler.alerts import maybe_alert
 from app.secrets import get_secret
 from app.storage import repo, session_scope
 
@@ -80,8 +81,9 @@ def execute(engine: Engine, started: Started, inputs: dict | None = None, *, cli
     try:
         with session_scope(engine) as lookup_session:
             state = repo.get_state(lookup_session, started.integration, action_name)
+            baseline = repo.get_baseline(lookup_session, started.integration, action_name)
             result = run_action(cfg, action_name, inputs, started.trigger, state=state, client=client, on_page=on_page,
-                                sleep=sleep, run_id=started.run_id, secret_lookup=lambda name: get_secret(name, lookup_session))
+                                sleep=sleep, run_id=started.run_id, secret_lookup=lambda name: get_secret(name, lookup_session), baseline=baseline)
     finally:
         # Even if something unexpected broke, never leave the run stuck as `running`.
         with session_scope(engine) as s:
@@ -92,6 +94,8 @@ def execute(engine: Engine, started: Started, inputs: dict | None = None, *, cli
             repo.finish_run(s, run, result)
             if result.status == "success" and started.mode == "pull":
                 repo.set_last_success(s, started.integration, action_name, result.started_at)
+                repo.add_to_baseline(s, started.integration, action_name, result.seen_paths)
+    maybe_alert(engine, cfg, action_name, started.trigger, result)
     return result
 
 
