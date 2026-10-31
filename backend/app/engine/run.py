@@ -6,7 +6,9 @@ The engine has no database. `on_page(records, quarantine, page_number)` is calle
 so the caller (the runner) saves it at once: if page 7 fails, pages 1 to 6 are already stored.
 
 Paging stops when (schema/README.md):
-  next_link    there is no next link (Link header rel="next", or the body path)
+  next_link    there is no next link (Link header rel="next", or the body path), or a page has no records.
+               The empty-page rule matters for polling APIs such as the Okta System Log, which return a next
+               link on EVERY page, even after the last record.
   offset       a page is empty, or the offset reaches total_path
   page_number  a page is empty (stop_when_empty, the default)
   cursor       there is no next cursor
@@ -108,6 +110,8 @@ def run_action(cfg: dict, action_name: str, inputs: dict | None = None, trigger:
                 break
             kind = pg["type"]
             if kind == "next_link":
+                if not raws:
+                    break
                 link = response.links.get("next", {}).get("url") if pg["source"] == "header" else jmespath.search(pg["path"], body)
                 if not link:
                     break

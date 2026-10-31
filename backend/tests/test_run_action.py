@@ -109,3 +109,11 @@ def test_min_interval_throttles_requests(mock):
     waits = []
     run_action(cfg, "users_cursor", client=mock, sleep=waits.append)
     assert len(waits) == 2 and all(0 < w <= 0.3 for w in waits)
+
+
+def test_next_link_stops_on_an_empty_page_even_if_a_link_is_still_offered(mock):
+    """The Okta System Log returns a next link on every page, so an empty page has to end the run."""
+    nxt = {"Link": '<https://api.github.com/organizations/9001/members?page=9>; rel="next"'}
+    client, seen = scripted(httpx.Response(200, json=PAGES[0], headers=nxt), httpx.Response(200, json=[], headers=nxt), httpx.Response(500))
+    r = run_action(GH, "list_members", client=client, sleep=lambda s: None)
+    assert r.status == "success" and r.pages_fetched == 2 and r.records_valid == 3 and len(seen) == 2
