@@ -27,6 +27,19 @@ class AuthSession(Base):
     expires_at: Mapped[str] = mapped_column(String(32))
 
 
+class Audit(Base):
+    """S-7: who changed what, and when. Names, revisions and request ids only: never a secret value or a config body."""
+
+    __tablename__ = "audit"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account: Mapped[str] = mapped_column(String(64), index=True)
+    at: Mapped[str] = mapped_column(String(32))
+    event: Mapped[str] = mapped_column(String(48))  # e.g. integration.created, secret.set, run.manual
+    target: Mapped[str | None] = mapped_column(String(128), nullable=True)  # the integration or secret name (or name/action)
+    revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
 class Integration(Base):
     """D-15: the only source of truth for configs. One row per integration and owner, edited in place."""
 

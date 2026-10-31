@@ -8,11 +8,12 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
+from app.api.audit import record
 from app.api.configs import integration_out, read_config, require_valid, summary
 from app.api.deps import Account, Limit, Offset, engine_dep, outbound_client_dep, page, session_dep
 from app.core.errors import ApiError
 from app.scheduler import runner
-from app.storage import repo
+from app.storage import repo, session_scope
 
 router = APIRouter(tags=["Integrations"])
 SessionDep = Annotated[Session, Depends(session_dep)]
@@ -59,6 +60,7 @@ async def validate(request: Request) -> dict:
 async def create(request: Request, s: SessionDep, account: Account) -> dict:
     config, issues = await read_config(request)
     row = repo.create_integration(s, account, require_valid(config, issues))
+    record(s, account, "integration.created", row.name, row.revision)
     return integration_out(s, row)
 
 
@@ -75,18 +77,23 @@ async def replace(name: str, request: Request, s: SessionDep, account: Account) 
     if config["name"] != name:
         raise ApiError(400, "validation_error", "The config's name must match the integration being replaced",
                        {"errors": [{"path": "name", "message": f"must stay {name}, because records are keyed by it", "severity": "error"}]})
-    return integration_out(s, repo.replace_integration(s, account, name, config))
+    row = repo.replace_integration(s, account, name, config)
+    record(s, account, "integration.updated", name, row.revision)
+    return integration_out(s, row)
 
 
 @router.delete("/integrations/{name}", status_code=204)
 def delete(name: str, s: SessionDep, account: Account) -> Response:
     repo.delete_integration(s, account, name)
+    record(s, account, "integration.deleted", name)
     return Response(status_code=204)
 
 
 @router.patch("/integrations/{name}/enabled")
 def set_enabled(name: str, body: EnabledBody, s: SessionDep, account: Account) -> dict:
-    return summary(s, repo.set_enabled(s, account, name, body.enabled))
+    row = repo.set_enabled(s, account, name, body.enabled)
+    record(s, account, "integration.enabled" if body.enabled else "integration.disabled", name, row.revision)
+    return summary(s, row)
 
 
 @router.get("/integrations/{name}/health")
@@ -96,6 +103,8 @@ def get_health(name: str, s: SessionDep, account: Account) -> dict:
 
 @router.post("/integrations/{name}/test")
 def test(name: str, body: TestBody, engine: EngineDep, client: ClientDep, account: Account) -> dict:
+    with session_scope(engine) as s:
+        record(s, account, "action.tested", f"{name}/{body.action}")
     return runner.test(engine, account, name, body.action, body.inputs, client=client)
 
 
@@ -104,6 +113,8 @@ def run_action(name: str, action: str, background: BackgroundTasks, response: Re
                account: Account, body: RunBody | None = None):
     inputs = body.inputs if body else None
     started = runner.begin(engine, account, name, action, "manual", inputs)
+    with session_scope(engine) as s:
+        record(s, account, "action.run", f"{name}/{action}")
     if started.mode == "pull":  # D-6: a pull finishes in the background. Poll GET /runs/{run_id}.
         background.add_task(runner.execute, engine, started, inputs, client=client)
         response.status_code = 202

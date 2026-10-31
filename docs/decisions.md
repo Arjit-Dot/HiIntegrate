@@ -83,6 +83,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
 | D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
 | D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions, **both checked and confirmed by Person B (1 Nov)**. On `main` at `f345556`; `contract-v4` is tagged after this confirmation** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
+| D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov), built on branch `a/audit-and-limits`, awaiting Person A's approval.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged by Person A after approval |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -1409,6 +1410,52 @@ Person B reviewed the branch (`a/multi-user` at `4af82b7`) before approving:
 **Seen while checking, not conditions:** in Compose the API has `restart: unless-stopped`, so on an old database it restarts in a loop and the message is in `docker compose logs backend`, not on the `docker compose up` screen; and the check compares column names only, so it would not notice a changed column type.
 
 **Noted, not conditions** (named so they are not lost): registration is open by default and `/auth/register` has no rate limit; scrypt `n=2^14` is below today's usual advice (`2^17`); the API docs and `openapi.json` are readable without signing in; the session token is kept in `localStorage`; the login throttle is per username and per process.
+
+---
+
+## D-19: Audit log and rate limits (S-7 and S-9)
+
+**Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: built on branch `a/audit-and-limits`, not merged. It changes `schema/openapi.yaml`, so it needs Person A's approval and a new tag (`contract-v5`) before it goes to `main`.**
+
+D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each needs its own contract approval. Checkpoint 3 is **not** green yet (see `roadmap.md`). Person B built S-7 and S-9 anyway, on the instruction of the project owner, and keeps them off `main` until Person A decides. Nothing here is on `main`, so the ordering rule is still met where it matters: no unapproved contract change is live.
+
+**S-8 is not part of this.** D-18 already gives every route a sign-in and a `401`. This decision does not touch it.
+
+### What is built
+
+| Part | Behaviour |
+|---|---|
+| S-7 audit table | `audit` (id, account, time, event, target, revision, request id). Written in the same transaction as the change, so a rolled-back change leaves no entry |
+| S-7 events | `integration.created`, `integration.updated`, `integration.deleted`, `integration.enabled`, `integration.disabled`, `secret.set`, `action.tested`, `action.run` (a manual run) |
+| S-7 what is never stored | A secret value, a config body, a record, an input value. Only names, the `revision` and the request id |
+| S-7 route | `GET /audit?limit&offset&event&target`, newest first, **own account only**, needs a sign-in (401 otherwise) |
+| S-9 limits | Per account, per minute, in memory per API process: **write** 60 (create, update, delete, enable, set a secret), **run** 30 (test and manual run), **ai** 20. Reads and `/integrations/validate` are never limited |
+| S-9 reply | `429` with the existing error code `rate_limited`, a `Retry-After` header (seconds) and `details: {bucket, retry_after}` |
+| S-9 settings | `RATE_LIMIT_WRITE`, `RATE_LIMIT_RUN`, `RATE_LIMIT_AI` (`0` turns one off). Not config-driven |
+| S-9 size cap | The engine streams every response and stops at `MAX_RESPONSE_BYTES` (default 10,000,000). Over the cap, the run fails with the existing code `bad_response` ("the response is larger than the N-byte limit"). Content-Length is checked first, so a huge body is refused before it is read |
+
+### Contract impact
+
+- `openapi.yaml`: new route `/audit`, schema `AuditEntry`, tag `Audit`, a shared response `RateLimited` and a `429` on 11 operations (create, replace, delete, enable, test, run, set secret, and the four AI routes). A note in the description.
+- `result.schema.json` and `integration.schema.json`: **unchanged.** The size cap reuses `bad_response`, and `rate_limited` already exists in the error codes (D-18).
+- The frontend's types are regenerated (`npm run types`). No screen changes: the API client already shows `error.message`, so a 429 reads "Too many write requests. Wait 12 s and try again."
+
+### Limits of this version (said plainly)
+
+- The audit log records **changes made through the API**. The worker's scheduled runs are in run history, not the audit log. Nothing records reads.
+- Limits live in the memory of one API process. With several API processes each counts alone, and a restart clears the counters. Fine for the single-process Compose setup.
+- The audit table is created at startup (`create_all`), so an existing database gets it with no reset. No retention yet (S-10).
+- Rate limits protect against a runaway client or a stolen token. They do not replace S-6 (the guard on where the engine sends requests).
+
+### Tests
+
+`backend/tests/test_audit_limits.py` (17 tests): every event is recorded; no secret value and no config text appears in the log; filters and paging; one account cannot read another's log; 401 without a sign-in; a failed change leaves no entry; 429 with `Retry-After`; reads and validation are never limited; the limit is per account; run and AI buckets are separate; `0` turns a limit off; the window slides; the size cap catches a declared and a streamed oversize body, keeps headers (so `Link` paging still works) and defaults to 10 MB. The whole suite: 382 passed, 7 skipped. `ruff`, the contract check, the Redocly lint and the frontend build pass.
+
+### Approval needed from Person A
+
+1. Approve or list changes to the contract impact above.
+2. If approved: merge `a/audit-and-limits` to `main`, tag `contract-v5`, and tick S-7 and S-9 in `roadmap.md`.
+3. Decide whether the limits (60 / 30 / 20 a minute) suit the demo. The rehearsal script and the Finaltester steps stay well under them.
 
 ---
 
