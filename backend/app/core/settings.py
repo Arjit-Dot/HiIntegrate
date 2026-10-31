@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     smtp_from: str | None = None
 
     llm_api_key: str | None = None
-    llm_model: str = "claude-sonnet-5-5"
+    llm_model: str = "gemini-3.5-flash"
+    llm_fallback_model: str | None = "gemini-3.1-flash-lite"  # used when the main model stays overloaded (503) or unreachable
 
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:5173"]

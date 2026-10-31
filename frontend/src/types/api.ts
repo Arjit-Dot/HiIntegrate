@@ -2247,8 +2247,13 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    text: string;
-                };
+                    /** @description AI mode: a service name such as `Jira`. The AI finds the API documentation, trying several pages before giving up. Ignored for searching when `url` or `text` is also sent. */
+                    service?: string;
+                    /** @description Pasted docs, a curl example, a sample response, or the text of an attached document. HTML is turned into plain text. */
+                    text?: string;
+                    /** @description AI mode: an https documentation page (or an OpenAPI file). The server reads it. Private addresses and non-text pages are refused with 422. */
+                    url?: string;
+                } | unknown | unknown | unknown;
             };
         };
         responses: {
@@ -2264,9 +2269,32 @@ export interface operations {
                             [key: string]: unknown;
                         };
                         errors: components["schemas"]["ValidationIssue"][];
+                        /** @description Present when `url` was sent: the page that was read. */
+                        source?: {
+                            /** @description The final address, after redirects. */
+                            url: string;
+                            /** @description Readable characters on the page. */
+                            chars: number;
+                            /** @description True when only the first 50,000 characters went to the model. */
+                            truncated: boolean;
+                        };
+                        /** @description Present when `service` was searched: every page tried, in order. The last one is the page the draft came from. On 422 the same list is in `error.details.tried`. */
+                        tried?: {
+                            url: string;
+                            ok: boolean;
+                            /** @description Why the page was not used, or null. */
+                            reason: string | null;
+                        }[];
+                        /** @description One entry per try: the first draft and up to two corrections after the validator's complaints. */
+                        attempts?: {
+                            attempt: number;
+                            valid: boolean;
+                            error_count: number;
+                        }[];
                     };
                 };
             };
+            422: components["responses"]["ValidationError"];
             501: components["responses"]["Unsupported"];
         };
     };

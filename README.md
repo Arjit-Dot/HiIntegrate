@@ -111,7 +111,7 @@ Put these in `.env` (never committed). The list shows **names only**. Real value
 | `DATABASE_URL`, `POSTGRES_PASSWORD` | The database |
 | `ENCRYPTION_KEY` | Encrypts stored secrets. Never share it |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_FROM` | The mail account that sends alerts |
-| `LLM_API_KEY`, `LLM_MODEL` | The AI extras. The model defaults to `claude-sonnet-5-5` |
+| `LLM_API_KEY`, `LLM_MODEL` | The AI extras, which use Google Gemini (a key from Google AI Studio). The model defaults to `gemini-3.5-flash`. Without a key the `/ai/*` routes answer 501 and everything else works |
 | `SECRET_<NAME>` | A token or password for a service, such as `SECRET_GITHUB_TOKEN`, `SECRET_JIRA_TOKEN`, `SECRET_OKTA_TOKEN`, `SECRET_SMTP_PASSWORD` |
 | `SECRET_<NAME>_HOST` | Optional. The host that secret is pinned to, such as `SECRET_GITHUB_TOKEN_HOST=api.github.com` |
 

@@ -552,7 +552,14 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: false, required: [text], properties: { text: { type: string, minLength: 1 } } }
+            schema:
+              type: object
+              additionalProperties: false
+              anyOf: [{ required: [text] }, { required: [url] }, { required: [service] }]
+              properties:
+                service: { type: string, minLength: 1, maxLength: 100, description: "AI mode: a service name such as `Jira`. The AI finds the API documentation, trying several pages before giving up. Ignored for searching when `url` or `text` is also sent." }
+                text: { type: string, minLength: 1, description: "Pasted docs, a curl example, a sample response, or the text of an attached document. HTML is turned into plain text." }
+                url: { type: string, minLength: 1, maxLength: 2000, description: "AI mode: an https documentation page (or an OpenAPI file). The server reads it. Private addresses and non-text pages are refused with 422." }
       responses:
         "200":
           description: A draft
@@ -565,6 +572,35 @@ paths:
                   yaml: { type: string }
                   config: { type: object, additionalProperties: true }
                   errors: { type: array, items: { $ref: "#/components/schemas/ValidationIssue" } }
+                  source:
+                    type: object
+                    description: "Present when `url` was sent: the page that was read."
+                    required: [url, chars, truncated]
+                    properties:
+                      url: { type: string, description: "The final address, after redirects." }
+                      chars: { type: integer, description: "Readable characters on the page." }
+                      truncated: { type: boolean, description: "True when only the first 50,000 characters went to the model." }
+                  tried:
+                    type: array
+                    description: "Present when `service` was searched: every page tried, in order. The last one is the page the draft came from. On 422 the same list is in `error.details.tried`."
+                    items:
+                      type: object
+                      required: [url, ok, reason]
+                      properties:
+                        url: { type: string }
+                        ok: { type: boolean }
+                        reason: { type: [string, "null"], description: "Why the page was not used, or null." }
+                  attempts:
+                    type: array
+                    description: "One entry per try: the first draft and up to two corrections after the validator's complaints."
+                    items:
+                      type: object
+                      required: [attempt, valid, error_count]
+                      properties:
+                        attempt: { type: integer, minimum: 1 }
+                        valid: { type: boolean }
+                        error_count: { type: integer, minimum: 0 }
+        "422": { $ref: "#/components/responses/ValidationError" }
         "501": { $ref: "#/components/responses/Unsupported" }
 
   /ai/summarize:

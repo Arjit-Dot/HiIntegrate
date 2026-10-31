@@ -5,14 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
-import { api, ApiError, type Config, type SecretInfo, type TestResponse } from '../api/client'
+import { api, ApiError, type Config, type GenerateConfigResponse, type SecretInfo, type TestResponse } from '../api/client'
 import { applyPreset, buildConfig, configToState, defaultState, hostOf, SCHEMAS, TRANSFORMS, type FormState, type SchemaName } from '../lib/config'
 import { ErrorBox, Pill, useToast } from '../components/common'
 import { TestResult } from '../components/TestResult'
+import { AiDraft } from '../components/AiDraft'
 import { lineOf, locate, missingVar } from '../lib/validation'
 
 type Issue = { path: string; message: string; severity: 'error' | 'warning'; line?: number }
 type Pane = 'config' | 'validate' | 'test'
+type Draft = { from: string; problems: number; tried: number; vars: [string, string][]; secret?: string }
 
 export default function AddEdit() {
   const { id } = useParams()
@@ -36,6 +38,8 @@ export default function AddEdit() {
   const [testErr, setTestErr] = useState('')
   const [testInputs, setTestInputs] = useState('{\n  "id": "1"\n}')
   const [busy, setBusy] = useState(false)
+  const [mode, setMode] = useState<'manual' | 'ai'>('manual')   // AI mode: a documentation link or file in, a draft out
+  const [draft, setDraft] = useState<Draft | null>(null)
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => { setRaw(null); setS(p => ({ ...p, [k]: v })) }
   const bind = (k: keyof FormState) => ({
@@ -68,6 +72,26 @@ export default function AddEdit() {
       setS({ ...st, name }); setEditedAction(st.actionName)
     }).catch(e => setLoadError(e.message))
   }, [id, templateId])
+
+  // AI mode (D-14): the draft opens exactly like a template does, so a person reviews, tests and saves it.
+  function applyDraft(r: GenerateConfigResponse) {
+    const problems = r.errors.filter(e => e.severity === 'error').length
+    const from = r.source?.url ?? 'the attached document'
+    const c0 = r.config as Config | undefined
+    setDraft({ from, problems, tried: Math.max((r.tried?.length ?? 1) - 1, 0), vars: Object.entries<unknown>(c0?.vars ?? {}).map(([k, v]) => [k, String(v)]), secret: c0?.auth?.secret })
+    setMode('manual')
+    try {
+      const c = r.config as Config | undefined
+      if (!c) throw new Error('no parsed config')
+      const st = configToState(c)
+      let name = st.name, n = 2
+      while (taken.includes(name)) name = `${st.name}-${n++}`
+      setBase(c); setRequires(c.requires); setRaw(null)
+      setS({ ...st, name }); setEditedAction(st.actionName)
+    } catch {
+      setRaw(r.yaml); setFmt('yaml'); setPane('config')   // the draft could not fill the form: edit the text instead
+    }
+  }
 
   // The config: from the editor text if the person typed in it, otherwise built from the form.
   const parsed = useMemo<{ config?: Config; error?: string }>(() => {
@@ -201,6 +225,26 @@ export default function AddEdit() {
           <p>Fill in the form. The config on the right is built live, and nothing is saved until it validates.{id && ' Saving updates this integration in place (D-15).'}</p>
         </div>
       </div>
+
+      {!id && !templateId && (
+        <div className="inline" style={{ marginBottom: 16 }} role="group" aria-label="How to add the integration">
+          <Button type="button" size="sm" variant={mode === 'manual' ? 'default' : 'secondary'} onClick={() => setMode('manual')}>Manual</Button>
+          <Button type="button" size="sm" variant={mode === 'ai' ? 'default' : 'secondary'} onClick={() => setMode('ai')}>AI</Button>
+        </div>
+      )}
+      {mode === 'ai' && !id && <AiDraft onDraft={applyDraft} />}
+      {draft && mode === 'manual' && !id && (
+        <div className="callout">
+          <strong>Drafted by AI from {draft.from}.</strong>{draft.tried > 0 && <> <span className="muted">({draft.tried} other page{draft.tried === 1 ? '' : 's'} tried first)</span></>} The AI can guess wrong, so check the paths and mapping below.
+          {draft.problems > 0 ? <> The draft has <b>{draft.problems}</b> validation problem{draft.problems === 1 ? '' : 's'}: they are marked in the form and the editor.</> : ' It passes validation.'}
+          <ul>
+            {draft.vars.length > 0 && <li><b>Check what the AI filled in</b> under Variables (they are examples, so replace them with yours): {draft.vars.map(([k, v], i) => <span key={k}>{i > 0 && ', '}<code>{k}</code> = <code>{v}</code></span>)}.</li>}
+            <li>Secret name: <code>{draft.secret ?? 'see Authentication'}</code>. Enter its <b>value</b> in <b>Authentication</b>: only you can supply it.</li>
+            <li>Press <b>Test connection</b> to see whether the mapped paths exist in the real response.</li>
+            <li>Nothing is saved until you press Save.</li>
+          </ul>
+        </div>
+      )}
 
       {templateId && !id && (
         <div className="callout">
