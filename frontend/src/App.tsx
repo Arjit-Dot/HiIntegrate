@@ -3,6 +3,7 @@ import { ToastProvider } from './components/common'
 import Integrations from './pages/Integrations'
 import AddEdit from './pages/AddEdit'
 import Placeholder from './pages/Placeholder'
+import Templates from './pages/Templates'
 import Secrets from './pages/Secrets'
 import { API_BASE } from './api/client'
 
@@ -31,7 +32,7 @@ export default function App() {
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/add" element={<AddEdit />} />
           <Route path="/integrations/:id/edit" element={<AddEdit />} />
-          <Route path="/templates" element={<Placeholder title="Templates" note="Starting points for each record type." />} />
+          <Route path="/templates" element={<Templates />} />
           <Route path="/results" element={<Placeholder title="Results" note="Normalized records, one table per schema." />} />
           <Route path="/quarantine" element={<Placeholder title="Quarantine" note="Records that failed the rules." />} />
           <Route path="/runs" element={<Placeholder title="Run history" note="Every scheduled, manual and test run." />} />

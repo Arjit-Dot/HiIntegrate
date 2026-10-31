@@ -2,7 +2,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Editor from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
 import { api, ApiError, type Config, type SecretInfo, type TestResponse } from '../api/client'
@@ -15,6 +15,8 @@ type Pane = 'config' | 'validate' | 'test'
 
 export default function AddEdit() {
   const { id } = useParams()
+  const templateId = useSearchParams()[0].get('template')
+  const [requires, setRequires] = useState<Config | undefined>()   // from the template, to tell the person what to fill in
   const nav = useNavigate()
   const toast = useToast()
   const [s, setS] = useState<FormState>(defaultState)
@@ -48,6 +50,17 @@ export default function AddEdit() {
       setS(st); setEditedAction(st.actionName)
     }).catch(e => setLoadError(e.message))
   }, [id])
+
+  // "Use this template" (D-15: a template is only a starting point, so saving creates a NEW integration).
+  useEffect(() => {
+    if (id || !templateId) return
+    api.getTemplate(templateId).then(r => {
+      const c = r.config as Config
+      setBase(c); setRequires(c.requires)
+      const st = configToState(c)
+      setS(st); setEditedAction(st.actionName)
+    }).catch(e => setLoadError(e.message))
+  }, [id, templateId])
 
   // The config: from the editor text if the person typed in it, otherwise built from the form.
   const parsed = useMemo<{ config?: Config; error?: string }>(() => {
@@ -137,6 +150,13 @@ export default function AddEdit() {
         </div>
       </div>
 
+      {templateId && !id && (
+        <div className="callout">
+          <strong>Started from the {templateId} template.</strong> Saving creates a new integration; the template itself is not changed.
+          {requires?.vars && <ul>{Object.entries<any>(requires.vars).map(([k, v]) => <li key={k}>Set <code>{k}</code> in Variables: {v.label}{v.example ? <> (for example <code>{String(v.example)}</code>)</> : null}</li>)}</ul>}
+          {requires?.secrets?.length ? <div className="hint">Needs the secret <code>{requires.secrets.join(', ')}</code>: enter its value in the Authentication section.</div> : null}
+        </div>
+      )}
       <div className="callout">
         <strong>What the platform requires</strong> <span className="muted">(fields marked <span className="star">*</span>)</span>
         <ul>

@@ -10,6 +10,7 @@ export type Integration = S['Integration']
 export type ValidateResponse = S['ValidateResponse']
 export type TestResponse = S['TestResponse']
 export type SecretInfo = S['SecretInfo']
+export type TemplateSummary = S['TemplateSummary']
 export type Config = Record<string, any>
 
 export class ApiError extends Error {
@@ -54,6 +55,8 @@ export const api = {
     call<IntegrationSummary>('PATCH', `/integrations/${encodeURIComponent(id)}/enabled`, { enabled }),
   test: (id: string, action: string, inputs?: Record<string, unknown>) =>
     call<TestResponse>('POST', `/integrations/${encodeURIComponent(id)}/test`, { action, inputs }),
+  listTemplates: () => call<{ items: TemplateSummary[] }>('GET', '/templates'),
+  getTemplate: (id: string) => call<{ id: string; config: Config; yaml: string }>('GET', `/templates/${encodeURIComponent(id)}`),
   listSecrets: () => call<{ items: SecretInfo[] }>('GET', '/secrets'),
   setSecret: (name: string, value: string, host: string) =>
     call<void>('PUT', `/secrets/${encodeURIComponent(name)}`, { value, host }),
