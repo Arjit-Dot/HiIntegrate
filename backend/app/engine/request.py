@@ -1,0 +1,53 @@
+"""Build the HTTP request for an action: placeholders, auth and headers (D-2.3, D-2.5, D-2.16, D-2.17)."""
+
+import base64
+from dataclasses import dataclass
+from datetime import datetime
+
+import httpx
+
+from app.engine.placeholders import fill
+from app.secrets import Secret, get_secret
+
+USER_AGENT = "HiIntegrate/1.0"
+
+
+@dataclass
+class Prepared:
+    request: httpx.Request
+    secret: Secret | None
+    host: str
+
+
+def build_request(cfg: dict, action_name: str, *, inputs: dict | None = None, state: dict | None = None,
+                  now: datetime | None = None, url: str | None = None) -> Prepared:
+    """`url` overrides the address (a next-page link). Its host is checked against the secret later."""
+    action = cfg["actions"][action_name]
+    vars_ = cfg.get("vars") or {}
+    ctx = {"vars": vars_, "inputs": inputs or {}, "state": state or {}, "now": now}
+    req = action["request"]
+
+    # Some services (GitHub) refuse a request with no User-Agent, and httpx.Request alone sends none.
+    headers = {"User-Agent": USER_AGENT, **((cfg.get("defaults") or {}).get("headers") or {}), **fill(req.get("headers") or {}, **ctx)}
+    params = {k: str(v) for k, v in fill(req.get("query") or {}, **ctx).items()} if url is None else {}
+    body = fill(req.get("body"), **ctx)
+    if url is None:
+        url = fill(cfg["base_url"], vars=vars_).rstrip("/") + fill(req["path"], **ctx)
+
+    auth = cfg["auth"]
+    secret = get_secret(auth["secret"]) if auth.get("type") in ("api_key", "bearer", "basic") else None
+    if auth["type"] == "api_key":
+        token = (auth.get("prefix") or "") + secret.value
+        if auth["in"] == "header":
+            headers[auth["name"]] = token
+        else:
+            params[auth["name"]] = token
+    elif auth["type"] == "bearer":
+        headers["Authorization"] = f"Bearer {secret.value}"
+    elif auth["type"] == "basic":
+        user = fill(auth["username"], vars=vars_)
+        headers["Authorization"] = "Basic " + base64.b64encode(f"{user}:{secret.value}".encode()).decode()
+
+    kwargs = {"json": body} if isinstance(body, (dict, list)) else ({"content": body} if body else {})
+    request = httpx.Request(req["method"], url, params=params or None, headers=headers, **kwargs)
+    return Prepared(request=request, secret=secret, host=request.url.host)
