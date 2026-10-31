@@ -33,6 +33,7 @@ main{max-width:1280px;margin:0 auto;padding:24px}
 .btn.small{padding:4px 10px;font-size:12.5px}
 .btn.danger{background:#fff;color:var(--bad);border-color:#f3c6c6}
 input[type=text],input[type=number],input[type=password],select,textarea{width:100%;border:1px solid #d5dbe6;border-radius:8px;padding:8px 10px;font:inherit;background:#fff;color:var(--ink)}
+[aria-invalid=true]{border-color:var(--bad)!important;background-color:#fff5f5}
 input:focus,select:focus,textarea:focus{outline:2px solid #c7cbff;border-color:var(--accent)}
 select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23667085' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
 textarea{resize:vertical;min-height:64px}
