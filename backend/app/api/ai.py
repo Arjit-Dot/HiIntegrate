@@ -139,6 +139,13 @@ def docs_dep():
     return fetch_docs
 
 
+class SuggestMappingBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_schema: Literal["user", "device", "alert"]
+    sample: object  # a pasted response: a list of records, an object holding a list, or one record
+    mapping: dict[str, dict] | None = None  # edited entries to check against the sample, with no model call
+
+
 class SummarizeBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target: Literal["user", "device", "alert"] = "user"
@@ -192,6 +199,18 @@ def generate_config(body: GenerateBody, llm: LlmDep, fetch: Annotated[Callable[[
     if tried is not None:
         out["tried"] = tried
     return out
+
+
+@router.post("/ai/suggest-mapping")
+def suggest_mapping(body: SuggestMappingBody, llm: LlmDep) -> dict:
+    """With `mapping`, only check the person's entries against the sample (no model, so it works with AI switched off).
+    Without it, the model suggests a path per field and the platform checks each one against the real records."""
+    if not isinstance(body.sample, (dict, list)) or not features.find_records(body.sample)[1]:
+        raise ApiError(422, "validation_error", "The sample has no records: paste a response that contains at least one object",
+                       {"errors": [{"path": "sample", "message": "needs at least one record", "severity": "error"}]})
+    if body.mapping is not None:
+        return features.check_mapping(body.target_schema, body.sample, body.mapping)
+    return ask(features.suggest_mapping, require_llm(llm), body.target_schema, body.sample)
 
 
 @router.post("/ai/summarize")

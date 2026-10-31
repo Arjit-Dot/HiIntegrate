@@ -203,14 +203,14 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [x] **Stretch, only if ahead:** schema drift check. If a mapped path vanishes from the response, mark the connection degraded and name the path. *(30)*
 
 ### Person B (about 155 minutes)
-- [ ] `ai/client.py`: the LLM wrapper, with the key from `LLM_API_KEY` and the model from a setting. Redacts secrets and auth headers, returns `501` when no key is set. *(5)*
-- [ ] **Summary**: the stored records in, a plain-language overview out, using `storage.get_results`. *(20)*
-- [ ] **Config authoring with a repair loop**: docs, curl or a sample response in, a draft config out. Run `validate_config` and feed the errors back (up to 2 retries), then run `test_action` and feed any missing paths back. The UI shows each step ("attempt 1: 3 errors, attempt 2: valid, test: all paths found"). Secrets are removed before anything reaches the model. The templates are the examples. *(30)*
-- [ ] **AI propose-fix (D-14), the headline AI feature.** `POST /ai/propose-fix` with `kind: quarantine` (cluster the rejects by reason and propose a `value_map` entry, a new `map` path or a transform) and `kind: run_failure` (explain the cause, propose a patch). Validate the proposal, retry the model once with the errors, then dry-run it with `engine.remap_records` and return `rescued` of `checked`. Cap at 20 raw records to the model and 200 re-checked. Nothing is saved. *(40)*
+- [x] `ai/client.py`: the LLM wrapper, with the key from `LLM_API_KEY` and the model from a setting. Redacts secrets and auth headers, returns `501` when no key is set. *(5)*
+- [x] **Summary**: the stored records in, a plain-language overview out, using `storage.get_results`. *(20)*
+- [x] **Config authoring with a repair loop**: docs, curl or a sample response in, a draft config out. Run `validate_config` and feed the errors back (up to 2 retries), then run `test_action` and feed any missing paths back. The UI shows each step ("attempt 1: 3 errors, attempt 2: valid, test: all paths found"). Secrets are removed before anything reaches the model. The templates are the examples. *(30)*
+- [x] **AI propose-fix (D-14), the headline AI feature.** `POST /ai/propose-fix` with `kind: quarantine` (cluster the rejects by reason and propose a `value_map` entry, a new `map` path or a transform) and `kind: run_failure` (explain the cause, propose a patch). Validate the proposal, retry the model once with the errors, then dry-run it with `engine.remap_records` and return `rescued` of `checked`. Cap at 20 raw records to the model and 200 re-checked. Nothing is saved. *(40)*
 - [x] **Buttons and panels:** "Generate with AI", "Summarize", and on the Quarantine page "Fix with AI", which shows the change, "rescues N of M", mapped samples, and an Apply button that sends `proposed_config` to `PUT /integrations/{id}`. The draft opens in the editor for a person to review. *(20)*
-- [ ] **AI mapping suggestions** (replaces the visual mapping builder): paste a sample, the model suggests a JMESPath for each target field with a confidence label, the person accepts or edits each, and the existing preview shows the mapped record. *(25)*
-- [ ] **Alert settings** in the form and a visible alert state on failing connections. *(10)*
-- [ ] Dark mode. *(5)*
+- [x] **AI mapping suggestions** (replaces the visual mapping builder): paste a sample, the model suggests a JMESPath for each target field with a confidence label, the person accepts or edits each, and the existing preview shows the mapped record. *(25)*
+- [x] **Alert settings** in the form and a visible alert state on failing connections. *(10)*
+- [x] Dark mode. *(5)*
 
 **AI rules (apply to every feature above):** a person approves every change, the model never writes to the database or a config by itself, secrets and auth headers are never sent, and the product still demos fully with AI switched off. Cache one good output per feature for the demo.
 

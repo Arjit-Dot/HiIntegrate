@@ -448,3 +448,87 @@ def test_a_duplicate_key_draft_is_corrected_and_comes_back_filled(api):
     assert body["config"]["vars"] == {"site": "your-domain", "email": "you@your-company.com"}
     assert body["yaml"].count("requires:") == 1 and "'true': active" in body["yaml"]
     assert not [e for e in body["errors"] if e["severity"] == "error"]
+
+
+# ---------------------------------------------------------------- AI mapping suggestions
+
+SAMPLE = {"total": 2, "users": [
+    {"uid": 7, "login": "ada", "mail": "Ada@Acme.com", "state": "ENABLED", "seen": "2026-10-30T10:00:00Z"},
+    {"uid": 8, "login": "bob", "mail": "bob@acme.com", "state": "DISABLED", "seen": None}]}
+SUGGESTION = {"fields": [
+    {"field": "id", "path": "uid", "transform": "string", "confidence": "high", "reason": "numeric unique key"},
+    {"field": "name", "path": "login", "transform": None, "confidence": "high", "reason": "login name"},
+    {"field": "email", "path": "mail", "transform": "lowercase", "confidence": "high", "reason": "address"},
+    {"field": "status", "path": "state", "value_map": {"ENABLED": "active", "DISABLED": "inactive"}, "confidence": "medium", "reason": "state"},
+    {"field": "last_login", "path": "seen", "transform": "datetime", "confidence": "high", "reason": "timestamp"},
+    {"field": "nonsense", "path": "x", "confidence": "high", "reason": "not a schema field"}]}
+
+
+def test_find_records_in_a_pasted_response():
+    assert features.find_records([{"a": 1}, 5, {"b": 2}]) == ("@", [{"a": 1}, {"b": 2}])
+    assert features.find_records(SAMPLE)[0] == "users" and len(features.find_records(SAMPLE)[1]) == 2
+    assert features.find_records({"id": 1, "name": "x"}) == ("@", [{"id": 1, "name": "x"}])
+    assert features.find_records("text") == ("@", []) and features.find_records({"meta": {"a": 1}}) == ("@", [{"meta": {"a": 1}}])
+
+
+def test_suggestions_are_checked_against_the_sample_and_previewed(api):
+    model = use(api, Script(SUGGESTION))
+    r = api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "user", "sample": SAMPLE})
+    body = r.json()
+    assert r.status_code == 200 and body["records_path"] == "users" and body["records_found"] == 2
+    by = {f["field"]: f for f in body["fields"]}
+    assert list(by) == ["id", "name", "email", "status", "last_login"]  # schema order, the invented field dropped
+    assert by["id"]["found"] == 2 and by["id"]["of"] == 2 and by["id"]["example"] == 7 and by["id"]["confidence"] == "high"
+    assert by["last_login"]["found"] == 1 and by["last_login"]["confidence"] == "medium"  # one record has no value: high is lowered
+    assert by["status"]["value_map"] == {"ENABLED": "active", "DISABLED": "inactive"}
+    assert body["preview"]["record"] == {"id": "7", "name": "ada", "email": "ada@acme.com", "status": "active", "last_login": "2026-10-30T10:00:00Z"}
+    sent = model.prompts[0]
+    assert "***@acme.com" in sent and "Ada@Acme.com" not in sent and '"login": "***"' in sent  # masked on the way to the model
+    assert "active, inactive, suspended, unknown" in sent or "active" in sent
+
+
+def test_a_path_that_finds_nothing_is_marked_low_and_a_broken_path_is_invalid(api):
+    bad = {"fields": [{"field": "id", "path": "uid", "confidence": "high"}, {"field": "name", "path": "nope.here", "confidence": "high", "reason": "guess"},
+                      {"field": "email", "path": "mail[", "confidence": "high"}]}
+    use(api, Script(bad))
+    body = api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "user", "sample": SAMPLE}).json()
+    by = {f["field"]: f for f in body["fields"]}
+    assert by["name"]["confidence"] == "low" and by["name"]["found"] == 0 and "Nothing was found" in by["name"]["reason"]
+    assert by["email"]["valid"] is False and by["email"]["confidence"] == "low"
+    assert body["preview"]["quarantine"] == {"reason": "invalid_value", "field": "id"}  # a numeric id needs the string transform
+
+
+def test_a_preview_says_why_a_record_would_be_quarantined(api):
+    use(api, Script({"fields": [{"field": "id", "path": "uid", "transform": "string", "confidence": "high"},
+                                {"field": "status", "path": "login", "confidence": "low", "value_map": {"zzz": "active"}}]}))
+    body = api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "user", "sample": SAMPLE}).json()
+    assert body["preview"]["record"]["status"] == "unknown"  # a value outside the map falls to the default, it is not rejected
+    use(api, Script({"fields": [{"field": "name", "path": "login", "confidence": "high"}]}))
+    body = api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "user", "sample": SAMPLE}).json()
+    assert body["preview"] == {"quarantine": {"reason": "missing_required_field", "field": "id"}}
+
+
+def test_edited_entries_are_checked_without_a_model_so_it_works_with_ai_off(api):
+    use(api, None)  # no key
+    mapping = {"id": {"path": "uid", "transform": "string"}, "email": {"path": "mail", "transform": "lowercase"}, "name": {"path": "wrong"}, "bogus": {"path": "x"}}
+    r = api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "user", "sample": SAMPLE, "mapping": mapping})
+    body = r.json()
+    assert r.status_code == 200 and {f["field"] for f in body["fields"]} == {"id", "email", "name"}
+    assert {f["field"]: f["found"] for f in body["fields"]} == {"id": 2, "email": 2, "name": 0}
+    assert body["preview"]["record"]["email"] == "ada@acme.com"
+    assert api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "user", "sample": SAMPLE}).status_code == 501  # suggesting needs the model
+
+
+def test_a_sample_with_no_records_is_a_422(api):
+    use(api, Script())
+    for sample in ([], {}, "just text", [1, 2, 3], 5):
+        r = api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "user", "sample": sample})
+        assert r.status_code == 422, (sample, r.status_code)
+    assert api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "ticket", "sample": SAMPLE}).status_code == 400
+
+
+def test_devices_and_alerts_use_their_own_fields(api):
+    use(api, Script({"fields": [{"field": "id", "path": "id", "confidence": "high"}, {"field": "severity", "path": "level", "confidence": "high",
+                                                                                      "value_map": {"HIGH": "high"}}, {"field": "email", "path": "x", "confidence": "high"}]}))
+    body = api.post("/api/v1/ai/suggest-mapping", json={"target_schema": "alert", "sample": [{"id": "a1", "level": "HIGH"}]}).json()
+    assert [f["field"] for f in body["fields"]] == ["id", "severity"] and body["preview"]["record"]["severity"] == "high"

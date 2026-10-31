@@ -9,6 +9,14 @@ import { Modal, Pill, useToast } from './common'
 // raw records again with it (a dry run): "rescues N of M". Nothing is saved by that. Apply is the normal
 // PUT /integrations/{id}, pressed by a person who has seen the change and the count.
 
+// The last good proposal per action is kept in this browser as a demo fallback. It can only be applied if the integration still
+// has the revision it was made for, which is the same guard as for a fresh proposal.
+type SavedFix = { fix: ProposeFixResponse; revision: number | null; at: string }
+const fixKey = (integration: string, action: string) => `hiintegrate.fix.${integration}.${action}`
+function loadFix(integration: string, action: string): SavedFix | null {
+  try { return JSON.parse(localStorage.getItem(fixKey(integration, action)) ?? 'null') } catch { return null }
+}
+
 const show = (v: unknown) => (v === undefined || v === null ? 'new' : JSON.stringify(v, null, 2))
 
 type Props = { integration: string; action: string; onClose: () => void; onApplied: () => void }
@@ -22,18 +30,25 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
   const [revision, setRevision] = useState<number | null>(null)   // the revision the proposal was made against
   const [applying, setApplying] = useState(false)
   const [applied, setApplied] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)   // set when the proposal on screen is the saved one
   const [running, setRunning] = useState(false)
   const [after, setAfter] = useState<RunRecord | null>(null)   // the run started after applying, to show the effect
 
   async function ask() {
-    setBusy(true); setError(''); setFix(null); setApplied(false)
+    setBusy(true); setError(''); setFix(null); setApplied(false); setSavedAt(null)
     try {
       const current = await api.getIntegration(integration)
       setRevision(current.revision ?? null)
-      setFix(await api.proposeFix({ kind: 'quarantine', integration, action }))
+      const proposal = await api.proposeFix({ kind: 'quarantine', integration, action })
+      setFix(proposal)
+      try { localStorage.setItem(fixKey(integration, action), JSON.stringify({ fix: proposal, revision: current.revision ?? null, at: new Date().toISOString() })) } catch { /* private mode */ }
     } catch (e) {
       if (e instanceof ApiError && e.status === 501) setOff(true)
-      else setError((e as Error).message)
+      else {
+        setError((e as Error).message)
+        const saved = loadFix(integration, action)
+        if (saved) { setFix(saved.fix); setRevision(saved.revision); setSavedAt(saved.at) }
+      }
     } finally { setBusy(false) }
   }
   // Ask once per opening. (In development React runs effects twice: without this the model would be called twice.)
@@ -89,6 +104,7 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
 
       {fix && (
         <>
+          {savedAt && <div className="callout">This is the <b>saved proposal from {new Date(savedAt).toLocaleString()}</b>, shown because the AI could not be reached. You can only apply it if {integration} has not been edited since.</div>}
           <p style={{ marginTop: 0 }}>{fix.summary}</p>
 
           {fix.changes.length === 0 && (

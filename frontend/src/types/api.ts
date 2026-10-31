@@ -383,6 +383,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/suggest-mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest which path of a pasted sample feeds each field of a schema, and check it
+         * @description Paste a sample response. The platform finds the records in it. Without `mapping`, the model suggests a JMESPath for each
+         *     field of `target_schema` (with a transform, a `value_map` where the field has fixed values, and a confidence), and the
+         *     platform then checks every suggestion against the real sample records: how many records the path finds a value in, an
+         *     example value, and a preview of the first record as the mapper would save it (or why it would be quarantined).
+         *     A confidence is lowered when the path does not hold up. With `mapping` (entries a person wrote or edited) no model is
+         *     called, so it works with AI switched off. Nothing is saved. Records sent to the model are masked (D-14).
+         */
+        post: operations["suggestMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ai/summarize": {
         parameters: {
             query?: never;
@@ -451,6 +476,42 @@ export interface components {
             message: string;
             /** @enum {unknown} */
             severity: "error" | "warning";
+        };
+        MappingSuggestion: {
+            /** @description Where the records sit in the sample: a key name, or `@` when the sample is the list or one record. */
+            records_path: string;
+            records_found: number;
+            fields: {
+                field: string;
+                /** @description A JMESPath on one record. */
+                path: string;
+                transform?: string | null;
+                value_map?: {
+                    [key: string]: string;
+                } | null;
+                /** @enum {unknown} */
+                confidence: "high" | "medium" | "low";
+                reason?: string;
+                /** @description Sample records in which the path finds a value. */
+                found: number;
+                /** @description Sample records checked. */
+                of: number;
+                /** @description The first value found, or null. */
+                example?: unknown;
+                /** @description False when the path is not valid JMESPath. */
+                valid: boolean;
+            }[];
+            /** @description The first sample record as the mapper would save it, or why it would be quarantined. */
+            preview: {
+                record: {
+                    [key: string]: unknown;
+                };
+            } | {
+                quarantine: {
+                    reason: string;
+                    field: string;
+                };
+            };
         };
         ProposeFixResponse: {
             /** @description A plain-language explanation of the cause and the fix. */
@@ -2336,6 +2397,47 @@ export interface operations {
                             error_count: number;
                         }[];
                     };
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            501: components["responses"]["Unsupported"];
+        };
+    };
+    suggestMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {unknown} */
+                    target_schema: "user" | "device" | "alert";
+                    /** @description A list of records, an object holding a list of records, or one record. At least one record. */
+                    sample: unknown;
+                    /** @description Check these entries instead of asking the model. Keys are field names of the schema. */
+                    mapping?: {
+                        [key: string]: {
+                            path?: string;
+                            transform?: string | null;
+                            value_map?: {
+                                [key: string]: string;
+                            } | null;
+                        };
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description The checked suggestions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingSuggestion"];
                 };
             };
             422: components["responses"]["ValidationError"];
