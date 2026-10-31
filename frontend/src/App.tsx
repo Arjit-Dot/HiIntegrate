@@ -8,6 +8,7 @@ import Quarantine from './pages/Quarantine'
 import Runs from './pages/Runs'
 import Secrets from './pages/Secrets'
 import { API_BASE } from './api/client'
+import { useTheme } from './lib/theme'
 
 const NAV: [string, string][] = [
   ['/integrations', 'Integrations'], ['/add', 'Add integration'], ['/templates', 'Templates'],
@@ -15,6 +16,7 @@ const NAV: [string, string][] = [
 ]
 
 export default function App() {
+  const [theme, toggleTheme] = useTheme()
   return (
     <ToastProvider>
       <header className="topbar">
@@ -27,6 +29,9 @@ export default function App() {
           ))}
         </nav>
         <span className="proto" title="Set VITE_API_BASE to change it">API: {API_BASE}</span>
+        <button type="button" className="theme-toggle" onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>{theme === 'dark' ? '☀' : '☾'}</button>
       </header>
       <main>
         <Routes>
