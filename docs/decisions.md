@@ -77,8 +77,8 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-12 | Build-speed decisions (closing Phase 0) | Locked (decided on the team's behalf) |
 | D-13 | The frontend visual | Locked |
 | D-14 | `POST /ai/propose-fix` | Locked (approved by both, 31 Oct 7:40pm) |
-| D-15 | Configs live in the database, updated in place | Agreed by Person A. Person B to confirm |
-| D-16 | Unified users across services | Agreed by Person A. Person B to confirm. Tagged `contract-v3` |
+| D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
+| D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -127,8 +127,8 @@ One line per decision. Details and reasons are in the sections below.
 | D-12 | Build-speed decisions | `https` only (local `http` allowed); no API login; any SMTP server; hash is 32/40/64 hex; Claude model from `LLM_MODEL`; worker syncs every 15 s; run IDs `run-<n>` | None directly | Claude, on the team's behalf |
 | D-13 | The frontend visual | `docs/ui-prototype.html` is the final visual; Person B builds the app to match it | FR-10, B-2, B-3, B-5 | agreed |
 | D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | agreed |
-| D-15 | Configs in the database | One row per integration with a `revision`; adding to an existing service edits that row with `PUT`; templates are starting points only | FR-2, B-5 | Person A, B to confirm |
-| D-16 | Unified users | `GET /users/unified` merges users across services by lowercased email into one entry listing each service. Stored records are unchanged | FR-11 | Person A, B to confirm |
+| D-15 | Configs in the database | One row per integration with a `revision`; adding to an existing service edits that row with `PUT`; templates are starting points only | FR-2, B-5 | approved by both |
+| D-16 | Unified users | `GET /users/unified` merges users across services by lowercased email into one entry listing each service. Stored records are unchanged | FR-11 | approved by both |
 
 ---
 
@@ -1240,7 +1240,7 @@ One shared set of examples that both people treat as the truth:
 
 ## D-15: Configs live in the database, and changes update them in place
 
-**Covers:** FR-2, B-5 · **Source:** Person A's request (31 Oct, after the kickoff sync). **Person B to confirm** at the next sync. It does not change `schema/`, so `contract-v2` still holds.
+**Covers:** FR-2, B-5 · **Source:** Person A's request (31 Oct, after the kickoff sync). **Approved by both (Person B confirmed 1 Nov).** It does not change `schema/`, so `contract-v2` still holds.
 
 **Decision**
 - **The database is the only source of truth for configs.** The `integrations` table holds one row per integration: the validated config (JSON), a `revision` number (1 on create, plus 1 on every save), `created_at` and `updated_at`. The engine, the scheduler and the API read configs from this table only.
@@ -1260,7 +1260,7 @@ One shared set of examples that both people treat as the truth:
 
 ## D-16: Unified users across services
 
-**Covers:** FR-11 · **Source:** Person A's request (31 Oct), tagged `contract-v3`. **Person B to confirm** at the next sync. It adds one route and two schema definitions, and changes no existing shape.
+**Covers:** FR-11 · **Source:** Person A's request (31 Oct), tagged `contract-v3`. **Approved by both (Person B confirmed 1 Nov).** It adds one route and two schema definitions, and changes no existing shape.
 
 **Decision**
 - **Stored records do not change.** `users` still holds one row per `(source, id)` (D-3.4), so each service keeps its own record, history and upsert.

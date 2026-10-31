@@ -14,7 +14,7 @@
 - `main` contains the commit **"Kickoff sync: roles, approvals, shifted clock, catch-up check"**.
 - The contract to build against is the tag **`contract-v2`** (commit `ac3cb1a`). It covers host pinning (D-7.6) and AI propose-fix (D-14).
 - `schema/` on `main` is identical to `contract-v2`.
-- Every decision D-1 to D-14 is **Locked** in `docs/decisions.md`. D-15 (configs live in the database and are updated in place) is agreed by Person A and waits for Person B to confirm.
+- Every decision D-1 to D-16 is **Locked** in `docs/decisions.md`. D-15 (configs live in the database and are updated in place) and D-16 (unified users) were approved by both on 1 Nov.
 - `main` contains the commit **"Configs live in the database and are updated in place (D-15)"**.
 - The roadmap's **Checkpoint 1 is at 9:15pm**, and the deadline is **5:00am**.
 - The only remote branch is `main`.
@@ -47,7 +47,7 @@ npx --yes @redocly/cli@1 lint schema/openapi.yaml 2>&1 | tail -1               #
 ```bash
 grep -E "^\| D-([0-9]|1[0-4]) \|" docs/decisions.md | head -14 | awk -F'|' '{print $2 "|" $4}'   # expect: every row says Locked
 grep -c "Draft" docs/decisions.md                     # any hit must be historical text, not a status row
-grep -E "^\| D-15 \|" docs/decisions.md | head -1     # expect: "Agreed by Person A. Person B to confirm". Ask Person B whether they agree
+grep -E "^\| D-15 \|" docs/decisions.md | head -1     # expect: "Locked (approved by both, 1 Nov)"
 grep -n "Checkpoint 1 at 9:15pm" roadmap.md           # expect: 1 line
 grep -n "Person A is \*\*Arjit\*\*" roadmap.md        # expect: 1 line
 grep -c "^- \[ \]" <(sed -n '/^## 4. Phase 0/,/^## 5. Phase 1/p' roadmap.md)   # expect: 0 (Phase 0 all ticked)
