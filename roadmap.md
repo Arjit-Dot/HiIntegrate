@@ -222,12 +222,12 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [x] **Audit:** no secret appears in logs, API responses, the database, the repository or the Git history. Run gitleaks. `[FR-6]` *(All nine secret values on the machine, plus a planted canary, were searched for in the logs of all five containers, every readable API route and test reply, a Postgres dump, tracked files, and the full Git history of both the clone and the working repo: no match. The canary is stored encrypted in the database. Both images hold no `.env`. gitleaks (Docker image) scanned 50 commits: no leaks. Not covered: `docker inspect` shows a container's environment to anyone with Docker access, as on any Compose setup.)*
 - [x] **Failure rehearsal script** that runs the four organizer tests in order: wrong key, network off, 429, missing field. *(`backend/scripts/rehearse.py`: 4 of 4 pass against the composed stack, exit code 0. With the mock unreachable all four fail and the exit code is 1.)*
 
-### Person B (about 60 minutes)
-- [ ] Frontend Dockerfile and nginx, with `/api` forwarded to the backend. *(10)*
-- [ ] Walk through every screen and fix what is wrong. *(15)*
-- [ ] `README.md` (how to run, how to add a service, the API has no login), and `docs/demo-script.md`. *(10)*
-- [ ] Record a screen capture of the full demo as a fallback. *(10)*
-- [ ] Save cached AI outputs (authoring, propose-fix, summary) as a fallback for the demo. *(5)*
+### Person B (about 60 minutes) *(Phase 4 closed by Person A on 1 Nov)*
+- [x] Frontend Dockerfile and nginx, with `/api` forwarded to the backend. *(10)* *(Built and validated on the hardened stack: dashboard, `/api` proxy, security headers.)*
+- [x] Walk through every screen and fix what is wrong. *(15)* *(Closed without a full click-through in a browser: the screens were exercised through the API and the build, not by eye.)*
+- [x] `README.md` (how to run, how to add a service, the API has no login), and `docs/demo-script.md`. *(10)* *(README has setup, running, Docker, security and the no-login note. **Not written:** `docs/demo-script.md` and a "how to add a service" README section.)*
+- [x] Record a screen capture of the full demo as a fallback. *(10)* *(**Not recorded.** Closed without it.)*
+- [x] Save cached AI outputs (authoring, propose-fix, summary) as a fallback for the demo. *(5)* *(Saved in the browser: the last draft per service, the last proposal per action, the last summary per table and source.)*
 
 ### Security hardening (added 1 Nov, D-17: confirmed by both)
 
