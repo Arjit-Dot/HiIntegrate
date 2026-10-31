@@ -545,6 +545,40 @@ paths:
               schema: { type: object, required: [summary], properties: { summary: { type: string } } }
         "501": { $ref: "#/components/responses/Unsupported" }
 
+  /ai/propose-fix:
+    post:
+      tags: [AI]
+      summary: Propose a config fix for quarantined records or a failed run, and check it
+      description: |
+        The model suggests a change to the integration's config. The platform then checks the suggestion without saving anything:
+        the proposed config is validated, and for `kind: quarantine` the stored raw records are mapped again with it (a dry run).
+        The reply says how many records the fix would rescue. Nothing is saved and the integration is not changed.
+        To apply a fix, the dashboard sends `proposed_config` to `PUT /integrations/{id}` after a person approves it.
+        Secrets, auth headers and secret values are never sent to the model. Records sent to the model are capped (see docs/decisions.md D-14).
+      operationId: proposeFix
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [kind, integration, action]
+              properties:
+                kind: { enum: [quarantine, run_failure], description: "`quarantine` fixes rejected records. `run_failure` explains a failed run." }
+                integration: { type: string, pattern: "^[a-z0-9][a-z0-9_-]*$" }
+                action: { type: string }
+                run_id: { type: string, description: "Optional for `quarantine` (default: every quarantined record of the action). Required for `run_failure`." }
+      responses:
+        "200":
+          description: A proposal, which may contain no fix.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProposeFixResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
 components:
   parameters:
     limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
@@ -625,6 +659,38 @@ components:
         line: { type: integer, description: "Optional. The line in the YAML text, for editor markers." }
         message: { type: string }
         severity: { enum: [error, warning] }
+    ProposeFixResponse:
+      type: object
+      required: [summary, changes, errors, verification]
+      properties:
+        summary: { type: string, description: "A plain-language explanation of the cause and the fix." }
+        changes:
+          type: array
+          description: "Empty when the model found no fix (the summary then explains why)."
+          items:
+            type: object
+            required: [path, after, reason]
+            properties:
+              path: { type: string, description: "The config field, such as actions.list_users.map.status.value_map." }
+              before: { description: "The current value, or null if the field is new." }
+              after: { description: "The proposed value." }
+              reason: { type: string }
+        proposed_config: { type: object, additionalProperties: true, description: "The whole config with the changes applied. Absent when `changes` is empty." }
+        errors:
+          type: array
+          description: "Validation problems in `proposed_config`. If not empty, the proposal must not be applied."
+          items: { $ref: "#/components/schemas/ValidationIssue" }
+        verification:
+          description: "The dry-run result. Null for `run_failure`, when `changes` is empty, or when `errors` is not empty."
+          oneOf:
+            - { type: "null" }
+            - type: object
+              required: [checked, rescued, still_quarantined, mapped_samples]
+              properties:
+                checked: { type: integer, minimum: 0, description: "Stored quarantined records mapped again (at most 200)." }
+                rescued: { type: integer, minimum: 0, description: "Records that now map to a valid record." }
+                still_quarantined: { type: integer, minimum: 0 }
+                mapped_samples: { type: array, maxItems: 3, items: {}, description: "Up to three records as they would be saved." }
     ValidateResponse:
       type: object
       required: [valid, errors]
