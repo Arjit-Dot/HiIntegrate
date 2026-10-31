@@ -74,7 +74,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-11 | Golden fixtures | Locked. Files written, with synthetic samples |
 | D-12 | Build-speed decisions (closing Phase 0) | Locked (decided on the team's behalf) |
 | D-13 | The frontend visual | Locked |
-| D-14 | `POST /ai/propose-fix` | **Draft, needs both people's approval** |
+| D-14 | `POST /ai/propose-fix` | Locked (approved by both, 31 Oct 7:40pm) |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -122,7 +122,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-11 | Golden fixtures | Config, raw pages, normalized output, quarantine entry, run and health examples, device and alert samples | None directly | default, approved |
 | D-12 | Build-speed decisions | `https` only (local `http` allowed); no API login; any SMTP server; hash is 32/40/64 hex; Claude model from `LLM_MODEL`; worker syncs every 15 s; run IDs `run-<n>` | None directly | Claude, on the team's behalf |
 | D-13 | The frontend visual | `docs/ui-prototype.html` is the final visual; Person B builds the app to match it | FR-10, B-2, B-3, B-5 | agreed |
-| D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | Draft |
+| D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | agreed |
 
 ---
 
@@ -1203,7 +1203,7 @@ One shared set of examples that both people treat as the truth:
 
 ## D-14: AI propose-fix
 
-**Covers:** FR-9, B-2 (supports) · **Source:** Draft, added after the `contract-v1` tag and after D-13. **Needs both people's approval** before anyone builds on it.
+**Covers:** FR-9, B-2 (supports) · **Source:** proposed by Person B after the `contract-v1` tag, **approved by both people** at the 7:40pm kickoff sync, and tagged in `contract-v2`.
 
 **Decision**
 - One route, `POST /ai/propose-fix`, with a `kind`:
@@ -1226,10 +1226,10 @@ One shared set of examples that both people treat as the truth:
 - Keeping the AI behind `api/ai.py` and the mapper as a pure function keeps the engine free of AI (D-8).
 - One route for both kinds means one change to the contract and one Prism mock for the frontend.
 
-**Open points for the team**
-- **Privacy:** raw quarantined records can hold names and emails, and they go to an external model. Options: send them as they are, or mask email local-parts and names before sending. The draft assumes **as they are, capped at 20 records**. Decide before real data is used.
-- **Ownership:** the route is Person B's (`api/ai.py`). `engine.remap_records` is Person A's, about 10 minutes.
-- **Contract tag:** `schema/openapi.yaml` changed after `contract-v1`. The open item for D-7.6 already plans `contract-v1.1`, so one new tag can cover D-7.6 and D-14 once the other person approves. Note the change in the Revision log (R-10).
+**Decided at the kickoff sync (were open points)**
+- **Privacy: masked.** Before raw records go to the model, the route masks them: the part of an email address before `@` becomes `***` (`***@acme.com`), and the values of name-like fields (`name`, `displayName`, `firstName`, `lastName`, `login`, `username`, and our own `name`) become `***`. IDs, statuses, dates, types and other fields are sent unchanged, because the model needs them to propose a fix. At most 20 records are sent.
+- **Ownership:** the route is Person B's (`api/ai.py`). `engine.remap_records` is Person A's, about 10 minutes, due by 12:45am.
+- **Contract tag:** D-7.6 and D-14 are tagged together as **`contract-v2`**. The docs earlier said `contract-v1.1`. `contract-v2` is the name in use.
 
 ---
 
@@ -1350,7 +1350,19 @@ Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. 
 | D-6 routes | Two AI routes | Adds `POST /ai/propose-fix` | A verified fix for quarantined records and failed runs |
 | D-8 handoffs | Five functions | Adds `engine.remap_records` | The dry run behind the verification count |
 
-Draft. Not approved by both people yet.
+Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw records sent to the model are masked.
+
+### R-11: Kickoff sync (31 Oct, 7:40pm)
+
+| Item | Outcome |
+|---|---|
+| Roles | Person A is Arjit (backend). Person B is anjaliirajpurohit (frontend and AI) |
+| D-14 | Approved by both. Raw records sent to the model are masked (emails before `@`, name-like fields) |
+| D-7.6 | Approved by both |
+| Contract tag | `contract-v2` (covers D-7.6 and D-14) is the contract to build against |
+| Clock | Phase 1 started 50 minutes late, so every later phase moved by 45 minutes, and the rehearsal was shortened to keep 5:00am |
+| Branches | `checkpoint1`, `docs/phase0-contract` and `contract/ai-propose-fix` were merged and deleted |
+| Alignment check | `catchup.md` lets either person's AI verify that both machines match this state |
 
 ---
 
@@ -1363,5 +1375,4 @@ Draft. Not approved by both people yet.
 | The raw samples in `samples/` are synthetic, not captured live | Test realism | Replace when access is confirmed |
 | `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 1 and 2 |
 | Rate-limit state (`min_interval_ms`) is per process in v1, so it needs shared storage before running more than one worker (D-10) | Scaling out | After v1 |
-| `schema/` changed after the `contract-v1` tag (D-7.6). The other person must approve, then tag `contract-v1.1` | The frozen contract | Before the build starts on secrets |
 | **Rotate every credential that was in the old `.env.example`** (GitHub token, Jira token and email, Okta token and domain, Slack webhook, VirusTotal key, AbuseIPDB key). Removing it from Git history does not undo the exposure | Security | Now, by the person who owns each credential |

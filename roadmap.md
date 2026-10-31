@@ -4,7 +4,11 @@ Two people, one monorepo, one contract. Everything below is in scope: all 11 mus
 
 **Clock:** Saturday 31 Oct, 6:20pm to Sunday 1 Nov, **5:00am** (IST). That is **10 hours 40 minutes**. The deadline was 2:00am and was extended by 3 hours. The extra time goes to the AI layer (Phase 3), packaging, and a longer rehearsal.
 
-**Where we start:** the contract is written and checked (`schema/`, `templates/`, `samples/`, `docs/examples/`). There is no backend or frontend code yet. `docs/decisions.md` has every decision and its reason, including D-14 (the AI propose-fix route, still a draft). If this file and `docs/decisions.md` disagree, `docs/decisions.md` wins.
+**Where we start:** the contract is written and checked (`schema/`, `templates/`, `samples/`, `docs/examples/`). There is no backend or frontend code yet. `docs/decisions.md` has every decision and its reason, including D-14 (the AI propose-fix route, approved by both). If this file and `docs/decisions.md` disagree, `docs/decisions.md` wins.
+
+**Team:** Person A is **Arjit** (backend). Person B is **anjaliirajpurohit** (frontend and AI).
+
+**Clock shift (agreed at the 7:40pm kickoff sync):** Phase 1 started at 7:40pm, 50 minutes late. Every later phase moved by 45 minutes, and the rehearsal was cut from 1 hour 45 minutes to 1 hour, so the 5:00am deadline holds.
 
 ## Read this first: how tight this is
 
@@ -19,7 +23,7 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 
 ## 1. Who owns what
 
-| | Person A (backend) | Person B (frontend and AI) |
+| | Person A: Arjit (backend) | Person B: anjaliirajpurohit (frontend and AI) |
 |---|---|---|
 | **Folders** | `backend/` (all except `app/ai/` and `app/api/ai.py`), `Dockerfile`s and `docker-compose.yml` for backend, worker, mock API and Postgres | `frontend/`, `backend/app/ai/`, `backend/app/api/ai.py`, the frontend Dockerfile and nginx config |
 | **Also** | The mock API (`backend/tests/mock_api/`), backend tests, the email sender | `README.md`, the demo script, the fallback recording |
@@ -56,15 +60,15 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 
 | Time | Phase | Goal |
 |---|---|---|
-| 6:20 to 6:50pm | **0. Close Phase 0** (together) | Sign-off, access to every service, tag `contract-v1` |
-| 6:50 to 8:30pm | **1. Foundations** | Validation, the request engine, the UI shell. Bonuses B-2 and B-3 |
-| **8:30pm** | **Checkpoint 1** | Demo: validate, test connection, retries, 429 |
-| 8:30 to 11:00pm | **2. Core features** | Pagination, mapping, storage, secrets, API, every screen. Bonus B-5 |
-| **11:00pm** | **Checkpoint 2** | Frontend on the real backend. GitHub, Jira and Okta each complete a real pull |
-| 11:00pm to 1:45am | **3. Reliability and AI** | Scheduler, health, email alert, tests, the AI layer (authoring loop, propose-fix, summary, mapping suggestions). Bonuses B-4 and B-1 |
-| 1:45 to 2:45am | **4. Packaging** | Docker, a clean-machine run, the audit |
-| **2:45am** | **Checkpoint 3** | Feature freeze. Every requirement ticked |
-| 2:45 to 4:30am | **5. Rehearse** | The demo, three times. Cache the AI outputs. Bug fixes only |
+| 6:20 to 7:40pm | **0. Close Phase 0** (together) | Sign-off, access to every service, tag the contract. **Done** |
+| 7:40 to 9:15pm | **1. Foundations** | Validation, the request engine, the UI shell. Bonuses B-2 and B-3 |
+| **9:15pm** | **Checkpoint 1** | Demo: validate, test connection, retries, 429 |
+| 9:15 to 11:45pm | **2. Core features** | Pagination, mapping, storage, secrets, API, every screen. Bonus B-5 |
+| **11:45pm** | **Checkpoint 2** | Frontend on the real backend. GitHub, Jira and Okta each complete a real pull |
+| 11:45pm to 2:30am | **3. Reliability and AI** | Scheduler, health, email alert, tests, the AI layer (authoring loop, propose-fix, summary, mapping suggestions). Bonuses B-4 and B-1 |
+| 2:30 to 3:30am | **4. Packaging** | Docker, a clean-machine run, the audit |
+| **3:30am** | **Checkpoint 3** | Feature freeze. Every requirement ticked |
+| 3:30 to 4:30am | **5. Rehearse** | The demo, twice (once with AI off). Cache the AI outputs. Bug fixes only |
 | 4:30 to 5:00am | **Buffer** | Final push and tag. Leave it empty |
 
 ## 3. What each person needs from the other
@@ -72,18 +76,18 @@ The estimates below add up for each person, but there is **about 15 minutes of s
 | B needs from A | By | Fallback |
 |---|---|---|
 | Nothing to start. B builds on the Prism mock (`npx @stoplight/prism-cli mock schema/openapi.yaml -p 4010`) | now | |
-| The real API on port 8000 for every route | 11:00pm | B keeps working on the mock until then |
-| Real GitHub, Jira and Okta data in the database | 11:00pm | The expected-output fixtures |
+| The real API on port 8000 for every route | 11:45pm | B keeps working on the mock until then |
+| Real GitHub, Jira and Okta data in the database | 11:45pm | The expected-output fixtures |
 
 | A needs from B | By | Fallback |
 |---|---|---|
-| Real captured samples to replace the synthetic ones | 9:30pm | The synthetic samples still pass `npm run check` |
-| The AI endpoints' shape (`/ai/generate-config`, `/ai/summarize`, `/ai/propose-fix`) | 11:00pm | Already in `openapi.yaml` (D-14) |
-| `engine.remap_records` for the AI fix check | 12:00am | B shows the proposal without a rescue count until it lands |
+| Real captured samples to replace the synthetic ones | 10:15pm | The synthetic samples still pass `npm run check` |
+| The AI endpoints' shape (`/ai/generate-config`, `/ai/summarize`, `/ai/propose-fix`) | 11:45pm | Already in `openapi.yaml` (D-14) |
+| `engine.remap_records` for the AI fix check | 12:45am | B shows the proposal without a rescue count until it lands |
 
 The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `http://localhost:4010` for the mock, `http://localhost:8000/api/v1` for the backend. Prism serves routes without `/api/v1`.
 
-## 4. Phase 0: close it (6:20 to 6:50pm, together)
+## 4. Phase 0: close it (6:20 to 7:40pm, together). Closed
 
 **Decisions: closed.** The team approved D-5.3 and D-6 to D-11. The last open questions are decided in `docs/decisions.md` D-12. In short:
 
@@ -96,16 +100,25 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 
 **Still to do (people, in parallel, about 20 minutes):**
 
-- [ ] **B:** GitHub token and an organization to list. Jira Cloud site, account email and API token. Okta developer org, API token, **one enrolled device** (for example your phone with Okta Verify), and some sign-in events.
-- [ ] **A:** the SMTP account and its settings, and Docker plus Postgres running locally.
-- [ ] Both people read `schema/README.md`.
-- [ ] `cd schema/tools && npm install && npm run check` passes on both machines.
-- [ ] Merge `docs/phase0-contract` into `main`, then `git tag contract-v1 && git push origin contract-v1`. *(Done.)*
-- [ ] **Both:** approve D-14 (`POST /ai/propose-fix`, decided on the privacy question: raw records go to the model as they are, or masked) and tag the contract with D-7.6 (`contract-v1.1`).
+- [x] **B:** GitHub token and an organization to list. Jira Cloud site, account email and API token. Okta developer org, API token, **one enrolled device** (for example your phone with Okta Verify), and some sign-in events.
+- [x] **A:** the SMTP account and its settings, and Docker plus Postgres running locally. *(Postgres runs on A's machine as `hiintegrate-db`. The SMTP fields in A's `.env` were still empty at 7:40pm, so fill them before Phase 3.)*
+- [x] Both people read `schema/README.md`.
+- [x] `cd schema/tools && npm install && npm run check` passes on both machines. *(`catchup.md` re-checks this on B's machine.)*
+- [x] Merge `docs/phase0-contract` into `main`, then `git tag contract-v1 && git push origin contract-v1`.
+- [x] **Both:** approved D-14 (`POST /ai/propose-fix`, with **masked** records) and D-7.6, tagged together as **`contract-v2`**.
 
-## 5. Phase 1: foundations (6:50 to 8:30pm)
+**Kickoff sync (7:40pm), agreed by both:**
+- Person A is Arjit, Person B is anjaliirajpurohit.
+- D-14 is approved. Raw records sent to the model are masked: the part of an email before `@`, and name-like fields, become `***`.
+- D-7.6 (host pinning) is approved.
+- The contract you build against is the tag **`contract-v2`**. Any later change to `schema/` needs both people and a new tag.
+- The clock moved by 45 minutes (see the timeline above).
+- The merged branches `checkpoint1`, `docs/phase0-contract` and `contract/ai-propose-fix` were deleted.
+- `catchup.md` lets either person's AI check that both machines match this plan.
 
-**Bonus target by 8:30pm: B-2 (validation with clear errors) and B-3 (test connection).**
+## 5. Phase 1: foundations (7:40 to 9:15pm)
+
+**Bonus target by 9:15pm: B-2 (validation with clear errors) and B-3 (test connection).**
 
 ### Person A (about 100 minutes)
 - [ ] Backend skeleton in FastAPI: settings from the environment, logging that redacts secrets, one error handler that returns `{"error": {...}}`. *(15)*
@@ -123,14 +136,14 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] **Test panel** on that page: raw reply beside the mapped record, with missing paths highlighted. `[B-3]` *(10)*
 - [ ] Capture real sample responses from GitHub, Jira and Okta into `samples/`, replacing the synthetic files. Run `npm run check`. *(15, in the gaps)*
 
-### Checkpoint 1 at 8:30pm
+### Checkpoint 1 at 9:15pm
 - [ ] A: `validate` rejects the 14 files in `samples/invalid/` with the expected errors.
 - [ ] A: `test` makes a live call (mock API and GitHub) and reports missing paths.
 - [ ] A: retries and 429 handling work against the mock API.
 - [ ] B: list page and editor run on the Prism mock, with the validation and test panels wired.
 - [ ] `main` runs and holds both people's work.
 
-## 6. Phase 2: core features (8:30 to 11:00pm)
+## 6. Phase 2: core features (9:15 to 11:45pm)
 
 **Bonus target: B-5 (add a source through a web form).**
 
@@ -156,7 +169,7 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] Health on the list and the enable toggle. Loading, empty and error states everywhere. *(25)*
 - [ ] Check the screens against the real samples. *(5)*
 
-### Checkpoint 2 at 11:00pm (integration)
+### Checkpoint 2 at 11:45pm (integration)
 Switch the frontend from Prism to the real backend. Fix any difference from `openapi.yaml`.
 - [ ] Add GitHub through the form, press Test, see mapped output.
 - [ ] GitHub, Jira and Okta each complete a **real** pull.
@@ -166,7 +179,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] A key typed into the Add form, and one set on the Secrets screen, are each used by a real run.
 - [ ] A secret pinned to `api.github.com` is refused for a config that points somewhere else (`secret_host_mismatch`), and nothing is sent.
 
-## 7. Phase 3: reliability and AI (11:00pm to 1:45am)
+## 7. Phase 3: reliability and AI (11:45pm to 2:30am)
 
 **Bonus targets: B-4 (alerts) and B-1 (incremental sync).**
 
@@ -175,7 +188,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] **Health** per connection, with `consecutive_failures`, from the latest finished `schedule` or `manual` run. `[FR-10]` *(10)*
 - [ ] **Email alert**: one email at the threshold, reset on success, sent through SMTP. A failed send is logged and never fails the run. `[B-4]` *(15)*
 - [ ] **Incremental sync**: keep `last_success_at` per action and send it as the configured parameter. `[B-1]` *(15)*
-- [ ] **`engine.remap_records(config, action, raw_records)`**: map stored quarantined `raw` records with a candidate config. Pure function: no database, no network, saves nothing. B's propose-fix route needs it by 12:00am (D-14). *(10)*
+- [ ] **`engine.remap_records(config, action, raw_records)`**: map stored quarantined `raw` records with a candidate config. Pure function: no database, no network, saves nothing. B's propose-fix route needs it by 12:45am (D-14). *(10)*
 - [ ] **Tests** (`pytest`): each pagination style, retry and backoff, 429, quarantine, mapping and transforms, validation, health, the alert firing once, a config with no `defaults` block, and `remap_records`. *(25)*
 - [ ] Edge cases: an empty page, a missing `Retry-After`, `max_pages`. *(5)*
 - [ ] **Stretch, only if ahead:** schema drift check. If a mapped path vanishes from the response, mark the connection degraded and name the path. *(30)*
@@ -192,7 +205,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 
 **AI rules (apply to every feature above):** a person approves every change, the model never writes to the database or a config by itself, secrets and auth headers are never sent, and the product still demos fully with AI switched off. Cache one good output per feature for the demo.
 
-## 8. Phase 4: packaging (1:45 to 2:45am)
+## 8. Phase 4: packaging (2:30 to 3:30am)
 
 ### Person A (about 60 minutes)
 - [ ] `docker-compose.yml` with `postgres`, `backend`, `worker`, `frontend` and `mock-api`, and a database volume. *(25)*
@@ -207,7 +220,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] Record a screen capture of the full demo as a fallback. *(10)*
 - [ ] Save cached AI outputs (authoring, propose-fix, summary) as a fallback for the demo. *(5)*
 
-### Checkpoint 3 at 2:45am: feature freeze
+### Checkpoint 3 at 3:30am: feature freeze
 From a clean clone, `docker compose up`, then tick every item:
 
 | ID | Requirement | Verified by |
@@ -233,9 +246,9 @@ Also tick:
 - [ ] The product demos fully with all AI switched off (`LLM_API_KEY` unset gives `501`, and nothing else breaks).
 - [ ] `cd schema/tools && npm run check` still passes.
 
-## 9. Phase 5: rehearse (2:45 to 4:30am)
+## 9. Phase 5: rehearse (3:30 to 4:30am)
 
-- Both people run the full demo three times, one driving and one watching for rough spots. Run it once with AI off.
+- Both people run the full demo twice, one driving and one watching for rough spots. Run it once with AI off.
 - **Bug fixes only.** No new features.
 - Fallbacks ready: the screen recording, the saved samples, and a cached AI output.
 
@@ -276,10 +289,10 @@ Also tick:
 
 | Risk | What to do |
 |---|---|
-| A service signup or token stalls | Say so at 6:50pm. Switch to the other services early. The mock API proves behavior but does not count as a source. |
+| A service signup or token stalls | Say so at the next hourly sync. Switch to the other services early. The mock API proves behavior but does not count as a source. |
 | Okta has no device or events | Enroll a device and sign in and out a few times in Phase 0. |
 | The email account will not send | Try a different provider. The alert logic can be demonstrated against any SMTP server. |
-| `docker compose up` fails on a clean machine | Start the Docker work earlier than 1:45am if the images are ready. Test from a clean clone once before the checkpoint, not at it. |
+| `docker compose up` fails on a clean machine | Start the Docker work earlier than 2:30am if the images are ready. Test from a clean clone once before the checkpoint, not at it. |
 | The real API differs from the synthetic samples | Capture real samples early (B, Phase 1) and fix the templates in Phase 2. |
 
 **If you are more than 30 minutes behind at a checkpoint,** use this order:
