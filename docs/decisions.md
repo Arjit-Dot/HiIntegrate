@@ -84,7 +84,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
 | (R-14 to R-19) | Contract v4: schema drift, the AI routes, alert state | Approved by both. Tagged `contract-v4` (see R-20) |
 | D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions, **both checked and confirmed by Person B (1 Nov)**. On `main` at `f345556`; `contract-v4` is tagged after this confirmation** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
-| D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov), built on branch `a/audit-and-limits`, awaiting Person A's approval.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged by Person A after approval |
+| D-19 | Audit log and rate limits | **Proposed by Person B (1 Nov), built on branch `a/audit-and-limits`, awaiting Person A's approval.** S-7 and S-9 of D-17. Adds `GET /audit`, a `429` reply on write, run and AI routes, and a response size cap in the engine. S-8 (the API login) is already covered by D-18. `contract-v5` is tagged after approval |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -1418,7 +1418,7 @@ Person B reviewed the branch (`a/multi-user` at `4af82b7`) before approving:
 
 **Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: built on branch `a/audit-and-limits`, not merged. It changes `schema/openapi.yaml`, so it needs Person A's approval and a new tag (`contract-v5`) before it goes to `main`.**
 
-D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each needs its own contract approval. Checkpoint 3 is **not** green yet (see `roadmap.md`). Person B built S-7 and S-9 anyway, on the instruction of the project owner, and keeps them off `main` until Person A decides. Nothing here is on `main`, so the ordering rule is still met where it matters: no unapproved contract change is live.
+D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each needs its own contract approval. Checkpoint 3 is **not** green yet (see `roadmap.md`). Person A handed S-7 to S-9 to Person B on 1 Nov (R-20), so Person B built S-7 and S-9 now and keeps them off `main` until Person A approves the contract change. Nothing here is on `main`, so the ordering rule is still met where it matters: no unapproved contract change is live.
 
 **S-8 is not part of this.** D-18 already gives every route a sign-in and a `401`. This decision does not touch it.
 
