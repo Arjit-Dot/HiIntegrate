@@ -518,6 +518,10 @@ export interface components {
         Integration: {
             config: components["schemas"]["integration.schema"];
             health: components["schemas"]["health"];
+            /** @description 1 when created, plus 1 on every save (D-15). Editing in place never creates a second integration. */
+            revision?: number;
+            created_at?: string;
+            updated_at?: string;
         };
         SecretInfo: {
             name: string;
