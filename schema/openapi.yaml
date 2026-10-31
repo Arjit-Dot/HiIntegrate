@@ -436,7 +436,7 @@ paths:
     put:
       tags: [Secrets]
       summary: Set or replace a secret's value
-      description: Write-only. Returns `501` until the encrypted store exists (Phase 2), because environment variables are the only source before that.
+      description: Write-only. Used by the Secrets screen and by the Add/Edit form (which stores the value before it saves the integration). Returns `501` until the encrypted store exists (Phase 2), because environment variables are the only source before that.
       operationId: setSecret
       requestBody:
         required: true

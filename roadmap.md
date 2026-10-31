@@ -121,14 +121,15 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 
 ### Person B (about 150 minutes)
 - [ ] Add/Edit page complete: auth fields that change with the type, pull and lookup fields, pagination for each style, the inputs table, the mapping table for the chosen schema, `error_when`, alerts, and the inputs built from the template's `requires` block. `[B-5]` *(30)*
+- [ ] **Token and password entry** (D-7.5): a password-type value field next to each secret name in the Add/Edit form (**API key**, **Token**, or **Password or API token**, by auth type; one per name in a template's `requires.secrets`). It is write-only, shows `set` or `not set` from `GET /secrets`, and stores the value with `PUT /secrets/{name}` before it saves the integration. On `501` it says to set `SECRET_<NAME>` in the environment and still saves. `[FR-6]` `[B-5]` *(10)*
 - [ ] Template gallery, with a "use this template" button that fills the form. `[B-5]` *(15)*
 - [ ] Results page: a schema selector, a source filter, and a table or JSON view. *(15)*
 - [ ] Quarantine page with filters and **Export all**. `[FR-9]` *(15)*
 - [ ] Run history. `[FR-10]` *(10)*
-- [ ] Secrets screen: set and replace only, never shown. `[FR-6]` *(10)*
+- [ ] Secrets screen: set and replace only, never shown. It has the same value field as the form. `[FR-6]` *(10)*
 - [ ] **Run lookup** panel: pick a lookup action, fill its inputs, see the mapped record. *(15)*
 - [ ] Health on the list and the enable toggle. Loading, empty and error states everywhere. *(25)*
-- [ ] Check the screens against the real samples. *(15)*
+- [ ] Check the screens against the real samples. *(5)*
 
 ### Checkpoint 2 at 11:00pm (integration)
 Switch the frontend from Prism to the real backend. Fix any difference from `openapi.yaml`.
@@ -137,7 +138,7 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] Okta fills all three tables: users, devices and alerts.
 - [ ] A pull across several pages fills the table, and the dirty mock dataset fills the Quarantine page.
 - [ ] Validation and Test run against the real API.
-- [ ] A secret set on the Secrets screen is used by a run.
+- [ ] A key typed into the Add form, and one set on the Secrets screen, are each used by a real run.
 
 ## 7. Phase 3: reliability and AI (11:00pm to 12:30am)
 

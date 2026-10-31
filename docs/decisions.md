@@ -111,7 +111,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-5.2 | Health view | 5 statuses from the latest finished `schedule` or `manual` run; `test` runs ignored | FR-10 | Extends roadmap |
 | D-5.3 | Alert rule | Email once when `consecutive_failures` reaches the threshold; resets on success | B-4 | default, approved |
 | D-6 | API contract | `/api/v1`, JSON, routes as listed; pull runs return 202, lookups 200; unpaged quarantine export; no API login in v1 | FR-10, B-2, B-3, B-5 | default, approved |
-| D-7 | Secrets | Env vars until Checkpoint 1, encrypted store (Fernet) by Checkpoint 2 (agreed); write-only API with redaction; user-chosen secret names; Git rules (all agreed) | FR-6 | agreed |
+| D-7 | Secrets | Env vars until Checkpoint 1, encrypted store (Fernet) by Checkpoint 2 (agreed); write-only API with redaction; user-chosen secret names; Git rules; token and password entry in the form (all agreed) | FR-6 | agreed |
 | D-8 | Module boundaries | Five handoff functions; one `runner` runs, saves, scores health and alerts | None directly | default, approved |
 | D-9 | Mock servers | Prism for the frontend; a local mock API on 8001 for failure tests | FR-3, FR-7, FR-8, FR-9 | default, approved |
 | D-10 | Tech and conventions | Stateless FastAPI; APScheduler in a separate worker; SQLAlchemy and Postgres (SQLite for tests); React with Vite behind nginx; Compose | None directly | Claude, approved |
@@ -904,7 +904,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 
 **Covers:** FR-6 · **Source:** agreed (extends the roadmap and `changes-v2` C-7)
 
-**Status:** all four points are agreed.
+**Status:** all five points are agreed.
 
 ### D-7.1: Where secret values live (agreed)
 
@@ -963,6 +963,22 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 - A scanner catches what `.gitignore` can't: a key pasted into a source file, a sample response or a doc, including in earlier commits.
 - A secret that reached Git history can't be fully removed, because copies may exist elsewhere. The safe response is to replace it.
 - Keeping secrets away from the AI means a prompt or a log of one can never leak a key.
+
+### D-7.5: Entering a token or password in the dashboard (agreed)
+
+**Decision**
+- The **Add/Edit integration form** has a password-type field for the secret's value, next to the secret's name. It is labelled by the auth type: **API key** for `api_key`, **Token** for `bearer`, and **Password or API token** for `basic`. A template adds one field for each name in its `requires.secrets`.
+- The **Secrets screen** has the same field for any secret name, to set or replace a value.
+- **Write-only.** The field is never pre-filled and the value is never shown again. Next to it the form shows `set` or `not set`, from `GET /secrets`. For a secret that is already set, leaving the field blank keeps the current value.
+- **Saving.** The form first stores the value with `PUT /secrets/{name}`, then saves the integration. If storing the value fails, the integration is not saved.
+- **Before the encrypted store exists** (Phase 2), `PUT /secrets/{name}` returns `501`. The form then says "Not available yet. Set `SECRET_<NAME>` in the environment" and still saves the integration.
+- The field uses `type="password"` and `autocomplete="new-password"`. The request body of `PUT /secrets/{name}` is never logged (D-7.2).
+- **Known limit:** in the local setup the API has no login and no TLS, so the value travels over plain HTTP on the local machine. That is acceptable for local or Docker use, and the README says so.
+
+**Why**
+- D-7.1 planned for keys to be entered through the dashboard, and the add-a-source form (B-5) is where a user is already thinking about the login. Entering the key there avoids editing environment files and finishing on another screen.
+- Storing the secret before the integration means an integration never points at a secret that was not saved.
+- Keeping the field write-only is what lets a stolen browser session or a curious user fail to read keys back.
 
 ---
 
@@ -1224,6 +1240,12 @@ Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. 
 | D-7.3 secret names | The person adding the integration chooses them. The platform only checks the form |
 | The remaining open questions | Decided on the team's behalf in D-12 |
 | New checks | `samples/invalid/http-base-url.yaml` (14 invalid files now), the `https` rule in the reference check, and the hash pattern in `schema/README.md` |
+
+### R-7: Secret entry in the form
+
+| Item | Outcome |
+|---|---|
+| Entering a token or password | Added as D-7.5. The Add/Edit form gets a write-only value field next to each secret name. The Secrets screen already planned the same field. No API change was needed, because `PUT /secrets/{name}` and `GET /secrets` already exist |
 
 ---
 
