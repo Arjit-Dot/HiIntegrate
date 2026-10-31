@@ -11,11 +11,11 @@ from app.ai import docs
 from app.ai.client import LLMError
 from app.ai.docs import DocsError, check_url, fetch_docs, to_text
 from app.api.ai import docs_dep, llm_dep
-from app.api.deps import engine_dep
+from app.api.deps import engine_dep, outbound_client_dep
 from app.main import create_app
 from app.storage import make_engine
 from app.storage.models import Base
-from tests.test_ai import GITHUB_YAML, Script
+from tests.test_ai import GITHUB_YAML, Script, clean_secrets, no_network
 
 PAGE = """<html><head><title>Acme API</title><style>.x{color:red}</style><script>var secret=1;</script></head>
 <body><nav>Home | Pricing</nav><h1>Users</h1><p>List the users of your organization.</p>
@@ -143,13 +143,15 @@ def test_to_text_keeps_pre_formatting():
 # ---------------------------------------------------------------- the route
 
 @pytest.fixture
-def api(tmp_path):
+def api(tmp_path, monkeypatch):
+    clean_secrets(monkeypatch)
     engine = make_engine(f"sqlite:///{tmp_path}/d.db")
     Base.metadata.create_all(engine)
     app = create_app()
     app.dependency_overrides[engine_dep] = lambda: engine
+    app.dependency_overrides[outbound_client_dep] = no_network
     client = TestClient(app)
-    client.app_ = app
+    client.app_, client.engine = app, engine
     return client
 
 
@@ -361,3 +363,176 @@ def test_a_page_needs_an_endpoint_for_users_devices_or_alerts_to_count():
     assert useful(GOOD) and useful("POST /v1/devices/list /v1/devices/{id} /v1/devices/search")
     assert not useful("GET /rest/api/3/issue is the only endpoint, /rest/api/3/issue/bulk") and not useful("GET /rest/api/3/users/search alone")
     assert not useful("POST /api/v1/authn signs a person in") and not useful("Great product. Users love it.")
+
+
+# ---------------------------------------------------------------- trying the draft against the real service (test_action)
+
+ACME = """
+version: 1
+name: acme
+display_name: Acme
+category: identity
+description: Users
+enabled: true
+vars: { site: your-site }
+requires: { vars: { site: { label: Site, example: your-site } }, secrets: [acme_token] }
+base_url: "https://{{vars.site}}.example.com"
+auth: { type: bearer, secret: acme_token }
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    schedule: every 1h
+    request: { method: GET, path: /users }
+    records_path: data
+    map: { id: uid, name: login, email: mail }
+    required: [id]
+"""
+ACME_FIXED = ACME.replace("{ id: uid, name: login, email: mail }", "{ id: id, name: username, email: email }")
+REAL = {"data": [{"uid": "7", "login": "ada", "mail": "ada@acme.example"}]}
+OTHER = {"data": [{"id": "7", "username": "ada", "email": "ada@acme.example"}]}
+
+
+def service(api, reply, calls):
+    def handler(request):
+        calls.append({"url": str(request.url), "auth": request.headers.get("authorization")})
+        return httpx.Response(200, json=reply) if isinstance(reply, dict) else reply
+
+    api.app_.dependency_overrides[outbound_client_dep] = lambda: httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def pinned(monkeypatch, host="acme.example.com", name="ACME_TOKEN"):
+    monkeypatch.setenv(f"SECRET_{name}", "acme-secret-123")
+    if host:
+        monkeypatch.setenv(f"SECRET_{name}_HOST", host)
+
+
+def generate(api, model):
+    wire(api, model, lambda u: pytest.fail("no page"))
+    return api.post("/api/v1/ai/generate-config", json={"text": "Acme docs"}).json()
+
+
+def test_a_draft_is_tried_for_real_and_the_site_is_filled_from_the_pinned_host(api, monkeypatch):
+    pinned(monkeypatch)
+    calls = []
+    service(api, REAL, calls)
+    body = generate(api, Script(ACME))
+    assert calls == [{"url": "https://acme.example.com/users", "auth": "Bearer acme-secret-123"}]  # the person's own host, from the pin
+    assert body["config"]["vars"] == {"site": "acme"}
+    assert body["test"] == {"ran": True, "action": "list_users", "ok": True, "status_code": 200, "missing_paths": [], "notes": body["test"]["notes"],
+                            "filled_vars": {"site": "acme"}}
+    assert "raw_sample" not in body["test"] and "acme-secret-123" not in str(body)  # real data and secrets stay on the server
+
+
+def test_paths_that_found_nothing_are_fed_back_once_and_the_fix_is_tested_again(api, monkeypatch):
+    pinned(monkeypatch)
+    calls = []
+    service(api, OTHER, calls)
+    model = Script(ACME, ACME_FIXED)
+    body = generate(api, model)
+    assert len(calls) == 2 and len(model.prompts) == 2
+    assert "found nothing" in model.prompts[1] and "uid" not in model.prompts[1] or "id" in model.prompts[1]
+    assert "***" in model.prompts[1] and "ada@acme.example" not in model.prompts[1]  # the sample record is masked
+    assert body["test"]["corrected"] is True and body["test"]["missing_paths"] == [] and set(body["test"]["missing_before"]) >= {"id", "name", "email"}
+    assert body["config"]["actions"]["list_users"]["map"]["id"] == "id" and body["attempts"][-1] == {"attempt": 2, "valid": True, "error_count": 0}
+
+
+def test_a_correction_that_is_invalid_is_dropped_and_the_first_draft_kept(api, monkeypatch):
+    pinned(monkeypatch)
+    service(api, OTHER, [])
+    body = generate(api, Script(ACME, "not: [valid"))
+    assert body["config"]["actions"]["list_users"]["map"]["id"] == "uid" and body["test"]["ran"] and not body["test"].get("corrected")
+
+
+def test_a_failed_call_is_reported_but_never_corrected(api, monkeypatch):
+    pinned(monkeypatch)
+    service(api, httpx.Response(401), [])
+    model = Script(ACME)
+    body = generate(api, model)
+    assert body["test"]["ran"] is True and body["test"]["ok"] is False and body["test"]["status_code"] == 401 and len(model.prompts) == 1
+
+
+def test_a_gone_endpoint_is_fed_back_but_a_wrong_login_is_not(api, monkeypatch):
+    pinned(monkeypatch)
+    replies = iter([httpx.Response(410), httpx.Response(200, json=REAL)])
+    api.app_.dependency_overrides[outbound_client_dep] = lambda: httpx.Client(transport=httpx.MockTransport(lambda r: next(replies)))
+    model = Script(ACME, ACME.replace("path: /users", "path: /v2/users"))
+    body = generate(api, model)
+    assert "no longer available" in model.prompts[1] and body["test"]["ok"] is True and body["test"]["corrected"] is True
+    assert body["config"]["actions"]["list_users"]["request"]["path"] == "/v2/users"
+
+
+@pytest.mark.parametrize("setup,reason", [
+    (lambda mp: None, "is not set yet"),  # no secret at all
+    (lambda mp: pinned(mp, host=None), "not pinned to a host"),  # a secret the AI could send anywhere
+    (lambda mp: pinned(mp, host="somewhere-else.example.org"), "pinned to somewhere-else.example.org"),
+])
+def test_the_secret_is_never_sent_to_a_host_the_ai_chose(api, monkeypatch, setup, reason):
+    setup(monkeypatch)
+    service(api, REAL, calls := [])
+    body = generate(api, Script(ACME.replace("your-site", "mysite") if "pinned to" in reason else ACME))
+    assert body["test"]["ran"] is False and reason in body["test"]["skipped_reason"] and calls == []
+
+
+def test_a_draft_with_no_pull_action_is_not_tested(api, monkeypatch):
+    pinned(monkeypatch)
+    lookup_only = ACME.replace("mode: pull", "mode: lookup").replace("    schedule: every 1h\n", "    inputs: { id: { type: string, required: true } }\n")
+    service(api, REAL, calls := [])
+    body = generate(api, Script(lookup_only))
+    assert body["test"]["ran"] is False and "no pull action" in body["test"]["skipped_reason"] and calls == []
+
+
+def test_a_private_address_is_never_called_even_if_the_secret_is_pinned_to_it(api, monkeypatch):
+    pinned(monkeypatch, host="localhost")
+    local = ACME.replace('"https://{{vars.site}}.example.com"', '"https://localhost"')
+    service(api, REAL, calls := [])
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, *a, **k: [(2, 1, 6, "", ("127.0.0.1", 0))])
+    body = generate(api, Script(local))
+    assert body["test"]["ran"] is False and "cannot be tried yet" in body["test"]["skipped_reason"] and calls == []
+
+
+def test_the_site_is_not_filled_when_the_pinned_host_does_not_fit_the_base_url(api, monkeypatch):
+    pinned(monkeypatch, host="unrelated.example.org")
+    service(api, REAL, calls := [])
+    body = generate(api, Script(ACME))
+    assert body["config"]["vars"] == {"site": "your-site"} and body["test"]["ran"] is False and "pinned to unrelated.example.org" in body["test"]["skipped_reason"] and calls == []
+
+
+def test_existing_secret_names_go_to_the_model_but_never_their_values(api, monkeypatch):
+    pinned(monkeypatch)
+    monkeypatch.setenv("SECRET_JIRA_TOKEN", "jira-secret-456")
+    service(api, REAL, [])
+    model = Script(ACME)
+    generate(api, model)
+    seen = model.systems[0] + model.prompts[0]
+    assert "acme_token" in seen and "jira_token" in seen and "acme-secret-123" not in seen and "jira-secret-456" not in seen
+
+
+def test_an_account_email_is_copied_from_a_saved_integration_that_uses_the_same_secret_and_host(api, monkeypatch):
+    from app.config_loader import parse_config
+    from app.storage import repo, session_scope
+
+    pinned(monkeypatch)
+    basic = ACME.replace("auth: { type: bearer, secret: acme_token }", "auth: { type: basic, username: \"{{vars.email}}\", secret: acme_token }")
+    basic = basic.replace("vars: { site: your-site }", "vars: { site: your-site, email: you@your-company.com }")
+    basic = basic.replace("requires: { vars: { site: { label: Site, example: your-site } },", "requires: { vars: { site: { label: Site, example: your-site }, email: { label: Email, example: you@your-company.com } },")
+    saved = parse_config(basic.replace("your-site", "acme").replace("you@your-company.com", "ada@acme.example").replace("name: acme", "name: acme-saved"))
+    with session_scope(api.engine) as s:
+        repo.create_integration(s, saved)
+    service(api, REAL, calls := [])
+    body = generate(api, Script(basic))
+    assert body["config"]["vars"] == {"site": "acme", "email": "ada@acme.example"}
+    assert body["test"]["filled_vars"] == {"site": "acme", "email": "ada@acme.example"} and calls[0]["url"] == "https://acme.example.com/users"
+
+
+def test_saved_values_are_not_copied_from_another_secret_or_over_the_persons_own_values(api, monkeypatch):
+    from app.config_loader import parse_config
+    from app.storage import repo, session_scope
+
+    pinned(monkeypatch)
+    other = parse_config(ACME.replace("your-site", "acme").replace("name: acme", "name: acme-saved").replace("acme_token", "different_token"))
+    with session_scope(api.engine) as s:
+        repo.create_integration(s, other)
+    service(api, REAL, [])
+    body = generate(api, Script(ACME))
+    assert body["test"]["filled_vars"] == {"site": "acme"}  # from the pin only: the other integration uses a different secret

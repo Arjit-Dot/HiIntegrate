@@ -21,6 +21,10 @@ export type GenerateConfigResponse = {
   errors: S['ValidationIssue'][]
   source?: { url: string; chars: number; truncated: boolean }
   tried?: { url: string; ok: boolean; reason: string | null }[]
+  test?: {
+    ran: boolean; skipped_reason?: string; action?: string; ok?: boolean; status_code?: number | null
+    missing_paths: string[]; notes: string[]; filled_vars: Record<string, unknown>; corrected?: boolean; missing_before?: string[]
+  }
   attempts?: { attempt: number; valid: boolean; error_count: number }[]
 }
 
@@ -74,6 +78,8 @@ export const api = {
     call<TestResponse>('POST', `/integrations/${encodeURIComponent(id)}/test`, { action, inputs }),
   /** AI mode (D-14): a service name (the AI finds the docs), a documentation url, or attached text in; a draft config out. Nothing is saved. */
   generateConfig: (b: { service?: string; url?: string; text?: string }) => call<GenerateConfigResponse>('POST', '/ai/generate-config', b),
+  /** AI summary of the stored records (D-14). Nothing is saved; 501 when the server has no LLM_API_KEY. */
+  summarize: (b: { target?: 'user' | 'device' | 'alert'; source?: string }) => call<{ summary: string }>('POST', '/ai/summarize', b),
   listTemplates: () => call<{ items: TemplateSummary[] }>('GET', '/templates'),
   getTemplate: (id: string) => call<{ id: string; config: Config; yaml: string }>('GET', `/templates/${encodeURIComponent(id)}`),
   listResults: (p: { target: string; source?: string; limit?: number; offset?: number }) =>

@@ -14,7 +14,7 @@ import { lineOf, locate, missingVar } from '../lib/validation'
 
 type Issue = { path: string; message: string; severity: 'error' | 'warning'; line?: number }
 type Pane = 'config' | 'validate' | 'test'
-type Draft = { from: string; problems: number; tried: number; vars: [string, string][]; secret?: string }
+type Draft = { from: string; problems: number; tried: number; vars: [string, string][]; secret?: string; test?: GenerateConfigResponse['test'] }
 
 export default function AddEdit() {
   const { id } = useParams()
@@ -78,7 +78,7 @@ export default function AddEdit() {
     const problems = r.errors.filter(e => e.severity === 'error').length
     const from = r.source?.url ?? 'the attached document'
     const c0 = r.config as Config | undefined
-    setDraft({ from, problems, tried: Math.max((r.tried?.length ?? 1) - 1, 0), vars: Object.entries<unknown>(c0?.vars ?? {}).map(([k, v]) => [k, String(v)]), secret: c0?.auth?.secret })
+    setDraft({ from, problems, tried: Math.max((r.tried?.length ?? 1) - 1, 0), vars: Object.entries<unknown>(c0?.vars ?? {}).map(([k, v]) => [k, String(v)]), secret: c0?.auth?.secret, test: r.test })
     setMode('manual')
     try {
       const c = r.config as Config | undefined
@@ -238,9 +238,13 @@ export default function AddEdit() {
           <strong>Drafted by AI from {draft.from}.</strong>{draft.tried > 0 && <> <span className="muted">({draft.tried} other page{draft.tried === 1 ? '' : 's'} tried first)</span></>} The AI can guess wrong, so check the paths and mapping below.
           {draft.problems > 0 ? <> The draft has <b>{draft.problems}</b> validation problem{draft.problems === 1 ? '' : 's'}: they are marked in the form and the editor.</> : ' It passes validation.'}
           <ul>
-            {draft.vars.length > 0 && <li><b>Check what the AI filled in</b> under Variables (they are examples, so replace them with yours): {draft.vars.map(([k, v], i) => <span key={k}>{i > 0 && ', '}<code>{k}</code> = <code>{v}</code></span>)}.</li>}
-            <li>Secret name: <code>{draft.secret ?? 'see Authentication'}</code>. Enter its <b>value</b> in <b>Authentication</b>: only you can supply it.</li>
-            <li>Press <b>Test connection</b> to see whether the mapped paths exist in the real response.</li>
+            {draft.vars.length > 0 && <li><b>Check what was filled in</b> under Variables{draft.test?.ran || Object.keys(draft.test?.filled_vars ?? {}).length ? '' : ' (these are examples, so replace them with yours)'}: {draft.vars.map(([k, v], i) => <span key={k}>{i > 0 && ', '}<code>{k}</code> = <code>{v}</code>{k in (draft.test?.filled_vars ?? {}) && <span className="muted"> (from your saved {draft.secret ?? 'secret'})</span>}</span>)}.</li>}
+            <li>Secret: <code>{draft.secret ?? 'see Authentication'}</code>.{draft.test?.ran || draft.test?.skipped_reason?.includes('not pinned') ? ' It is already set, so there is nothing to enter.' : <> Enter its <b>value</b> in <b>Authentication</b>: only you can supply it.</>}</li>
+            {draft.test?.ran && draft.test.ok && draft.test.missing_paths.length === 0 && <li><b>Tried against the real service:</b> it answered and every mapped path was found{draft.test.corrected && draft.test.missing_before?.length ? <> (the AI first missed <code>{draft.test.missing_before.join(', ')}</code> and fixed it)</> : null}. Nothing was saved.</li>}
+            {draft.test?.ran && draft.test.ok && draft.test.missing_paths.length > 0 && <li><b>Tried against the real service:</b> these mapped fields found nothing, so check their paths: <code>{draft.test.missing_paths.join(', ')}</code>.</li>}
+            {draft.test?.ran && !draft.test.ok && <li><b>Tried against the real service, but it did not work:</b> {draft.test.notes[0] ?? 'the call failed'}. Check the Variables and the secret, then press <b>Test connection</b>.</li>}
+            {draft.test && !draft.test.ran && <li><b>Not tried yet:</b> {draft.test.skipped_reason}.</li>}
+            {!draft.test && <li>Press <b>Test connection</b> to see whether the mapped paths exist in the real response.</li>}
             <li>Nothing is saved until you press Save.</li>
           </ul>
         </div>

@@ -2278,6 +2278,28 @@ export interface operations {
                             /** @description True when only the first 50,000 characters went to the model. */
                             truncated: boolean;
                         };
+                        /** @description Present when the draft was tried against the real service (first page, nothing saved). Only a secret that already exists and is pinned to the host the config calls is ever used, so a draft written from a web page cannot send it anywhere else. Real records are not returned. */
+                        test?: {
+                            ran: boolean;
+                            /** @description Why it was not tried. */
+                            skipped_reason?: string;
+                            /** @description The pull action that was tried. */
+                            action?: string;
+                            /** @description Whether the service answered with usable records. */
+                            ok?: boolean;
+                            status_code?: number | null;
+                            /** @description Mapped fields that found nothing in the real record. */
+                            missing_paths: string[];
+                            notes: string[];
+                            /** @description Variables filled in for the person: the site or domain from the secret's pinned host, and values copied from a saved integration that uses the same secret on the same host. */
+                            filled_vars: {
+                                [key: string]: unknown;
+                            };
+                            /** @description True when the model fixed the draft after the first test and the fix was tested again. */
+                            corrected?: boolean;
+                            /** @description With `corrected`: the fields that found nothing before the fix. */
+                            missing_before?: string[];
+                        };
                         /** @description Present when `service` was searched: every page tried, in order. The last one is the page the draft came from. On 422 the same list is in `error.details.tried`. */
                         tried?: {
                             url: string;
