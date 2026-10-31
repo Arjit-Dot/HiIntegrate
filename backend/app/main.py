@@ -9,7 +9,7 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health
+from app.api import data, health, integrations, runs, secrets, templates
 from app.core.errors import install_error_handlers
 from app.core.logging import request_id_var, setup_logging
 from app.core.settings import get_settings
@@ -42,7 +42,8 @@ def create_app() -> FastAPI:
         return response
 
     install_error_handlers(app)
-    app.include_router(health.router, prefix=settings.api_prefix)
+    for module in (health, integrations, runs, data, secrets, templates):
+        app.include_router(module.router, prefix=settings.api_prefix)
     return app
 
 

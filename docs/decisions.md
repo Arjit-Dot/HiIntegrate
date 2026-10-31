@@ -116,7 +116,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-3.4 | Identity and required fields | Key is `(source, id)`; re-runs upsert; `required` can only add. Users are matched across sources by D-16 | FR-11 | changes-v2, revised |
 | D-4 | Quarantine record | 8 fields; 3 reasons including new `invalid_value` | FR-9 | Extends roadmap |
 | D-5.1 | Run record | 15 fields; statuses `running`, `success`, `failed`; triggers `schedule`, `manual`, `test` | FR-10 | Roadmap |
-| D-5.2 | Health view | 5 statuses from the latest finished `schedule` or `manual` run; `test` runs ignored | FR-10 | Extends roadmap |
+| D-5.2 | Health view | 5 statuses from the latest finished `schedule` or `manual` run **of each action**; `test` runs ignored | FR-10 | Extends roadmap |
 | D-5.3 | Alert rule | Email once when `consecutive_failures` reaches the threshold; resets on success | B-4 | default, approved |
 | D-6 | API contract | `/api/v1`, JSON, routes as listed; pull runs return 202, lookups 200; unpaged quarantine export; no API login in v1 | FR-10, B-2, B-3, B-5 | default, approved |
 | D-7 | Secrets | Env vars until Checkpoint 1, encrypted store (Fernet) by Checkpoint 2 (agreed); write-only API with redaction; user-chosen secret names; Git rules; token and password entry in the form; each secret pinned to a host (all agreed) | FR-6 | agreed |
@@ -805,14 +805,15 @@ Three points. Points 1 and 2 were agreed one by one. Point 3 was set by default.
 | Status | When it applies |
 |---|---|
 | `never_run` | The connection has no counted runs yet |
-| `healthy` | The latest finished run succeeded with no invalid records |
-| `degraded` | The latest finished run succeeded, but some records were quarantined |
-| `failing` | The latest finished run failed |
+| `healthy` | The latest finished run of **every action** succeeded with no invalid records |
+| `degraded` | No action's latest run failed, but at least one quarantined records |
+| `failing` | The latest finished run of **any action** failed |
 | `disabled` | The connection is turned off. This overrides every other status |
 
-- Alongside the status: `last_run_at`, `records_pulled`, `last_error` and `consecutive_failures`. `consecutive_failures` counts failed runs in a row and resets to 0 on a success.
+- Alongside the status: `last_run_at` and `records_pulled` (from the newest run), `last_error` (from the most recent failing action), and `consecutive_failures`.
+- **`consecutive_failures` is per action, and the connection reports the worst one:** the most failed runs in a row on any single action. It resets when that action succeeds.
 - Only `schedule` and `manual` runs count. `test` runs are ignored.
-- Health looks at the latest **finished** run. A run still `running` is skipped until it completes.
+- Health looks at the latest **finished** run **of each action**. A run still `running` is skipped until it completes. Only actions still in the config count, so a renamed or deleted action's old failure does not haunt the connection.
 - A run that is retried after a 429 and then succeeds counts as a success (`healthy`, or `degraded` if records were quarantined).
 
 **Why**
@@ -821,6 +822,7 @@ Three points. Points 1 and 2 were agreed one by one. Point 3 was set by default.
 - A run in progress has no result yet, so judging by it would show a connection as healthy or failing before anyone knows.
 - `disabled` overrides the rest because a turned-off connection doesn't run, and an old failure shouldn't make it look broken.
 - `consecutive_failures` is what the alert rule (D-5.3) counts.
+- **Revised 31 Oct (after real Okta runs):** health was first the latest run of the whole connection. On Okta, `list_alerts` failed and a later successful `list_devices` made the connection look `healthy`. Judging each action by its own latest run stops a failing action hiding behind a healthy one.
 
 **Source note:** The statuses and the first rules come from the roadmap. Ignoring `test` runs and skipping an unfinished run settle gaps it left open.
 
@@ -1420,6 +1422,14 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | Config storage | Added D-15. Configs live only in the `integrations` table. Changes to an existing service update its row in place with a `revision` number. Templates are starting points only. No change to `schema/` |
 | Leaked credentials | Person A reports they have been revoked and replaced |
 | Python | Python 3.12 is installed on Person A's machine (`python3.12`; `python3` is still 3.9) |
+
+### R-13: Changes found by running real services (31 Oct, 10:40pm)
+
+| Item | Before | Now | Why |
+|---|---|---|---|
+| D-5.2 health | The latest finished run of the whole connection | The latest finished run of **each action**. `consecutive_failures` is the worst single action | On real Okta, `list_alerts` failed and a later `list_devices` success made the connection look healthy |
+| Next-link paging stop rule (`schema/README.md`) | Stops when there is no next link | Also stops on a page with no records | The Okta System Log returns a next link on every page, so a run reached `max_pages` and then hit the 429 limit |
+| `GET /integrations/{id}` | `config` and `health` | Also `revision`, `created_at`, `updated_at` | The dashboard can show that an edit changed the integration in place (D-15). Additive in `openapi.yaml` |
 
 ---
 

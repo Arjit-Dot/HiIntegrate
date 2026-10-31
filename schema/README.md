@@ -42,14 +42,14 @@ The validator (`config_loader.validate_config`) must enforce these as well. `too
 ## Behavior the schema implies
 - **Retries:** `max_retries` is the number of retries after the first try. Each retry waits the next value in `backoff_seconds`, and the last value repeats. Retried: timeouts, connection errors and 5xx. Never 4xx.
 - **429:** wait for `Retry-After`, or use the backoff if the header is missing. If the wait is longer than `max_wait_seconds` (default 60), fail with `rate_limited`.
-- **Paging stops when:** `next_link` has no next link, `offset` gets an empty page (or the offset reaches `total_path`), `page_number` gets an empty page (when `stop_when_empty`), `cursor` has no next cursor, or `max_pages` is reached.
+- **Paging stops when:** `next_link` has no next link or a page has no records (the Okta System Log always returns a next link), `offset` gets an empty page (or the offset reaches `total_path`), `page_number` gets an empty page (when `stop_when_empty`), `cursor` has no next cursor, or `max_pages` is reached.
 - **Mapping a record:** a missing or null path uses `default`, otherwise the field stays empty. `transform` runs first (failure: `transform_failed`), then `value_map`. A value outside `value_map` uses `default`, otherwise the record is quarantined as `invalid_value`. Every `required` field and `id` must be present (`missing_required_field`). The finished record must match `result.schema.json`.
 - **Lookup input checks (before any request):** `int` is a whole number, `ip` is IPv4 or IPv6, `domain` is a domain name, `hash` is a hex string of 32, 40 or 64 characters, `enum` is one of its `values`. A blank required input is rejected.
 - **Empty is allowed:** a field the service can't supply stays empty (null), and that is not an error.
 - **Saving:** records are saved page by page. If page 7 fails, pages 1 to 6 stay stored and the run is `failed` with its partial counts.
 - **Identity:** a record is identified by `(source, id)`, so re-running a pull updates records instead of duplicating them. `source` is the integration `name`. Do not rename an integration after records exist.
 - **Secrets are pinned to a host (D-7.6):** a secret may be sent only to the host stored with it, and the engine checks that on **every** request, including next-page links and redirects. A mismatch sends nothing and fails the run with `secret_host_mismatch`. `PUT /secrets/{name}` takes `{value, host}`. A secret from the environment may carry `SECRET_<NAME>_HOST`; without it the engine logs a warning.
-- **Health:** one label per connection from the latest finished `schedule` or `manual` run. `test` runs are ignored, and `disabled` overrides the rest.
+- **Health:** one label per connection, from the latest finished `schedule` or `manual` run **of each action**: `failing` if any action's latest run failed, `degraded` if one quarantined records. `consecutive_failures` is the worst single action's failures in a row. `test` runs are ignored, and `disabled` overrides the rest.
 
 ## Names that were fixed when these files were written
 These were open in `docs/decisions.md` and are now settled here. They are the first thing to review at sign-off.
