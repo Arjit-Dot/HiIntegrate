@@ -22,8 +22,8 @@ function loadDraft(key: string): SavedDraft | null {
 }
 type Tried = NonNullable<GenerateConfigResponse['tried']>
 
-export function AiDraft({ onDraft }: { onDraft: (r: GenerateConfigResponse) => void }) {
-  const [what, setWhat] = useState('')   // a service name, or a link to documentation
+export function AiDraft({ onDraft, initial = '' }: { onDraft: (r: GenerateConfigResponse) => void; initial?: string }) {
+  const [what, setWhat] = useState(initial)   // a service name, or a link to documentation
   const [file, setFile] = useState<Attached | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
