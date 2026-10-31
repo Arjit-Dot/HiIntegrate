@@ -356,6 +356,50 @@ paths:
                 offset: 0
         "400": { $ref: "#/components/responses/ValidationError" }
 
+  /users/unified:
+    get:
+      tags: [Data]
+      summary: Users merged across services (D-16)
+      description: One entry per person. Users are matched by lowercased email, and each entry lists every service the person appears in. Built from the stored users, so nothing extra is stored.
+      operationId: listUnifiedUsers
+      parameters:
+        - { name: source, in: query, description: Only people who appear in this service, schema: { type: string } }
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of unified users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "result.schema.json#/$defs/unified_user"
+              example:
+                items:
+                  - key: grace@acme.com
+                    email: grace@acme.com
+                    name: Grace Hopper
+                    last_login: "2025-12-20T10:00:00Z"
+                    sources:
+                      - { source: jira, id: 5b10a1, status: active, last_login: null, fetched_at: "2026-01-01T09:00:00Z" }
+                      - { source: okta, id: 00u1grace, status: active, last_login: "2025-12-20T10:00:00Z", fetched_at: "2026-01-01T09:05:00Z" }
+                  - key: "github:4021"
+                    email: null
+                    name: ada-l
+                    last_login: null
+                    sources:
+                      - { source: github, id: "4021", status: active, last_login: null, fetched_at: "2026-01-01T09:05:00Z" }
+                total: 2
+                limit: 50
+                offset: 0
+        "400": { $ref: "#/components/responses/ValidationError" }
+
   /quarantine:
     get:
       tags: [Data]

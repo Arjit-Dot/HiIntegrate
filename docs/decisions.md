@@ -55,8 +55,9 @@ The **Covers** line at the top of each entry names the requirements it supports.
 14. [D-12: Build-speed decisions](#d-12-build-speed-decisions-closing-phase-0)
 15. [D-14: AI propose-fix](#d-14-ai-propose-fix)
 16. [D-15: Configs live in the database](#d-15-configs-live-in-the-database-and-changes-update-them-in-place)
-16. [Revision log](#revision-log)
-17. [Open items](#open-items)
+17. [D-16: Unified users across services](#d-16-unified-users-across-services)
+18. [Revision log](#revision-log)
+19. [Open items](#open-items)
 
 ## Status
 
@@ -77,6 +78,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-13 | The frontend visual | Locked |
 | D-14 | `POST /ai/propose-fix` | Locked (approved by both, 31 Oct 7:40pm) |
 | D-15 | Configs live in the database, updated in place | Agreed by Person A. Person B to confirm |
+| D-16 | Unified users across services | Agreed by Person A. Person B to confirm. Tagged `contract-v3` |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -111,7 +113,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-3.1 | `user` schema | `id`, `name`, `email`, `status`, `last_login` plus platform-set `source`, `fetched_at` | FR-11 | changes-v2 |
 | D-3.2 | `device` schema | `id`, `hostname`, `ip`, `os`, `owner`, `last_seen` plus platform-set fields | FR-11 | changes-v2 |
 | D-3.3 | `alert` schema | `id`, `type`, `severity`, `timestamp`, `description` plus platform-set fields | FR-11 | changes-v2 |
-| D-3.4 | Identity and required fields | Key is `(source, id)`; re-runs upsert; `required` can only add | FR-11 | changes-v2 |
+| D-3.4 | Identity and required fields | Key is `(source, id)`; re-runs upsert; `required` can only add. Users are matched across sources by D-16 | FR-11 | changes-v2, revised |
 | D-4 | Quarantine record | 8 fields; 3 reasons including new `invalid_value` | FR-9 | Extends roadmap |
 | D-5.1 | Run record | 15 fields; statuses `running`, `success`, `failed`; triggers `schedule`, `manual`, `test` | FR-10 | Roadmap |
 | D-5.2 | Health view | 5 statuses from the latest finished `schedule` or `manual` run; `test` runs ignored | FR-10 | Extends roadmap |
@@ -126,6 +128,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-13 | The frontend visual | `docs/ui-prototype.html` is the final visual; Person B builds the app to match it | FR-10, B-2, B-3, B-5 | agreed |
 | D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | agreed |
 | D-15 | Configs in the database | One row per integration with a `revision`; adding to an existing service edits that row with `PUT`; templates are starting points only | FR-2, B-5 | Person A, B to confirm |
+| D-16 | Unified users | `GET /users/unified` merges users across services by lowercased email into one entry listing each service. Stored records are unchanged | FR-11 | Person A, B to confirm |
 
 ---
 
@@ -710,13 +713,13 @@ File: `schema/result.schema.json`. Four points. Revised to match the organizers'
 - For all three schemas, a record is identified by `(source, id)`.
 - Re-running a pull **updates** an existing record instead of adding a duplicate (upsert).
 - The platform requires only `id` and `source`. An action's `required` list can add to that (for example `email`) but can't remove from it.
-- The same person or device on two services stays as two records, because `source` differs. Matching across sources is not in v1.
+- The same person or device on two services stays as two stored records, because `source` differs. For **users**, a unified view matches them across sources (D-16). Devices and alerts are not matched.
 
 **Why**
 - Without an identity, a pull every 5 minutes would multiply the tables with copies of the same records.
 - `id` alone isn't enough, because two services can use the same ID for different things. Adding `source` makes the pair unique.
 - Letting configs only add requirements keeps the minimum safe: a record always has what it needs to be identified.
-- Cross-source matching needs rules for when two records are the same, which is a bigger feature than v1 needs.
+- Cross-source matching needs rules for when two records are the same. It was left out at first and added for users in D-16, as a view over these records, so identity here is unchanged.
 
 **Source note:** The earlier locked version used `(source, source_id)` for `users` and `(source, indicator)` for `indicators`.
 
@@ -885,6 +888,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 | `POST /integrations/{id}/actions/{action}/run` | Run an action |
 | `GET /runs`, `GET /runs/{run_id}` | Run history and one run |
 | `GET /results?target=user\|device\|alert` | Stored records |
+| `GET /users/unified` | Users merged across services, one entry per person (D-16) |
 | `GET /quarantine` | Quarantined records, paged |
 | `GET /quarantine/export` | **Every** quarantined record, unpaged |
 | `GET /secrets`, `PUT /secrets/{name}` | Names only, and set a value |
@@ -895,7 +899,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 - **Run:** a `pull` returns `202` with a `run_id` and finishes in the background (poll `GET /runs/{run_id}`). A `lookup` returns `200` with the mapped record. Starting an action that is already running returns `409 conflict`. The request body is `{"inputs": {...}}`. A lookup that fails at the service returns `502` with code `run_failed`, and the run is still recorded. A successful lookup carries its run in the `X-Run-Id` header.
 - **Validate** replies `{"valid": false, "errors": [{"path", "line", "message", "severity"}]}`. `line` is optional.
 - **Test** replies `{"ok", "status_code", "latency_ms", "pages_fetched", "raw_sample", "mapped_sample", "missing_paths", "notes"}`.
-- **Filters:** `/runs` takes `integration` and `status`. `/results` takes `target` and `source`. `/quarantine` and its export take `source`, `action`, `run_id` and `target_schema`.
+- **Filters:** `/runs` takes `integration` and `status`. `/results` takes `target` and `source`. `/users/unified` takes `source`, `limit` and `offset`. `/quarantine` and its export take `source`, `action`, `run_id` and `target_schema`.
 - **Export:** a JSON array with the quarantine fields (D-4), including `raw`. CSV is a stretch.
 - A config using a reserved feature (D-2.22) gets `501 unsupported`.
 - **Dashboard:** each integration that has lookup actions gets a **Run** panel. You pick a lookup action, fill its inputs (types are checked before any request), and see the mapped record, whether it was saved, and the run it created. Pulls are not run from here, because they run on a schedule. The request body is proposed as `{"inputs": {...}}`, which is not locked yet.
@@ -1251,6 +1255,30 @@ One shared set of examples that both people treat as the truth:
 - Two configs for the same service would pull the same records twice and split their health and alerts.
 - Editing in place keeps `source` and run history unchanged, so the records, quarantine and health stay attached to the integration.
 - No contract change is needed: `PUT /integrations/{id}` already replaces the whole config, and the openapi already forbids changing `name`.
+
+---
+
+## D-16: Unified users across services
+
+**Covers:** FR-11 · **Source:** Person A's request (31 Oct), tagged `contract-v3`. **Person B to confirm** at the next sync. It adds one route and two schema definitions, and changes no existing shape.
+
+**Decision**
+- **Stored records do not change.** `users` still holds one row per `(source, id)` (D-3.4), so each service keeps its own record, history and upsert.
+- **A unified view is built from those rows when asked.** `GET /users/unified` returns one `unified_user` per person (`result.schema.json#/$defs/unified_user`).
+- **Matching rule:** two users are the same person when their lowercased `email` is equal (D-3.1 already lowercases it). A user with no email is never merged. They appear as their own entry with `key` set to `source:id`.
+- **Each entry** has `key`, `email`, `name` (the first non-empty name), `last_login` (the most recent across services) and `sources`: a list with each service's `source`, `id`, `status`, `last_login` and `fetched_at`.
+- **Filter and paging:** `source` keeps only people who appear in that service, and still lists all of their services. `limit` and `offset` page the merged list.
+- **Devices and alerts are not matched.** `GET /results` is unchanged and still returns one row per `(source, id)`.
+- **The dashboard** shows one row per person on the Results page, with a "Services" column.
+
+**Why**
+- Showing one person once, with every service they use, is the useful answer for an identity view, and a person on three services would otherwise look like three people.
+- Building the view from the existing rows keeps `(source, id)` upserts, per-service history and re-runs exactly as they were. Nothing can be merged wrongly in storage, and no merge can be undone only by re-pulling.
+- Email is the only identifier all three services share, and it is already normalized.
+
+**Limits**
+- Two different people who share an email (a shared mailbox) are shown as one. A person with different emails on two services is shown as two.
+- The merge is computed per request, which is fine at v1 sizes. A stored link table is the next step if it ever needs to scale.
 
 ---
 
