@@ -10,6 +10,7 @@ info:
     - Errors always use `{"error": {"code", "message", "details"}}`.
     - Lists use `limit` (default 50, maximum 500) and `offset` (default 0), and reply `{items, total, limit, offset}`.
     - Every route except `/health`, `/auth/register` and `/auth/login` needs a sign-in (D-18): send the token from `/auth/login` in the `X-Session-Token` header. Each account sees only its own integrations, records, runs, quarantine and secrets. A missing, wrong or expired token gives 401.
+    - Routes that change data, start runs or call the AI are limited per account per minute (S-9): over the limit the answer is 429 `rate_limited` with a `Retry-After` header (seconds). Reads and validation are not limited.
     - Record and run shapes live in `result.schema.json`. The config shape lives in `integration.schema.json`.
 servers:
   - url: http://localhost:8000/api/v1
@@ -26,6 +27,7 @@ tags:
   - { name: Secrets, description: "Write-only secret names and values." }
   - { name: Templates, description: "Prebuilt configs." }
   - { name: AI, description: "Optional extras. The engine never calls them." }
+  - { name: Audit, description: "Who changed what (names and revisions, never values)." }
 
 paths:
   /health:
@@ -149,6 +151,7 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Integration" } } }
         "400": { $ref: "#/components/responses/ValidationError" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /integrations/validate:
     post:
@@ -195,6 +198,7 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Integration" } } }
         "400": { $ref: "#/components/responses/ValidationError" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
     delete:
       tags: [Integrations]
       summary: Remove an integration
@@ -202,6 +206,7 @@ paths:
       responses:
         "204": { description: Removed }
         "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /integrations/{id}/enabled:
     parameters:
@@ -220,6 +225,7 @@ paths:
           description: The updated summary
           content: { application/json: { schema: { $ref: "#/components/schemas/IntegrationSummary" } } }
         "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /integrations/{id}/health:
     parameters:
@@ -273,6 +279,7 @@ paths:
                 notes: []
         "400": { $ref: "#/components/responses/ValidationError" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /integrations/{id}/actions/{action}/run:
     parameters:
@@ -321,6 +328,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example: { error: { code: run_failed, message: Authentication failed (401), details: { run_id: run-5534, error_code: auth_failed } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /runs:
     get:
@@ -381,6 +389,38 @@ paths:
                 retries: 0
                 error: null
         "404": { $ref: "#/components/responses/NotFound" }
+
+  /audit:
+    get:
+      tags: [Audit]
+      summary: The audit log, newest first
+      description: |
+        One entry for every change you made (S-7): an integration created, updated, enabled, disabled or deleted, a secret set, an action tested or run by hand. Entries hold names, the integration `revision` and the request id (the `X-Request-Id` the API sent back), and never a secret value or a config body. You see only your own account's entries.
+      operationId: listAudit
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - { name: event, in: query, description: "Only this event, e.g. `secret.set`.", schema: { type: string } }
+        - { name: target, in: query, description: "Only this integration, secret name or `integration/action`.", schema: { type: string } }
+      responses:
+        "200":
+          description: A page of audit entries
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
+              example:
+                items:
+                  - { id: 7, at: "2026-01-01T09:07:00Z", event: secret.set, target: github_token, revision: null, request_id: 3f9c1a2b7d4e }
+                  - { id: 6, at: "2026-01-01T09:05:00Z", event: integration.updated, target: github, revision: 2, request_id: 8a1d0c5e9b22 }
+                total: 2
+                limit: 50
+                offset: 0
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /results:
     get:
@@ -561,6 +601,7 @@ paths:
         "204": { description: Stored }
         "400": { $ref: "#/components/responses/ValidationError" }
         "501": { $ref: "#/components/responses/Unsupported" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /templates:
     get:
@@ -680,6 +721,7 @@ paths:
                         error_count: { type: integer, minimum: 0 }
         "422": { $ref: "#/components/responses/ValidationError" }
         "501": { $ref: "#/components/responses/Unsupported" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /ai/suggest-mapping:
     post:
@@ -721,6 +763,7 @@ paths:
               schema: { $ref: "#/components/schemas/MappingSuggestion" }
         "422": { $ref: "#/components/responses/ValidationError" }
         "501": { $ref: "#/components/responses/Unsupported" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /ai/summarize:
     post:
@@ -743,6 +786,7 @@ paths:
             application/json:
               schema: { type: object, required: [summary], properties: { summary: { type: string } } }
         "501": { $ref: "#/components/responses/Unsupported" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /ai/propose-fix:
     post:
@@ -777,6 +821,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationError" }
         "501": { $ref: "#/components/responses/Unsupported" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
 components:
   securitySchemes:
@@ -842,6 +887,14 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: { code: unauthorized, message: "Sign in first: send the session token you got from /auth/login in the X-Session-Token header.", details: null } }
+    RateLimited:
+      description: Too many requests from this account in the last minute (S-9). Wait `Retry-After` seconds. `details` has the `bucket` (`write`, `run` or `ai`) and `retry_after`.
+      headers:
+        Retry-After: { description: Seconds to wait., schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: rate_limited, message: Too many write requests. Wait 12 s and try again., details: { bucket: write, retry_after: 12 } } }
     ValidationError:
       description: The request or the config is invalid. `details.errors` lists each problem with its field path.
       content:
@@ -868,6 +921,17 @@ components:
           example: { error: { code: unsupported, message: The secret store is not available yet, details: null } }
 
   schemas:
+    AuditEntry:
+      type: object
+      additionalProperties: false
+      required: [id, at, event, target, revision, request_id]
+      properties:
+        id: { type: integer }
+        at: { type: string, format: date-time }
+        event: { type: string, description: "`integration.created`, `integration.updated`, `integration.deleted`, `integration.enabled`, `integration.disabled`, `secret.set`, `action.tested` or `action.run`." }
+        target: { type: [string, "null"], description: "The integration or secret name, or `integration/action`." }
+        revision: { type: [integer, "null"], description: "The integration's revision after the change, when it has one." }
+        request_id: { type: [string, "null"] }
     Error:
       type: object
       required: [error]

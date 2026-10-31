@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Path, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.audit import record
 from app.api.deps import Account, session_dep
 from app.core.errors import ApiError
 from app.secrets import SecretError, StoreUnavailable, list_secrets, set_secret
@@ -33,4 +34,5 @@ def put_secret(name: Annotated[str, Path(pattern=r"^[A-Za-z0-9_]{1,64}$")], body
         raise ApiError(501, "unsupported", str(exc)) from None
     except SecretError as exc:
         raise ApiError(400, "validation_error", str(exc), {"errors": [{"path": "host", "message": str(exc), "severity": "error"}]}) from None
+    record(s, account, "secret.set", name)
     return Response(status_code=204)

@@ -288,6 +288,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The audit log, newest first
+         * @description One entry for every change you made (S-7): an integration created, updated, enabled, disabled or deleted, a secret set, an action tested or run by hand. Entries hold names, the integration `revision` and the request id (the `X-Request-Id` the API sent back), and never a secret value or a config body. You see only your own account's entries.
+         */
+        get: operations["listAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/results": {
         parameters: {
             query?: never;
@@ -527,6 +547,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AuditEntry: {
+            id: number;
+            /** Format: date-time */
+            at: string;
+            /** @description `integration.created`, `integration.updated`, `integration.deleted`, `integration.enabled`, `integration.disabled`, `secret.set`, `action.tested` or `action.run`. */
+            event: string;
+            /** @description The integration or secret name, or `integration/action`. */
+            target: string | null;
+            /** @description The integration's revision after the change, when it has one. */
+            revision: number | null;
+            request_id: string | null;
+        };
         Error: {
             error: {
                 /** @enum {unknown} */
@@ -1366,6 +1398,29 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Too many requests from this account in the last minute (S-9). Wait `Retry-After` seconds. `details` has the `bucket` (`write`, `run` or `ai`) and `retry_after`. */
+        RateLimited: {
+            headers: {
+                /** @description Seconds to wait. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "Too many write requests. Wait 12 s and try again.",
+                 *         "details": {
+                 *           "bucket": "write",
+                 *           "retry_after": 12
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description The request or the config is invalid. `details.errors` lists each problem with its field path. */
         ValidationError: {
             headers: {
@@ -1713,6 +1768,7 @@ export interface operations {
             };
             400: components["responses"]["ValidationError"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     validateIntegration: {
@@ -1799,6 +1855,7 @@ export interface operations {
             };
             400: components["responses"]["ValidationError"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     deleteIntegration: {
@@ -1821,6 +1878,7 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     setEnabled: {
@@ -1851,6 +1909,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getIntegrationHealth: {
@@ -1945,6 +2004,7 @@ export interface operations {
             };
             400: components["responses"]["ValidationError"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     runAction: {
@@ -2020,6 +2080,7 @@ export interface operations {
             400: components["responses"]["ValidationError"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
             501: components["responses"]["Unsupported"];
             /** @description A lookup failed at the service. The run is recorded. */
             502: {
@@ -2157,6 +2218,61 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    listAudit: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["limit"];
+                offset?: components["parameters"]["offset"];
+                /** @description Only this event, e.g. `secret.set`. */
+                event?: string;
+                /** @description Only this integration, secret name or `integration/action`. */
+                target?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of audit entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": 7,
+                     *           "at": "2026-01-01T09:07:00Z",
+                     *           "event": "secret.set",
+                     *           "target": "github_token",
+                     *           "revision": null,
+                     *           "request_id": "3f9c1a2b7d4e"
+                     *         },
+                     *         {
+                     *           "id": 6,
+                     *           "at": "2026-01-01T09:05:00Z",
+                     *           "event": "integration.updated",
+                     *           "target": "github",
+                     *           "revision": 2,
+                     *           "request_id": "8a1d0c5e9b22"
+                     *         }
+                     *       ],
+                     *       "total": 2,
+                     *       "limit": 50,
+                     *       "offset": 0
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Page"] & {
+                        items?: components["schemas"]["AuditEntry"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listResults: {
@@ -2477,6 +2593,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
             501: components["responses"]["Unsupported"];
         };
     };
@@ -2638,6 +2755,7 @@ export interface operations {
                 };
             };
             422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
             501: components["responses"]["Unsupported"];
         };
     };
@@ -2679,6 +2797,7 @@ export interface operations {
                 };
             };
             422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
             501: components["responses"]["Unsupported"];
         };
     };
@@ -2710,6 +2829,7 @@ export interface operations {
                     };
                 };
             };
+            429: components["responses"]["RateLimited"];
             501: components["responses"]["Unsupported"];
         };
     };
@@ -2747,6 +2867,7 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
             501: components["responses"]["Unsupported"];
         };
     };

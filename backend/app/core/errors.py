@@ -14,9 +14,9 @@ CODES = {"validation_error", "not_found", "conflict", "unsupported", "run_failed
 
 
 class ApiError(Exception):
-    def __init__(self, status: int, code: str, message: str, details=None):
+    def __init__(self, status: int, code: str, message: str, details=None, headers: dict | None = None):
         assert code in CODES, code
-        self.status, self.code, self.message, self.details = status, code, message, details
+        self.status, self.code, self.message, self.details, self.headers = status, code, message, details, headers
         super().__init__(message)
 
 
@@ -50,7 +50,7 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ApiError)
     async def api_error(_: Request, exc: ApiError):
-        return JSONResponse(error_body(exc.code, exc.message, exc.details), status_code=exc.status)
+        return JSONResponse(error_body(exc.code, exc.message, exc.details), status_code=exc.status, headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def request_invalid(_: Request, exc: RequestValidationError):

@@ -16,6 +16,7 @@ from app.storage.models import (
     Account,
     ActionState,
     AlertAttempt,
+    Audit,
     AuthSession,
     Integration,
     PathBaseline,
@@ -413,3 +414,24 @@ def delete_auth_session(s: Session, token_hash: str) -> None:
     if row is not None:
         s.delete(row)
         s.flush()
+
+
+# --- audit log (S-7) ---------------------------------------------------------------------------------------------
+
+def add_audit(s: Session, account: str, event: str, target: str | None = None, revision: int | None = None,
+              request_id: str | None = None) -> None:
+    """Record one change. Never pass a value: only names, a revision and the request id."""
+    s.add(Audit(account=account, at=now_iso(), event=event, target=target, revision=revision, request_id=request_id))
+
+
+def list_audit(s: Session, account: str, limit: int = 50, offset: int = 0, event: str | None = None,
+               target: str | None = None) -> tuple[list[dict], int]:
+    q = select(Audit).where(Audit.account == account)
+    if event:
+        q = q.where(Audit.event == event)
+    if target:
+        q = q.where(Audit.target == target)
+    total = s.scalar(select(func.count()).select_from(q.subquery())) or 0
+    rows = s.scalars(q.order_by(Audit.id.desc()).limit(limit).offset(offset)).all()
+    return [{"id": r.id, "at": r.at, "event": r.event, "target": r.target, "revision": r.revision, "request_id": r.request_id}
+            for r in rows], total

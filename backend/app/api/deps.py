@@ -4,11 +4,11 @@ from collections.abc import Iterator
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, Header, Query
+from fastapi import Depends, Header, Query, Request
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from app import auth
+from app import auth, ratelimit
 from app.core.errors import ApiError
 from app.storage import get_engine, repo, session_factory
 
@@ -52,3 +52,14 @@ def account_dep(s: Annotated[Session, Depends(session_dep)], x_session_token: An
 
 
 Account = Annotated[str, Depends(account_dep)]
+
+
+def limit_dep(request: Request, account: Annotated[str, Depends(account_dep)]) -> None:
+    """S-9: 429 when this account is over its per-minute limit for writes, runs or AI calls."""
+    bucket = ratelimit.bucket_for(request.method, request.url.path)
+    if bucket is None:
+        return
+    wait = ratelimit.limiter.check(account, bucket)
+    if wait:
+        raise ApiError(429, "rate_limited", f"Too many {bucket} requests. Wait {wait} s and try again.",
+                       {"bucket": bucket, "retry_after": wait}, headers={"Retry-After": str(wait)})

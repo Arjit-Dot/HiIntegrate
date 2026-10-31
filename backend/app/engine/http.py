@@ -9,6 +9,7 @@
 """
 
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -20,6 +21,35 @@ import httpx
 from app.engine.errors import RunError
 
 log = logging.getLogger("app.engine")
+
+# S-9: the most one response may be. A service (or a hostile config pointing at one) cannot fill memory with a huge body.
+DEFAULT_MAX_RESPONSE_BYTES = 10_000_000
+
+
+def max_response_bytes() -> int:
+    try:
+        return int(os.environ.get("MAX_RESPONSE_BYTES", "")) or DEFAULT_MAX_RESPONSE_BYTES
+    except ValueError:
+        return DEFAULT_MAX_RESPONSE_BYTES
+
+
+def _read_capped(client: httpx.Client, request: httpx.Request, cap: int) -> httpx.Response:
+    """Send and read the body, stopping at `cap` bytes. Raises bad_response if it is larger."""
+    response = client.send(request, stream=True)
+    try:
+        declared = response.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > cap:
+            raise RunError("bad_response", f"the response is larger than the {cap}-byte limit", status=response.status_code)
+        chunks, size = [], 0
+        for chunk in response.iter_bytes():
+            size += len(chunk)
+            if size > cap:
+                raise RunError("bad_response", f"the response is larger than the {cap}-byte limit", status=response.status_code)
+            chunks.append(chunk)
+    finally:
+        response.close()
+    headers = [(k, v) for k, v in response.headers.multi_items() if k.lower() not in ("content-encoding", "content-length", "transfer-encoding")]
+    return httpx.Response(response.status_code, headers=headers, content=b"".join(chunks), request=request)
 
 
 @dataclass
@@ -72,7 +102,7 @@ def send(client: httpx.Client, request: httpx.Request, policy: Policy, *, sleep:
     started = time.monotonic()
     while True:
         try:
-            response = client.send(request)
+            response = _read_capped(client, request, max_response_bytes())
         except httpx.TimeoutException as exc:
             kind, failure = "timeout", RunError("timeout", f"timed out: {type(exc).__name__}", retries=retries)
         except httpx.TransportError as exc:
