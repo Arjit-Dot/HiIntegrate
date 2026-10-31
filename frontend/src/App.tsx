@@ -18,7 +18,7 @@ export default function App() {
   return (
     <ToastProvider>
       <header className="topbar">
-        <div className="brand"><div className="logo">⇄</div>Integration Platform</div>
+        <div className="brand"><div className="logo">⇄</div>HiIntegrate</div>
         <nav className="nav">
           {NAV.map(([to, label]) => (
             <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')} style={{ textDecoration: 'none' }}>
