@@ -21,6 +21,10 @@ export type GenerateConfigResponse = {
   errors: S['ValidationIssue'][]
   source?: { url: string; chars: number; truncated: boolean }
   tried?: { url: string; ok: boolean; reason: string | null }[]
+  test?: {
+    ran: boolean; skipped_reason?: string; action?: string; ok?: boolean; status_code?: number | null
+    missing_paths: string[]; notes: string[]; filled_vars: Record<string, unknown>; corrected?: boolean; missing_before?: string[]
+  }
   attempts?: { attempt: number; valid: boolean; error_count: number }[]
 }
 

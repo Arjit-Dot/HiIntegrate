@@ -126,10 +126,42 @@ def finalize(config: dict) -> dict:
     return cfg
 
 
-def generate_config(llm: LLMClient, text: str) -> dict:
+def _read_draft(answer: str) -> tuple[dict | None, list[dict]]:
+    config, issues = load_config(answer)
+    return config, issues + duplicate_keys(answer)
+
+
+def _needs_fixing(test: dict) -> bool:
+    """A test run says the paths are wrong when it reached the service and mapped fields found nothing, or the records path
+    found no list. A call that failed for another reason (login, network) is not the draft's fault."""
+    if not test.get("ran"):
+        return False
+    if test.get("ok"):
+        return bool(test.get("missing_paths"))
+    if test.get("status_code") in (405, 410):  # the endpoint or method is gone: the draft's fault, not the login's
+        return True
+    return any("unexpected response shape" in n for n in test.get("notes", []))
+
+
+def _describe_test(test: dict) -> str:
+    lines = [f"Action tested: {test.get('action')}"]
+    if test.get("status_code") in (405, 410):
+        lines.append(f"The service answered {test['status_code']}: this endpoint or method is no longer available. Use a current endpoint from the documentation.")
+    if test.get("missing_paths"):
+        lines.append("These mapped fields found nothing in the real record: " + ", ".join(test["missing_paths"]))
+    lines += [f"Note: {n}" for n in test.get("notes", [])]
+    if test.get("raw_sample") is not None:
+        lines.append("A real record from the service (masked):\n" + json.dumps(mask(test["raw_sample"]), default=str)[:3000])
+    return "\n".join(lines)
+
+
+def generate_config(llm: LLMClient, text: str, *, existing_secrets: list[str] | None = None, tester=None) -> dict:
     """Docs, curl or a sample response in, a draft config out. Validate, and feed the errors back up to 2 times.
-    Returns {yaml, config, errors, attempts}; `attempts` lets the UI show each step."""
-    system = prompt("generate_config", rules=prompt("rules"), example_github=_template("github"), example_template=_template("service-template"))
+    Then, if `tester` is given, try the draft against the real service once and correct paths that found nothing.
+    `tester(config) -> (config, report)` lives in the route: it owns the database, the secrets and the safety checks.
+    Returns {yaml, config, errors, attempts, test}; `attempts` lets the UI show each step."""
+    system = prompt("generate_config", rules=prompt("rules"), example_github=_template("github"), example_template=_template("service-template"),
+                    existing_secrets=", ".join(existing_secrets or []) or "none")
     user = scrub(text)
     attempts: list[dict] = []
     answer = _strip_fences(llm.generate(system, user))
@@ -145,11 +177,22 @@ def generate_config(llm: LLMClient, text: str) -> dict:
             break
         follow_up = prompt("fix_config", errors=_describe(issues) or "- the text is not valid YAML")
         answer = _strip_fences(llm.generate(system, f"{user}\n\n---\nYour previous answer:\n{answer}\n\n{follow_up}"))
+    test = None
     if config is not None and not _errors(issues):
         config = finalize(config)
+        if tester:
+            config, test = tester(config)
+            if _needs_fixing(test):
+                follow_up = prompt("fix_after_test", result=_describe_test(test))
+                fixed = _strip_fences(llm.generate(system, f"{user}\n\n---\nYour previous answer:\n{yaml.safe_dump(config, sort_keys=False, allow_unicode=True, width=110)}\n\n{follow_up}"))
+                fixed_config, fixed_issues = _read_draft(fixed)
+                if fixed_config is not None and not _errors(fixed_issues):
+                    config, test_after = tester(finalize(fixed_config))
+                    attempts.append({"attempt": len(attempts) + 1, "valid": True, "error_count": 0})
+                    test = {**test_after, "corrected": True, "missing_before": test.get("missing_paths", [])}
         issues = validate_config(config)
         answer = yaml.safe_dump(config, sort_keys=False, allow_unicode=True, width=110)
-    return {"yaml": answer, "config": config, "errors": issues, "attempts": attempts}
+    return {"yaml": answer, "config": config, "errors": issues, "attempts": attempts, "test": test}
 
 
 # ---------------------------------------------------------------- find the documentation from a service name

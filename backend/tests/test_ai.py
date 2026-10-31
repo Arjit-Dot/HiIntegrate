@@ -11,7 +11,7 @@ from app.ai import features
 from app.ai.client import LLMClient, LLMError
 from app.ai.redact import mask, safe_config, scrub
 from app.api.ai import llm_dep
-from app.api.deps import engine_dep
+from app.api.deps import engine_dep, outbound_client_dep
 from app.config_loader import parse_config
 from app.core.settings import REPO_ROOT, get_settings
 from app.main import create_app
@@ -177,24 +177,38 @@ class Script:
     """A scripted model: answers in order and keeps every prompt it was sent."""
 
     def __init__(self, *answers):
-        self.answers, self.prompts = list(answers), []
+        self.answers, self.prompts, self.systems = list(answers), [], []
         self.model = "scripted"
 
     def generate(self, system, user, **kw):
         self.prompts.append(user)
+        self.systems.append(system)
         answer = self.answers.pop(0)
         if isinstance(answer, Exception):
             raise answer
         return answer if isinstance(answer, str) else json.dumps(answer)
 
 
+def no_network():
+    """The AI routes may try a draft against the real service. Tests never do: any call fails the test."""
+    return httpx.Client(transport=httpx.MockTransport(lambda r: pytest.fail(f"unexpected network call to {r.url}")))
+
+
+def clean_secrets(monkeypatch):
+    for k in list(__import__("os").environ):
+        if k.startswith("SECRET_"):
+            monkeypatch.delenv(k, raising=False)
+
+
 @pytest.fixture
 def api(tmp_path, monkeypatch):
+    clean_secrets(monkeypatch)
     monkeypatch.setenv("SECRET_MOCK_TOKEN", "mock-secret-123")
     engine = make_engine(f"sqlite:///{tmp_path}/ai.db")
     Base.metadata.create_all(engine)
     app = create_app()
     app.dependency_overrides[engine_dep] = lambda: engine
+    app.dependency_overrides[outbound_client_dep] = no_network
     client = TestClient(app)
     client.engine, client.app_ = engine, app
     return client
