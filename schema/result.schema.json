@@ -303,7 +303,8 @@
             "bad_response",
             "api_error",
             "client_error",
-            "secret_host_mismatch"
+            "secret_host_mismatch",
+            "schema_drift"
           ]
         },
         "message": {
@@ -463,7 +464,7 @@
               "$ref": "#/$defs/error"
             }
           ],
-          "description": "Null unless the run failed."
+          "description": "Null unless the run failed, or succeeded but a mapped field vanished from the response (code schema_drift)."
         }
       }
     },

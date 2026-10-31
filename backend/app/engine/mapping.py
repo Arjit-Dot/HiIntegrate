@@ -154,3 +154,10 @@ def map_records(cfg: dict, action_name: str, raws: list, *, run_id: str, fetched
         r = map_record(cfg, action_name, raw, run_id=run_id, fetched_at=fetched_at, quarantined_at=quarantined_at)
         (records if "record" in r else quarantine).append(r.get("record") or r.get("quarantine"))
     return records, quarantine
+
+
+def remap_records(cfg: dict, action_name: str, raw_records: list, *, run_id: str = "remap") -> tuple[list, list]:
+    """A dry run for AI propose-fix (D-14): map stored raw records again with a (proposed) config.
+    Pure: no network, no database. Returns (records, quarantine), exactly as they would be saved."""
+    fetched_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return map_records(cfg, action_name, raw_records, run_id=run_id, fetched_at=fetched_at)

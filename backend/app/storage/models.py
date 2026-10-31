@@ -114,3 +114,13 @@ class ActionState(Base):
     integration: Mapped[str] = mapped_column(String(64), primary_key=True)
     action: Mapped[str] = mapped_column(String(64), primary_key=True)
     last_success_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class PathBaseline(Base):
+    """Mapped paths seen in earlier successful runs of an action, for the schema drift check.
+    A new table, so an existing database gets it from create_all without altering anything."""
+
+    __tablename__ = "path_baseline"
+    integration: Mapped[str] = mapped_column(String(64), primary_key=True)
+    action: Mapped[str] = mapped_column(String(64), primary_key=True)
+    paths: Mapped[list] = mapped_column(JSON, default=list)
