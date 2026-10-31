@@ -50,6 +50,7 @@ class GenerateBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str | None = Field(default=None, min_length=1)
     url: str | None = Field(default=None, min_length=1, max_length=2000)  # AI mode: a documentation page the server reads
+    service: str | None = Field(default=None, min_length=1, max_length=100)  # AI mode: a service name, such as "Jira"; the AI finds the docs
 
 
 def docs_dep():
@@ -74,19 +75,36 @@ class ProposeFixBody(BaseModel):
 @router.post("/ai/generate-config")
 def generate_config(body: GenerateBody, llm: LlmDep, fetch: Annotated[Callable[[str], dict], Depends(docs_dep)]) -> dict:
     llm = require_llm(llm)
-    if not body.text and not body.url:
-        raise ApiError(422, "validation_error", "send a documentation url or some text",
-                       {"errors": [{"path": "url", "message": "give a url or text", "severity": "error"}]})
-    material, source = prepare_text(body.text) if body.text else "", None
-    if body.url:
+    if not (body.text or body.url or body.service):
+        raise ApiError(422, "validation_error", "send a service name, a documentation url or some text",
+                       {"errors": [{"path": "service", "message": "give a service name, a url or text", "severity": "error"}]})
+
+    def unusable(message: str, path: str, tried: list[dict] | None = None):
+        details = {"errors": [{"path": path, "message": message, "severity": "error"}], **({"tried": tried} if tried is not None else {})}
+        return ApiError(422, "validation_error", f"The documentation cannot be used: {message}", details)
+
+    parts: list[str] = [f"Service: {body.service}"] if body.service else []
+    page, tried = None, None
+    if body.url:  # a link beats a name
         try:
             page = fetch(body.url)
         except DocsError as exc:
-            raise ApiError(422, "validation_error", f"The documentation page cannot be used: {exc}",
-                           {"errors": [{"path": "url", "message": str(exc), "severity": "error"}]}) from None
-        source = {"url": page["url"], "chars": page["chars"], "truncated": page["truncated"]}
-        material = f"Documentation page: {page['url']}\n\n{page['text']}" + (f"\n\nExtra instructions from the person:\n{prepare_text(body.text)}" if body.text else "")
-    return {**ask(features.generate_config, llm, material), **({"source": source} if source else {})}
+            raise unusable(str(exc), "url") from None
+    elif body.service and not body.text:  # a name alone: the AI finds the documentation and tries pages until one works
+        try:
+            page, tried = ask(features.find_docs, llm, body.service, fetch)
+        except features.DocsNotFound as exc:
+            raise unusable(f"{exc}. Attach the documentation as a file instead", "service", exc.tried) from None
+    if page:
+        parts.append(f"Documentation page: {page['url']}\n\n{page['text']}")
+    if body.text:
+        parts.append(prepare_text(body.text))
+    out = ask(features.generate_config, llm, "\n\n".join(parts))
+    if page:
+        out["source"] = {"url": page["url"], "chars": page["chars"], "truncated": page["truncated"]}
+    if tried is not None:
+        out["tried"] = tried
+    return out
 
 
 @router.post("/ai/summarize")

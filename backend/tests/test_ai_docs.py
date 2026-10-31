@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.ai import docs
+from app.ai.client import LLMError
 from app.ai.docs import DocsError, check_url, fetch_docs, to_text
 from app.api.ai import docs_dep, llm_dep
 from app.api.deps import engine_dep
@@ -108,19 +109,19 @@ def test_html_becomes_text_that_keeps_endpoints_and_examples_and_drops_noise():
 def test_json_and_yaml_specs_are_passed_through():
     spec = json.dumps({"openapi": "3.0.0", "paths": {"/users": {"get": {"summary": "x" * 300}}}})
     out = fetch_docs("https://api.acme.example/openapi.json", client=reader(lambda r: html(spec, ctype="application/json")))
-    assert '"/users"' in out["text"]
+    assert "GET /users |" in out["text"]
 
 
 def test_long_pages_are_cut_and_say_so():
     out = fetch_docs("https://docs.acme.example/big", client=reader(lambda r: html("<p>" + "word " * 30000 + "</p>")))
-    assert len(out["text"]) == docs.MAX_CHARS and out["truncated"] is True and out["chars"] > docs.MAX_CHARS
+    assert len(out["text"]) <= docs.MAX_CHARS and out["truncated"] is True and out["chars"] > docs.MAX_CHARS
 
 
 @pytest.mark.parametrize("response,why", [
     (lambda r: html(status=404), "404"),
     (lambda r: html("%PDF", ctype="application/pdf"), "not text"),
     (lambda r: html("<html><body><div id=app></div><script>render()</script></body></html>"), "almost no readable text"),
-    (lambda r: html("x" * 1_600_000, ctype="text/plain"), "larger than 1.5 MB"),
+    (lambda r: html("x" * 8_100_000, ctype="text/plain"), "larger than 8 MB"),
 ])
 def test_unusable_pages_give_a_clear_reason(response, why):
     with pytest.raises(DocsError, match=why):
@@ -211,7 +212,7 @@ def test_prepare_text_turns_an_attached_html_file_into_text_and_caps_it():
     out = docs.prepare_text(attached)
     assert "GET /v2/users" in out and "<pre>" not in out and "var secret" not in out
     assert docs.prepare_text("curl -H 'X: 1' https://api.acme.example/users") == "curl -H 'X: 1' https://api.acme.example/users"
-    assert len(docs.prepare_text("word " * 40000)) == docs.MAX_CHARS
+    assert len(docs.prepare_text("word " * 40000)) <= docs.MAX_CHARS
 
 
 def test_an_attached_html_document_reaches_the_model_as_text(api):
@@ -219,3 +220,144 @@ def test_an_attached_html_document_reaches_the_model_as_text(api):
     wire(api, model, lambda u: pytest.fail("no page should be fetched"))
     api.post("/api/v1/ai/generate-config", json={"text": "Attached document (api.html):\n" + PAGE})
     assert "GET /v2/users" in model.prompts[0] and "var secret" not in model.prompts[0] and "<pre>" not in model.prompts[0]
+
+
+# ---------------------------------------------------------------- big pages and OpenAPI files
+
+def test_a_long_page_keeps_its_start_and_the_parts_about_users_and_login():
+    filler = "\n\n".join(f"Section {i}: unrelated notes about billing invoices and themes. " * 8 for i in range(400))
+    useful = "GET /rest/api/3/users/search returns the list of users. Use startAt for pagination. Authenticate with a token."
+    text = "Acme API. Base URL https://api.acme.example\n\n" + filler[:100_000] + "\n\n" + useful + "\n\n" + filler[100_000:]
+    out = docs.select_relevant(text)
+    assert len(out) <= docs.MAX_CHARS and out.startswith("Acme API") and "GET /rest/api/3/users/search" in out
+    assert docs.select_relevant("short page") == "short page"
+
+
+def test_an_openapi_file_becomes_one_line_per_endpoint_with_the_response_fields():
+    spec = {"openapi": "3.0.0", "info": {"title": "Acme", "description": "Directory"}, "servers": [{"url": "https://api.acme.example/v2"}],
+            "components": {"securitySchemes": {"key": {"type": "apiKey", "in": "header", "name": "X-Api-Key"}},
+                           "schemas": {"User": {"type": "object", "properties": {"uid": {"type": "integer"}, "mail": {"type": "string"}}}}},
+            "paths": {"/users": {"get": {"summary": "List users", "tags": ["Users"], "parameters": [{"name": "page", "in": "query"}],
+                                         "responses": {"200": {"content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/User"}}}}}}}},
+                      "/users/{id}": {"delete": {"summary": "Delete"}}}}
+    text = docs.openapi_to_text(spec)
+    assert "Base URL: https://api.acme.example/v2" in text and "Auth scheme key: apiKey header X-Api-Key" in text
+    assert "GET /users | List users | tags: Users | params: page(query) | 200 returns: [{uid: integer, mail: string}]" in text and "DELETE" not in text
+    assert docs.openapi_to_text({"not": "a spec"}) is None
+
+
+def test_a_big_openapi_json_is_summarised_not_dumped():
+    paths = {f"/thing{i}": {"get": {"summary": f"Thing {i}", "responses": {"200": {"description": "ok"}}}} for i in range(3000)}
+    paths["/users/search"] = {"get": {"summary": "Find users", "responses": {"200": {"description": "ok"}}}}
+    body = json.dumps({"openapi": "3.0.0", "info": {"title": "Big"}, "paths": paths})
+    out = fetch_docs("https://api.acme.example/openapi.json", client=reader(lambda r: html(body, ctype="application/json")))
+    assert "GET /users/search | Find users" in out["text"] and len(out["text"]) <= docs.MAX_CHARS and out["truncated"] is True
+
+
+# ---------------------------------------------------------------- a service name: the AI finds the documentation
+
+def pages(**by_url):
+    """A fake fetcher: url -> a page, or a reason it cannot be read."""
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        v = by_url.get(url, "the page answered 404")
+        if not isinstance(v, dict):  # a plain string is the reason the page cannot be read
+            raise DocsError(v)
+        return {"url": url, "text": v["text"], "chars": len(v["text"]), "truncated": False, "links": v.get("links", [])}
+
+    fetch.calls = calls
+    return fetch
+
+
+GOOD = "GET /rest/api/3/users/search returns the users. GET /rest/api/3/user returns one user. GET /rest/api/3/group/member lists members. Authenticate with basic auth."
+
+
+def test_a_service_name_tries_pages_until_one_works(api):
+    fetch = pages(**{"https://a.example/guess": "the page answered 404", "https://b.example/marketing": {"text": "Great product, buy now. " * 20},
+                     "https://c.example/rest": {"text": GOOD}})
+    model = Script({"urls": ["https://a.example/guess", "https://b.example/marketing", "https://c.example/rest"]}, GITHUB_YAML)
+    wire(api, model, fetch)
+    r = api.post("/api/v1/ai/generate-config", json={"service": "Jira"})
+    body = r.json()
+    assert r.status_code == 200 and fetch.calls == ["https://a.example/guess", "https://b.example/marketing", "https://c.example/rest"]
+    assert [(t["url"], t["ok"]) for t in body["tried"]] == [("https://a.example/guess", False), ("https://b.example/marketing", False), ("https://c.example/rest", True)]
+    assert "404" in body["tried"][0]["reason"] and "no endpoints for users" in body["tried"][1]["reason"]
+    assert body["source"]["url"] == "https://c.example/rest" and body["config"]
+    draft_prompt = model.prompts[1]
+    assert "Service: Jira" in draft_prompt and "Documentation page: https://c.example/rest" in draft_prompt and GOOD in draft_prompt
+
+
+def test_when_every_candidate_fails_it_asks_once_more_with_the_failures(api):
+    fetch = pages(**{"https://a.example/x": "the page answered 404", "https://b.example/y": {"text": GOOD}})
+    model = Script({"urls": ["https://a.example/x"]}, {"urls": ["https://a.example/x", "https://b.example/y"]}, GITHUB_YAML)
+    wire(api, model, fetch)
+    body = api.post("/api/v1/ai/generate-config", json={"service": "Acme"}).json()
+    assert "https://a.example/x (the page answered 404)" in model.prompts[1] and "did not work" in model.prompts[1]
+    assert fetch.calls == ["https://a.example/x", "https://a.example/", "https://b.example/y"]  # its parent page is looked at; the failed one is not tried twice
+    assert body["source"]["url"] == "https://b.example/y"
+
+
+def test_giving_up_names_everything_that_was_tried_and_suggests_a_file(api):
+    fetch = pages(**{"https://a.example/x": "the page answered 404", "https://b.example/y": "the page is larger than 8 MB"})
+    wire(api, Script({"urls": ["https://a.example/x"]}, {"urls": ["https://b.example/y"]}), fetch)
+    r = api.post("/api/v1/ai/generate-config", json={"service": "Obscure"})
+    err = r.json()["error"]
+    assert r.status_code == 422 and "Attach the documentation as a file" in err["message"] and "tried 3 pages" in err["message"]
+    assert [t["url"] for t in err["details"]["tried"]] == ["https://a.example/x", "https://a.example/", "https://b.example/y"]
+
+
+def test_non_https_and_junk_suggestions_are_ignored(api):
+    fetch = pages(**{"https://ok.example/api": {"text": GOOD}})
+    wire(api, Script({"urls": ["http://insecure.example/api", "not a url", 42, "https://ok.example/api", "https://ok.example/api"]}, GITHUB_YAML), fetch)
+    assert api.post("/api/v1/ai/generate-config", json={"service": "Acme"}).status_code == 200
+    assert fetch.calls == ["https://ok.example/api"]
+
+
+def test_an_attached_file_is_used_instead_of_searching(api):
+    model = Script(GITHUB_YAML)
+    wire(api, model, lambda u: pytest.fail("no search when a document is attached"))
+    body = api.post("/api/v1/ai/generate-config", json={"service": "Acme", "text": "Attached document (a.txt):\nGET /users lists users"}).json()
+    assert "tried" not in body and "Service: Acme" in model.prompts[0] and "GET /users lists users" in model.prompts[0]
+
+
+def test_a_link_beats_a_name(api):
+    fetch = pages(**{"https://docs.acme.example/api": {"text": GOOD}})
+    model = Script(GITHUB_YAML)
+    wire(api, model, fetch)
+    api.post("/api/v1/ai/generate-config", json={"service": "Acme", "url": "https://docs.acme.example/api"})
+    assert fetch.calls == ["https://docs.acme.example/api"] and len(model.prompts) == 1
+
+
+def test_a_model_failure_while_finding_docs_is_a_502(api):
+    wire(api, Script(LLMError("the model answered 503: busy")), pages())
+    assert api.post("/api/v1/ai/generate-config", json={"service": "Acme"}).status_code == 502
+
+
+# ---------------------------------------------------------------- following links from a page that is not the reference
+
+def test_a_landing_page_is_followed_to_the_real_reference(api):
+    landing = {"text": "Welcome to the developer portal. Guides, tutorials and SDKs. " * 10, "links": [
+        {"url": "https://dev.example/pricing", "text": "Pricing"}, {"url": "https://dev.example/reference/users", "text": "Users API reference"}]}
+    fetch = pages(**{"https://dev.example/": landing, "https://dev.example/reference/users": {"text": GOOD}})
+    model = Script({"urls": ["https://dev.example/"]}, {"urls": ["https://dev.example/reference/users", "https://evil.example/not-on-the-page"]}, GITHUB_YAML)
+    wire(api, model, fetch)
+    body = api.post("/api/v1/ai/generate-config", json={"service": "Acme"}).json()
+    assert fetch.calls == ["https://dev.example/", "https://dev.example/reference/users"]
+    assert "Users API reference" in model.prompts[1] and body["source"]["url"] == "https://dev.example/reference/users"
+    assert [t["ok"] for t in body["tried"]] == [False, True]
+
+
+def test_links_are_found_on_html_pages_on_the_same_site_only():
+    html_ = '<a href="/docs/users">Users API</a><a href="https://other.example/x">Other</a><a href="#top">Top</a><a href="http://dev.example/insecure">Plain</a><a href="/docs/users">Again</a>'
+    links = docs.page_links(html_, "https://dev.example/home")
+    assert links == [{"url": "https://dev.example/docs/users", "text": "Users API"}]
+
+
+def test_a_page_needs_an_endpoint_for_users_devices_or_alerts_to_count():
+    from app.ai.features import useful
+
+    assert useful(GOOD) and useful("POST /v1/devices/list /v1/devices/{id} /v1/devices/search")
+    assert not useful("GET /rest/api/3/issue is the only endpoint, /rest/api/3/issue/bulk") and not useful("GET /rest/api/3/users/search alone")
+    assert not useful("POST /api/v1/authn signs a person in") and not useful("Great product. Users love it.")

@@ -100,6 +100,31 @@ def test_the_client_gives_up_after_three_tries():
     assert len(calls) == 3 and waits == [2, 5]
 
 
+def test_an_overloaded_model_falls_back_to_the_second_one():
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url).split("/models/")[1].split(":")[0])
+        return httpx.Response(503, json={"error": {"message": "high demand"}}) if "main" in seen[-1] else ok("from the fallback")
+
+    client = LLMClient("k-123456", "main-model", fallback="backup-model", http=httpx.Client(transport=httpx.MockTransport(handler)), sleep=lambda s: None)
+    assert client.generate("s", "u") == "from the fallback"
+    assert seen == ["main-model"] * 3 + ["backup-model"]
+
+
+def test_a_real_error_does_not_fall_back():
+    seen = []
+
+    def handler(request):
+        seen.append(1)
+        return httpx.Response(400, json={"error": {"message": "bad request"}})
+
+    client = LLMClient("k-123456", "main", fallback="backup", http=httpx.Client(transport=httpx.MockTransport(handler)), sleep=lambda s: None)
+    with pytest.raises(LLMError, match="400"):
+        client.generate("s", "u")
+    assert len(seen) == 1
+
+
 def test_the_client_reports_errors_without_the_key():
     with pytest.raises(LLMError, match="400.*API key not valid"):
         gemini(lambda r: httpx.Response(400, json={"error": {"message": "API key not valid"}})).generate("s", "u")
@@ -347,3 +372,66 @@ def test_propose_fix_error_shapes(api):
     assert api.post(url, json={"kind": "quarantine", "integration": "dirty", "action": "nope"}).status_code == 404
     assert api.post(url, json={"kind": "run_failure", "integration": "dirty", "action": "dirty_users", "run_id": "run-9999"}).status_code == 404
     assert api.post(url, json={"kind": "other", "integration": "dirty", "action": "dirty_users"}).status_code == 400
+
+
+# ---------------------------------------------------------------- the draft is made ready to review
+
+JIRA_DRAFT = """
+version: 1
+name: jira
+display_name: Jira
+category: identity
+description: Users from Jira Cloud
+enabled: true
+vars:
+  site: your-domain
+requires:
+  vars:
+    site: { label: Jira site, example: your-domain }
+  secrets: [jira_api_token]
+base_url: "https://{{vars.site}}.atlassian.net"
+auth: { type: basic, username: "{{vars.email}}", secret: jira_api_token }
+requires:
+  vars:
+    site: { label: Jira site, example: your-domain }
+    email: { label: Jira account email, example: you@your-company.com }
+  secrets: [jira_api_token]
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    schedule: every 1h
+    request: { method: GET, path: /rest/api/3/users/search }
+    records_path: "@"
+    map:
+      id: accountId
+      status: { path: active, value_map: { true: active, false: inactive }, default: active }
+    required: [id]
+"""
+
+
+def test_duplicate_keys_are_found():
+    found = features.duplicate_keys(JIRA_DRAFT)
+    assert [f["path"] for f in found] == ["requires"] and "appears twice" in found[0]["message"]
+    assert features.duplicate_keys("a: 1\nb:\n  c: 2\n") == [] and features.duplicate_keys("a: [unclosed") == []
+
+
+def test_finalize_fills_every_var_so_the_person_only_checks(monkeypatch):
+    cfg = parse_config(JIRA_DRAFT)
+    cfg["requires"]["vars"]["email"] = {"label": "email", "example": "you@your-company.com"}
+    del cfg["vars"]["site"]
+    cfg["actions"]["list_users"]["request"]["path"] = "/x/{{vars.region}}"
+    out = features.finalize(cfg)
+    assert out["vars"] == {"site": "your-domain", "email": "you@your-company.com", "region": "your-region"}
+    assert out["actions"]["list_users"]["map"]["status"]["value_map"] == {"true": "active", "false": "inactive"}  # not booleans
+    assert cfg["vars"] == {}  # the input config was not changed
+
+
+def test_a_duplicate_key_draft_is_corrected_and_comes_back_filled(api):
+    fixed = JIRA_DRAFT.replace('requires:\n  vars:\n    site: { label: Jira site, example: your-domain }\n  secrets: [jira_api_token]\nbase_url', "base_url", 1)
+    model = use(api, Script(JIRA_DRAFT, fixed))
+    body = api.post("/api/v1/ai/generate-config", json={"text": "Jira docs"}).json()
+    assert [a["valid"] for a in body["attempts"]] == [False, True] and "appears twice" in model.prompts[1]
+    assert body["config"]["vars"] == {"site": "your-domain", "email": "you@your-company.com"}
+    assert body["yaml"].count("requires:") == 1 and "'true': active" in body["yaml"]
+    assert not [e for e in body["errors"] if e["severity"] == "error"]

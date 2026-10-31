@@ -20,6 +20,7 @@ export type GenerateConfigResponse = {
   config?: Config
   errors: S['ValidationIssue'][]
   source?: { url: string; chars: number; truncated: boolean }
+  tried?: { url: string; ok: boolean; reason: string | null }[]
   attempts?: { attempt: number; valid: boolean; error_count: number }[]
 }
 
@@ -71,8 +72,8 @@ export const api = {
     call<IntegrationSummary>('PATCH', `/integrations/${encodeURIComponent(id)}/enabled`, { enabled }),
   test: (id: string, action: string, inputs?: Record<string, unknown>) =>
     call<TestResponse>('POST', `/integrations/${encodeURIComponent(id)}/test`, { action, inputs }),
-  /** AI mode (D-14): a documentation url and/or attached text in, a draft config out. Nothing is saved. */
-  generateConfig: (b: { url?: string; text?: string }) => call<GenerateConfigResponse>('POST', '/ai/generate-config', b),
+  /** AI mode (D-14): a service name (the AI finds the docs), a documentation url, or attached text in; a draft config out. Nothing is saved. */
+  generateConfig: (b: { service?: string; url?: string; text?: string }) => call<GenerateConfigResponse>('POST', '/ai/generate-config', b),
   listTemplates: () => call<{ items: TemplateSummary[] }>('GET', '/templates'),
   getTemplate: (id: string) => call<{ id: string; config: Config; yaml: string }>('GET', `/templates/${encodeURIComponent(id)}`),
   listResults: (p: { target: string; source?: string; limit?: number; offset?: number }) =>

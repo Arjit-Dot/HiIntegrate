@@ -14,7 +14,7 @@ import { lineOf, locate, missingVar } from '../lib/validation'
 
 type Issue = { path: string; message: string; severity: 'error' | 'warning'; line?: number }
 type Pane = 'config' | 'validate' | 'test'
-type Draft = { from: string; problems: number }
+type Draft = { from: string; problems: number; tried: number; vars: [string, string][]; secret?: string }
 
 export default function AddEdit() {
   const { id } = useParams()
@@ -77,7 +77,8 @@ export default function AddEdit() {
   function applyDraft(r: GenerateConfigResponse) {
     const problems = r.errors.filter(e => e.severity === 'error').length
     const from = r.source?.url ?? 'the attached document'
-    setDraft({ from, problems })
+    const c0 = r.config as Config | undefined
+    setDraft({ from, problems, tried: Math.max((r.tried?.length ?? 1) - 1, 0), vars: Object.entries<unknown>(c0?.vars ?? {}).map(([k, v]) => [k, String(v)]), secret: c0?.auth?.secret })
     setMode('manual')
     try {
       const c = r.config as Config | undefined
@@ -234,10 +235,11 @@ export default function AddEdit() {
       {mode === 'ai' && !id && <AiDraft onDraft={applyDraft} />}
       {draft && mode === 'manual' && !id && (
         <div className="callout">
-          <strong>Drafted by AI from {draft.from}.</strong> The AI can guess wrong, so check the paths and mapping below.
+          <strong>Drafted by AI from {draft.from}.</strong>{draft.tried > 0 && <> <span className="muted">({draft.tried} other page{draft.tried === 1 ? '' : 's'} tried first)</span></>} The AI can guess wrong, so check the paths and mapping below.
           {draft.problems > 0 ? <> The draft has <b>{draft.problems}</b> validation problem{draft.problems === 1 ? '' : 's'}: they are marked in the form and the editor.</> : ' It passes validation.'}
           <ul>
-            <li>Enter the secret value in <b>Authentication</b> (the draft only names it).</li>
+            {draft.vars.length > 0 && <li><b>Check what the AI filled in</b> under Variables (they are examples, so replace them with yours): {draft.vars.map(([k, v], i) => <span key={k}>{i > 0 && ', '}<code>{k}</code> = <code>{v}</code></span>)}.</li>}
+            <li>Secret name: <code>{draft.secret ?? 'see Authentication'}</code>. Enter its <b>value</b> in <b>Authentication</b>: only you can supply it.</li>
             <li>Press <b>Test connection</b> to see whether the mapped paths exist in the real response.</li>
             <li>Nothing is saved until you press Save.</li>
           </ul>

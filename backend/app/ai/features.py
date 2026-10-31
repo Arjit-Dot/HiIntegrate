@@ -10,10 +10,12 @@ from collections import Counter
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
 from app.ai.client import LLMClient, LLMError
+from app.ai.docs import DocsError
 from app.ai.redact import mask, safe_config, scrub
 from app.config_loader import load_config, validate_config
 from app.core.settings import REPO_ROOT
@@ -62,6 +64,68 @@ def _describe(issues: list[dict]) -> str:
 
 # ---------------------------------------------------------------- config authoring
 
+def duplicate_keys(text: str) -> list[dict]:
+    """YAML silently keeps the LAST of two equal keys, so a model that writes `requires:` twice loses the first block
+    without any error. Report each repeated key so it can be fed back like any other problem."""
+    try:
+        root = yaml.compose(text)
+    except yaml.YAMLError:
+        return []
+    found: list[dict] = []
+
+    def walk(node, path: str) -> None:
+        if isinstance(node, yaml.MappingNode):
+            seen: set = set()
+            for key_node, value in node.value:
+                key = key_node.value if isinstance(key_node, yaml.ScalarNode) else None
+                where = f"{path}.{key}" if path else str(key)
+                if key in seen:
+                    found.append({"path": where, "message": "appears twice in the same block: keep only one", "severity": "error"})
+                seen.add(key)
+                walk(value, where)
+        elif isinstance(node, yaml.SequenceNode):
+            for i, item in enumerate(node.value):
+                walk(item, f"{path}[{i}]")
+
+    walk(root, "")
+    return found
+
+
+_PLACEHOLDER = re.compile(r"\{\{\s*vars\.([A-Za-z_]\w*)\s*\}\}")
+
+
+def _strings(node):
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for v in node.values():
+            yield from _strings(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _strings(v)
+
+
+def finalize(config: dict) -> dict:
+    """Make the draft ready to review. Everything the person would otherwise have to type is filled with the model's
+    example, so they only have to check it: every {{vars.x}} gets a value (from requires.vars, else a clear placeholder),
+    and value_map keys become strings (YAML turns a bare `true` into a boolean, which would never match)."""
+    cfg = deepcopy(config)
+    requires = (cfg.get("requires") or {}).get("vars") or {}
+    wanted = list(dict.fromkeys([*requires, *_PLACEHOLDER.findall(" ".join(_strings({k: v for k, v in cfg.items() if k != "vars"})))]))
+    vars_ = dict(cfg.get("vars") or {})
+    for name in wanted:
+        if vars_.get(name) in (None, ""):
+            info = requires.get(name) if isinstance(requires.get(name), dict) else {}
+            vars_[name] = str(info.get("example") or f"your-{name.replace('_', '-')}")
+    if vars_:
+        cfg["vars"] = vars_
+    for action in (cfg.get("actions") or {}).values():
+        for entry in (action.get("map") or {}).values():
+            if isinstance(entry, dict) and isinstance(entry.get("value_map"), dict):
+                entry["value_map"] = {("true" if k is True else "false" if k is False else str(k)): v for k, v in entry["value_map"].items()}
+    return cfg
+
+
 def generate_config(llm: LLMClient, text: str) -> dict:
     """Docs, curl or a sample response in, a draft config out. Validate, and feed the errors back up to 2 times.
     Returns {yaml, config, errors, attempts}; `attempts` lets the UI show each step."""
@@ -72,6 +136,7 @@ def generate_config(llm: LLMClient, text: str) -> dict:
     config, issues = None, []
     for attempt in range(1, RETRIES + 2):
         config, issues = load_config(answer)
+        issues = issues + duplicate_keys(answer)
         errors = _errors(issues)
         attempts.append({"attempt": attempt, "valid": config is not None and not errors, "error_count": len(errors)})
         if not errors and config is not None:
@@ -80,7 +145,128 @@ def generate_config(llm: LLMClient, text: str) -> dict:
             break
         follow_up = prompt("fix_config", errors=_describe(issues) or "- the text is not valid YAML")
         answer = _strip_fences(llm.generate(system, f"{user}\n\n---\nYour previous answer:\n{answer}\n\n{follow_up}"))
+    if config is not None and not _errors(issues):
+        config = finalize(config)
+        issues = validate_config(config)
+        answer = yaml.safe_dump(config, sort_keys=False, allow_unicode=True, width=110)
     return {"yaml": answer, "config": config, "errors": issues, "attempts": attempts}
+
+
+# ---------------------------------------------------------------- find the documentation from a service name
+
+class DocsNotFound(DocsError):
+    def __init__(self, service: str, tried: list[dict]):
+        super().__init__(f"could not find usable API documentation for {service!r} (tried {len(tried)} page{'s' if len(tried) != 1 else ''})")
+        self.tried = tried
+
+
+# A page is useful when it names an endpoint for something the platform stores: users, devices or alerts.
+ENDPOINTS = re.compile(r"/[\w./{}-]*(users?|members?|accounts?|devices?|hosts?|endpoints?|assets?|alerts?|events?|findings?|incidents?|vulnerabilit\w*)\b", re.IGNORECASE)
+VERBS = re.compile(r"\b(GET|POST)\b")  # often rendered apart from the path, so not required to touch it
+URL_ROUNDS = 2  # ask for candidates, and once more if none of them worked
+MAX_PAGES_TRIED = 14
+MAX_CRAWLED = 3  # pages that loaded but were not the reference: their links are offered to the model
+
+
+MIN_ENDPOINT_HITS = 3  # one stray mention is not a reference page
+
+
+def useful(text: str) -> bool:
+    return bool(VERBS.search(text)) and len(ENDPOINTS.findall(text)) >= MIN_ENDPOINT_HITS
+
+
+def _urls(data: dict) -> list[str]:
+    urls = [u.strip() for u in data.get("urls", []) if isinstance(u, str) and u.strip().startswith("https://")]
+    return list(dict.fromkeys(urls))[:6]
+
+
+def suggest_urls(llm: LLMClient, service: str, failed: list[dict] | None = None) -> list[str]:
+    user = f"Service: {service}"
+    if failed:
+        user += "\nThese URLs did not work, so suggest different ones:\n" + "\n".join(f"- {f['url']} ({f['reason']})" for f in failed)
+    return _urls(_parse_json(llm.generate(prompt("discover_docs"), scrub(user), json_output=True)))
+
+
+def pick_links(llm: LLMClient, service: str, page: dict) -> list[str]:
+    """The page loaded but is not the reference: let the model choose which of its links to follow."""
+    allowed = {link["url"] for link in page.get("links", [])}
+    if not allowed:
+        return []
+    listing = "\n".join(f"{link['url']}  ({link['text']})" for link in page["links"])
+    data = _parse_json(llm.generate(prompt("pick_links"), scrub(f"Service: {service}\nPage: {page['url']}\nLinks:\n{listing}"), json_output=True))
+    return [u for u in _urls(data) if u in allowed][:4]
+
+
+def parent_pages(urls: list[str], limit: int = 4) -> list[str]:
+    """A guessed deep link that does not exist usually has a real parent page (and the site's front page) that links
+    to the right place. Deepest parents first, each only once."""
+    out: list[str] = []
+    for url in urls:
+        parts = urlsplit(url)
+        segments = [x for x in parts.path.split("/") if x]
+        for n in range(len(segments) - 1, -1, -1):
+            parent = f"https://{parts.netloc}/" + "/".join(segments[:n]) + ("/" if n else "")
+            if parent not in out and parent not in urls:
+                out.append(parent)
+    return sorted(out, key=lambda u: -len(u))[:limit]
+
+
+def find_docs(llm: LLMClient, service: str, fetch) -> tuple[dict, list[dict]]:
+    """Ask the model where the documentation is and try pages until one has real API content: first its guesses, then
+    the links on pages that loaded but were not the reference, then a second round of guesses that avoids the failures.
+    Returns (page, tried). Raises DocsNotFound, carrying everything that was tried, when nothing worked."""
+    tried: list[dict] = []
+    seen: set[str] = set()
+    followed: set[str] = set()
+    crawl: list[dict] = []  # pages that loaded but were not the reference
+    last: dict = {}  # the page the latest attempt loaded without it being the reference
+
+    def attempt(url: str) -> dict | None:
+        last.clear()
+        if url in seen or len(tried) >= MAX_PAGES_TRIED:
+            return None
+        seen.add(url)
+        try:
+            page = fetch(url)
+        except DocsError as exc:
+            tried.append({"url": url, "ok": False, "reason": str(exc)})
+            return None
+        if not useful(page["text"]):
+            if not any(t["url"] == page["url"] for t in tried):  # another address that led to a page already seen
+                tried.append({"url": page["url"], "ok": False, "reason": "no endpoints for users, devices or alerts were found on the page"})
+                if page.get("links") and len(crawl) < MAX_CRAWLED:
+                    crawl.append(page)
+                    last.update(page)
+            return None
+        tried.append({"url": page["url"], "ok": True, "reason": None})
+        return page
+
+    def follow(landing: dict) -> dict | None:
+        """The page loaded but is not the reference: let the model pick which of its links to try."""
+        if landing["url"] in followed:
+            return None
+        followed.add(landing["url"])
+        for link in pick_links(llm, service, landing):
+            if found := attempt(link):
+                return found
+        return None
+
+    for round_ in range(URL_ROUNDS):
+        for url in suggest_urls(llm, service, [t for t in tried if not t["ok"]]):
+            found = attempt(url)
+            if not found and last:  # a front page: its links come before the next guess
+                found = follow(dict(last))
+            if found:
+                return found, tried
+        if round_ == 0:  # before guessing again, look where the failed guesses should have been, then follow links
+            for url in parent_pages([t["url"] for t in tried if not t["ok"]]):
+                found = attempt(url) or (follow(dict(last)) if last else None)
+                if found:
+                    return found, tried
+            for earlier in crawl:
+                if found := follow(earlier):
+                    return found, tried
+    raise DocsNotFound(service, tried)
 
 
 # ---------------------------------------------------------------- summary

@@ -2,20 +2,23 @@
 
 The server fetches a URL a person typed, so this is built to be safe to point at anything:
 https only, no credentials in the URL, every hop (including redirects) must resolve to a public address,
-a small size cap, a short timeout, and only text-like content. Nothing from the page is executed.
+a size cap, a short timeout, and only text-like content. Nothing from the page is executed.
 Known limit: the address is checked, then httpx connects by name, so a DNS answer that changes between the
 two could slip through. Acceptable for a local, single-user tool; pin the resolved IP before exposing this.
 """
 
 import ipaddress
+import json
+import math
 import re
 import socket
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+import yaml
 
-MAX_BYTES = 1_500_000
+MAX_BYTES = 8_000_000
 MAX_CHARS = 50_000  # what the model gets, roughly 12k tokens
 MIN_CHARS = 200  # less than this usually means a page that needs JavaScript
 MAX_REDIRECTS = 3
@@ -61,8 +64,14 @@ class _Text(HTMLParser):
         self.out: list[str] = []
         self.skip = 0
         self.pre = 0
+        self.links: list[tuple[str, str]] = []  # (href, text), for following to a better page
+        self._href: str | None = None
+        self._label: list[str] = []
 
     def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            self._href = dict(attrs).get("href")
+            self._label = []
         if tag in _SKIP:
             self.skip += 1
         if tag == "pre":
@@ -73,6 +82,9 @@ class _Text(HTMLParser):
             self.out.append("## ")
 
     def handle_endtag(self, tag):
+        if tag == "a" and self._href:
+            self.links.append((self._href, " ".join("".join(self._label).split())[:80]))
+            self._href = None
         if tag in _SKIP and self.skip:
             self.skip -= 1
         if tag == "pre" and self.pre:
@@ -81,9 +93,27 @@ class _Text(HTMLParser):
             self.out.append("\n")
 
     def handle_data(self, data):
+        if self._href is not None:
+            self._label.append(data)
         if self.skip:
             return
         self.out.append(data if self.pre else re.sub(r"\s+", " ", data))
+
+
+def page_links(body: str, base: str, limit: int = 150) -> list[dict]:
+    """Links on an HTML page that stay on the same site, so the AI can pick a better page to read."""
+    parser = _Text()
+    parser.feed(body)
+    host = urlsplit(base).hostname
+    seen, out = set(), []
+    for href, label in parser.links:
+        url = urljoin(base, href.split("#")[0])
+        parts = urlsplit(url)
+        if parts.scheme != "https" or parts.hostname != host or url in seen or url == base:
+            continue
+        seen.add(url)
+        out.append({"url": url, "text": label})
+    return out[:limit]
 
 
 def to_text(body: str, content_type: str) -> str:
@@ -97,8 +127,129 @@ def to_text(body: str, content_type: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
+# ---------------------------------------------------------------- big pages: keep what matters
+
+_WEIGHTS = {"user": 3, "member": 2, "device": 3, "host": 2, "endpoint": 2, "alert": 3, "finding": 2, "vulnerab": 2, "list": 2, "search": 2,
+            "paginat": 2, "authenticat": 3, "api key": 2, "base url": 3, "startat": 2, "offset": 1, "cursor": 1, "get /": 2, "token": 1}
+HEAD_CHARS = 5000  # the start of a page usually says what the API is, its base URL and how to log in
+
+
+def _blocks(text: str, size: int = 1800) -> list[str]:
+    out = []
+    for part in re.split(r"\n\s*\n", text):
+        while len(part) > size:
+            cut = part.rfind("\n", 0, size)
+            cut = cut if cut > size // 2 else size
+            out.append(part[:cut])
+            part = part[cut:]
+        if part.strip():
+            out.append(part)
+    return out
+
+
+def select_relevant(text: str, limit: int = MAX_CHARS) -> str:
+    """Fit a long page into `limit` characters: always the start, then the parts that talk about users, devices, alerts,
+    endpoints, paging and login, in their original order. Short pages are returned unchanged."""
+    if len(text) <= limit:
+        return text
+    blocks = _blocks(text)
+    keep, used = set(), 0
+    for i, b in enumerate(blocks):
+        if used + len(b) > min(HEAD_CHARS, limit):
+            break
+        keep.add(i)
+        used += len(b) + 2
+
+    def score(b: str) -> float:
+        low = b.lower()
+        return sum(low.count(k) * w for k, w in _WEIGHTS.items()) / math.sqrt(len(b) + 100)
+
+    for i in sorted((i for i in range(len(blocks)) if i not in keep), key=lambda i: -score(blocks[i])):
+        if used + len(blocks[i]) > limit:
+            continue
+        if score(blocks[i]) <= 0:
+            break
+        keep.add(i)
+        used += len(blocks[i]) + 2
+    return "\n\n".join(blocks[i] for i in sorted(keep))
+
+
+# ---------------------------------------------------------------- OpenAPI files: a short list of endpoints
+
+def _deref(spec: dict, node):
+    for _ in range(5):
+        if isinstance(node, dict) and "$ref" in node and isinstance(node["$ref"], str) and node["$ref"].startswith("#/"):
+            cur = spec
+            for part in node["$ref"][2:].split("/"):
+                cur = cur.get(part, {}) if isinstance(cur, dict) else {}
+            node = cur
+        else:
+            break
+    return node
+
+
+def _shape(spec: dict, schema, depth: int = 2) -> str:
+    schema = _deref(spec, schema)
+    if not isinstance(schema, dict):
+        return "any"
+    if schema.get("type") == "array" or "items" in schema:
+        return f"[{_shape(spec, schema.get('items'), depth)}]"
+    props = schema.get("properties")
+    if props:
+        if depth <= 0:
+            return "{...}"
+        return "{" + ", ".join(k if depth == 1 else f"{k}: {_shape(spec, v, depth - 1)}" for k, v in list(props.items())[:30]) + "}"
+    return str(schema.get("type") or "any")
+
+
+def openapi_to_text(spec: dict) -> str | None:
+    """An OpenAPI/Swagger document as one line per endpoint (method, path, summary, parameters, the 200 response's fields)."""
+    if not isinstance(spec, dict) or not isinstance(spec.get("paths"), dict):
+        return None
+    info = spec.get("info") or {}
+    lines = [f"API: {info.get('title', '')}. {str(info.get('description', ''))[:400]}".strip()]
+    servers = [x.get("url") for x in spec.get("servers") or [] if isinstance(x, dict) and x.get("url")]
+    if servers:
+        lines.append("Base URL: " + ", ".join(servers[:3]))
+    elif spec.get("host"):
+        lines.append(f"Base URL: https://{spec['host']}{spec.get('basePath', '')}")
+    schemes = (spec.get("components") or {}).get("securitySchemes") or spec.get("securityDefinitions") or {}
+    for name, sch in list(schemes.items())[:6]:
+        sch = _deref(spec, sch)
+        lines.append(f"Auth scheme {name}: " + " ".join(str(sch.get(k)) for k in ("type", "scheme", "in", "name") if sch.get(k)))
+    lines.append("")
+    for path, item in spec["paths"].items():
+        if not isinstance(item, dict):
+            continue
+        for method in ("get", "post"):
+            op = item.get(method)
+            if not isinstance(op, dict):
+                continue
+            params = [_deref(spec, p) for p in (op.get("parameters") or []) + (item.get("parameters") or [])]
+            plist = ", ".join(f"{p.get('name')}({p.get('in')}{', required' if p.get('required') else ''})" for p in params if isinstance(p, dict))
+            ok = _deref(spec, (op.get("responses") or {}).get("200") or {})
+            content = (ok.get("content") or {}).get("application/json") or {}
+            body = content.get("schema") or ok.get("schema")
+            summary = op.get("summary") or str(op.get("description", ""))[:150]
+            lines.append(f"{method.upper()} {path} | {summary} | tags: {', '.join(op.get('tags') or [])} | params: {plist or 'none'}"
+                         + (f" | 200 returns: {_shape(spec, body)}" if body else ""))
+    return "\n".join(lines)
+
+
+def _spec_text(body: str, content_type: str) -> str | None:
+    head = body[:200].lstrip()
+    try:
+        if "json" in content_type or head.startswith("{"):
+            return openapi_to_text(json.loads(body))
+        if "yaml" in content_type or head.startswith(("openapi:", "swagger:")):
+            return openapi_to_text(yaml.safe_load(body))
+    except (ValueError, yaml.YAMLError, RecursionError):
+        return None
+    return None
+
+
 def fetch_docs(url: str, *, client: httpx.Client | None = None, check=check_url) -> dict:
-    """Returns {url, text, chars, truncated}. Raises DocsError with a message for the person."""
+    """Returns {url, text, chars, truncated, links}. Raises DocsError with a message for the person."""
     current = check(url)
     own = client is None
     client = client or httpx.Client(timeout=15, follow_redirects=False, headers={"User-Agent": "HiIntegrate-docs-reader/1.0", "Accept": "text/html,application/json,text/plain,*/*;q=0.5"})
@@ -121,7 +272,7 @@ def fetch_docs(url: str, *, client: httpx.Client | None = None, check=check_url)
                     for chunk in response.iter_bytes():
                         size += len(chunk)
                         if size > MAX_BYTES:
-                            raise DocsError("the page is larger than 1.5 MB")
+                            raise DocsError("the page is larger than 8 MB")
                         chunks.append(chunk)
                     body = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
                     break
@@ -132,12 +283,14 @@ def fetch_docs(url: str, *, client: httpx.Client | None = None, check=check_url)
     finally:
         if own:
             client.close()
-    text = to_text(body, content_type)
+    is_html = "html" in content_type or bool(re.search(r"<(!doctype html|html|body|head)\b", body[:2000], re.IGNORECASE))
+    links = page_links(body, current) if is_html else []
+    text = _spec_text(body, content_type) or to_text(body, content_type)
     if len(text) < MIN_CHARS:
         raise DocsError("the page has almost no readable text (it may need JavaScript). Paste the text, a curl example or a sample response instead")
-    return {"url": current, "text": text[:MAX_CHARS], "chars": len(text), "truncated": len(text) > MAX_CHARS}
+    return {"url": current, "text": select_relevant(text), "chars": len(text), "truncated": len(text) > MAX_CHARS, "links": links}
 
 
 def prepare_text(text: str) -> str:
     """Pasted or attached text for the model: HTML is turned into plain text, and the length is capped like a fetched page."""
-    return to_text(text, "")[:MAX_CHARS]
+    return select_relevant(to_text(text, ""))
