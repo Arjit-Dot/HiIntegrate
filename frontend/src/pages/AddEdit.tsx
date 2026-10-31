@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useTheme } from '../lib/theme'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
 import { api, ApiError, type Config, type GenerateConfigResponse, type SecretInfo, type TestResponse } from '../api/client'
@@ -17,6 +18,7 @@ type Pane = 'config' | 'validate' | 'test'
 type Draft = { from: string; problems: number; tried: number; vars: [string, string][]; secret?: string }
 
 export default function AddEdit() {
+  const [theme] = useTheme()
   const { id } = useParams()
   const templateId = useSearchParams()[0].get('template')
   const [requires, setRequires] = useState<Config | undefined>()   // from the template, to tell the person what to fill in
@@ -156,7 +158,7 @@ export default function AddEdit() {
           const v = missingVar(i.message)
           const where = n === 0 ? i.path : p.elsewhere ? `action ${p.elsewhere}: ${i.path}` : p.label
           return (
-            <div className="hint err" key={k} style={i.severity === 'warning' ? { color: '#b45309' } : undefined}>
+            <div className="hint err" key={k} style={i.severity === 'warning' ? { color: 'var(--warn)' } : undefined}>
               {where ? `${where}: ` : ''}{i.message}
               {v && !p.elsewhere && !s.vars.split('\n').some(l => l.trim().startsWith(v + '=')) && <> <Button variant="secondary" size="sm" type="button" onClick={() => addVariable(v)}>Add {v} to Variables</Button></>}
             </div>
@@ -462,7 +464,7 @@ export default function AddEdit() {
                 {raw !== null && <Button variant="secondary" size="sm" type="button"  onClick={() => setRaw(null)} title="Throw away the typed text and rebuild from the form">Reset to form</Button>}
               </div>
               {raw !== null && <div className="hint" style={{ marginBottom: 8 }}>You are editing the config directly. Changing the form resets it.</div>}
-              <Editor height="520px" language={fmt} value={text} onChange={v => v !== undefined && v !== text && setRaw(v)}
+              <Editor height="520px" theme={theme === 'dark' ? 'vs-dark' : 'light'} language={fmt} value={text} onChange={v => v !== undefined && v !== text && setRaw(v)}
                 onMount={(editor, monaco) => { editorRef.current = [editor, monaco]; setEditorTick(n => n + 1) }}
                 options={{ minimap: { enabled: false }, fontSize: 12.5, scrollBeyondLastLine: false, wordWrap: 'on' }} />
             </div>
@@ -476,7 +478,7 @@ export default function AddEdit() {
               </div>
               {errors.length === 0 && <div className="issue ok"><div><b>Valid.</b> No errors{issues.length ? `, ${issues.length} warning${issues.length > 1 ? 's' : ''}` : ''}.</div></div>}
               {issues.map((i, n) => (
-                <div className="issue" key={n} style={i.severity === 'warning' ? { background: 'var(--warn-bg)', color: '#78350f' } : undefined}>
+                <div className="issue" key={n} style={i.severity === 'warning' ? { background: 'var(--warn-bg)', color: 'var(--warn-ink)' } : undefined}>
                   <div><div className="p">{i.path}</div><div>{i.message}</div></div>
                 </div>
               ))}

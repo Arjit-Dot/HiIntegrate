@@ -28,6 +28,28 @@
   --radius: 0.5rem;
 }
 
+
+.dark {
+  --background: #1c2230;
+  --foreground: #eef2f8;
+  --card: #252d3d;
+  --card-foreground: #eef2f8;
+  --popover: #252d3d;
+  --popover-foreground: #eef2f8;
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --secondary: #303471;
+  --secondary-foreground: #c7d2fe;
+  --muted: #252d3d;
+  --muted-foreground: #a3afc2;
+  --accent: #303471;
+  --accent-foreground: #c7d2fe;
+  --destructive: #f87171;
+  --border: #3b4558;
+  --input: #4c586d;
+  --ring: #6469c4;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
