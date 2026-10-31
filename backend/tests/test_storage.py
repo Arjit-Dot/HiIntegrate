@@ -178,3 +178,12 @@ def test_the_api_stops_at_startup_on_an_old_database(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "get_engine", lambda: init_db(engine))
     with pytest.raises(SchemaOutOfDate, match="docker compose down -v"), TestClient(main.create_app()):
         pass
+
+
+def test_counts_for_the_summary_cover_every_stored_record_not_a_sample(s):
+    repo.upsert_records(s, ACCT, "user", [{**user(i, f"U{i}"), "source": "github" if i % 3 else "jira", "status": "active" if i % 2 else "inactive"} for i in range(1, 301)])
+    repo.upsert_records(s, "someone-else", "user", [{**user(999, "X"), "source": "okta"}])
+    by_source = repo.count_results_by(s, ACCT, "user", "source")
+    assert by_source == {"github": 200, "jira": 100} and sum(by_source.values()) == 300   # all 300, not the first 200, and only this account
+    assert repo.count_results_by(s, ACCT, "user", "status", source="jira") == {"inactive": 50, "active": 50}
+    assert repo.count_results_by(s, ACCT, "user", "no_such_field") == {}

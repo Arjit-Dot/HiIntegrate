@@ -19,7 +19,7 @@ from app.ai.client import LLMClient, LLMError
 from app.ai.docs import DocsError, check_url, fetch_docs, prepare_text
 from app.api.deps import Account, outbound_client_dep, session_dep
 from app.core.errors import ApiError
-from app.engine import remap_records, test_action
+from app.engine import lint, remap_records, test_action
 from app.engine.placeholders import PlaceholderError, fill
 from app.scheduler.runner import UnknownAction
 from app.secrets import SecretNotFound, get_secret, list_secrets
@@ -99,7 +99,7 @@ def make_tester(s: Session, account: str, client):
     def skipped(config: dict, reason: str, filled: dict | None = None) -> tuple[dict, dict]:
         return config, {"ran": False, "skipped_reason": reason, "missing_paths": [], "notes": [], "filled_vars": filled or {}}
 
-    def tester(config: dict) -> tuple[dict, dict]:
+    def run(config: dict) -> tuple[dict, dict]:
         config = deepcopy(config)
         action = next((n for n, a in config["actions"].items() if a["mode"] == "pull"), None)
         if action is None:
@@ -120,9 +120,24 @@ def make_tester(s: Session, account: str, client):
             return skipped(config, f"the base URL cannot be tried yet ({exc}). Fill in Variables, then press Test connection", filled)
         if host != secret.host:
             return skipped(config, f"the secret {auth['secret']} is pinned to {secret.host}, but this config calls {host}", filled)
-        result = test_action(config, action, client=client, secret_lookup=lambda name: get_secret(name, s, account))
+        result = test_action(config, action, client=client, secret_lookup=lambda name: get_secret(name, s, account), probe_paging=True)
         return config, {"ran": True, "action": action, "ok": result["ok"], "status_code": result["status_code"], "missing_paths": result["missing_paths"],
-                        "notes": result["notes"], "raw_sample": result["raw_sample"], "filled_vars": filled}
+                        "notes": result["notes"], "raw_sample": result["raw_sample"], "filled_vars": filled,
+                        "probe_problems": result.get("probe_problems", [])}
+
+    def tester(config: dict) -> tuple[dict, dict]:
+        """`run`, plus the paging mistakes that show in the settings alone (every action, with no real call) or in the second page
+        the test fetched. They go in `problems`, which makes the AI correct the draft once, and in `notes` for the person."""
+        config, report = run(config)
+        probe = report.pop("probe_problems", [])
+        problems = list(dict.fromkeys([*lint.config_paging_problems(config), *probe]))
+        if problems:
+            notes = list(report.get("notes", []))
+            for p in problems:
+                if f"Check: {p.rsplit(' (action', 1)[0]}" not in notes and f"Check: {p}" not in notes:
+                    notes.append(f"Check: {p}")
+            report["problems"], report["notes"] = problems, notes
+        return config, report
 
     return tester
 
@@ -189,9 +204,10 @@ def generate_config(body: GenerateBody, llm: LlmDep, fetch: Annotated[Callable[[
     if body.text:
         parts.append(prepare_text(body.text))
     names = sorted(x["name"] for x in list_secrets(s, account))  # names only, never values
-    out = ask(features.generate_config, llm, "\n\n".join(parts), existing_secrets=names, tester=make_tester(s, account, client))
+    hosts = {x["name"]: x["host"] for x in list_secrets(s, account)}  # where each is pinned: a draft may not reuse another service's
+    out = ask(features.generate_config, llm, "\n\n".join(parts), existing_secrets=names, tester=make_tester(s, account, client), secret_hosts=hosts)
     if out.get("test"):
-        out["test"] = {k: v for k, v in out["test"].items() if k != "raw_sample"}  # real data stays on the server
+        out["test"] = {k: v for k, v in out["test"].items() if k not in ("raw_sample", "problems")}  # real data and the internal signal stay on the server
     elif "test" in out:
         del out["test"]
     if page:
@@ -220,7 +236,9 @@ def summarize(llm: LlmDep, s: SessionDep, account: Account, body: SummarizeBody 
     records, total = repo.list_results(s, account, body.target, body.source, limit=200)
     if not records:
         return {"summary": f"There are no stored {body.target} records" + (f" from {body.source}" if body.source else "") + " yet."}
-    return {"summary": ask(features.summarize, llm, body.target, records, total)}
+    # Counts over every stored record, so the summary's numbers add up to the total (the sample is only 200 records).
+    counts = {f: repo.count_results_by(s, account, body.target, f, body.source) for f in features.SUMMARY_FIELDS}
+    return {"summary": ask(features.summarize, llm, body.target, records, total, counts)}
 
 
 @router.post("/ai/propose-fix")

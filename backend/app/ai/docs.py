@@ -248,47 +248,149 @@ def _spec_text(body: str, content_type: str) -> str | None:
     return None
 
 
-def fetch_docs(url: str, *, client: httpx.Client | None = None, check=check_url) -> dict:
-    """Returns {url, text, chars, truncated, links}. Raises DocsError with a message for the person."""
+def _get(client: httpx.Client, url: str, check) -> tuple[str, str, str]:
+    """One safe GET: every hop must be public (D-14), text only, size capped. Returns (final url, content type, body)."""
     current = check(url)
+    for _ in range(MAX_REDIRECTS + 1):
+        try:
+            with client.stream("GET", current) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise DocsError("the page redirected nowhere")
+                    current = check(urljoin(current, location))  # every hop must be public too
+                    continue
+                if response.status_code != 200:
+                    raise DocsError(f"the page answered {response.status_code}")
+                content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+                if content_type and not content_type.startswith(TEXT_TYPES):
+                    raise DocsError(f"the page is {content_type}, not text. Use an HTML page or an OpenAPI file")
+                chunks, size = [], 0
+                for chunk in response.iter_bytes():
+                    size += len(chunk)
+                    if size > MAX_BYTES:
+                        raise DocsError("the page is larger than 8 MB")
+                    chunks.append(chunk)
+                return current, content_type, b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
+        except httpx.HTTPError as exc:
+            raise DocsError(f"could not fetch the page ({type(exc).__name__})") from None
+    raise DocsError("the page redirected too many times")
+
+
+def _page(url: str, text: str, links=()) -> dict:
+    return {"url": url, "text": select_relevant(text), "chars": len(text), "truncated": len(text) > MAX_CHARS, "links": list(links)}
+
+
+# ---------------------------------------------------------------- pages that need JavaScript: find what they load
+
+# Most documentation sites that draw themselves with JavaScript (Swagger UI, Redoc, Stoplight, ReadMe) just load an OpenAPI file, so
+# the file is found instead: named in the page, at a usual address, or in the service's public repository. Failing that, the site's
+# own indexes (llms.txt, sitemap.xml) give links the AI can follow. Every address goes through the same public-only checks.
+SPEC_PATHS = ("/openapi.json", "/openapi.yaml", "/openapi.yml", "/swagger.json", "/swagger.yaml", "/swagger/v1/swagger.json", "/v3/api-docs",
+              "/api-docs", "/api/openapi.json", "/docs/openapi.json", "/.well-known/openapi.json")
+REPO_SPEC_FILES = ("openapi.yaml", "openapi.json", "swagger.json", "openapi/openapi.yaml")
+REPO_NAME = re.compile(r"openapi|swagger|api-?spec|api-?description|rest-?api", re.IGNORECASE)
+DOC_WORDS = re.compile(r"api|reference|rest|endpoint|swagger|openapi|developer", re.IGNORECASE)
+MAX_DISCOVERY_FETCHES = 16
+MAX_SITEMAP_LINKS = 40
+_SPEC_URL = (
+    re.compile(r"""spec-?url\s*=\s*["']([^"']+)["']""", re.IGNORECASE),                           # <redoc spec-url=…>, <rapi-doc spec-url=…>
+    re.compile(r"""data-url\s*=\s*["']([^"']+\.(?:json|ya?ml)[^"']*)["']""", re.IGNORECASE),
+    re.compile(r"""\burl\s*:\s*["']([^"']+\.(?:json|ya?ml)[^"']*)["']"""),                       # SwaggerUIBundle({ url: "…" })
+    re.compile(r"""["']url["']\s*:\s*["']([^"']+\.(?:json|ya?ml)[^"']*)["']"""),
+    re.compile(r"""(?:href|src)\s*=\s*["']([^"']*(?:openapi|swagger)[^"']*\.(?:json|ya?ml)[^"']*)["']""", re.IGNORECASE),
+)
+_NEEDS_JS = re.compile(r"""enable javascript|requires? javascript|javascript is (?:required|disabled)|<noscript|<redoc\b|swagger-ui|"""
+                       r"""<div[^>]+id=["']?(?:root|app|__next|__nuxt)["']?[ >/]""", re.IGNORECASE)
+_REPO = re.compile(r"https://github\.com/([\w.-]+)/([\w.-]+)", re.IGNORECASE)
+_MD_LINK = re.compile(r"\[([^\]]+)\]\((https://[^)\s]+)\)")
+_LOC = re.compile(r"<loc>\s*(https://[^<\s]+)\s*</loc>", re.IGNORECASE)
+
+
+def looks_script_drawn(body: str, text: str) -> bool:
+    """A page with little text and the marks of a page that draws itself in the browser."""
+    return len(text) < 1500 and bool(_NEEDS_JS.search(body))
+
+
+def spec_urls_in(body: str, base: str) -> list[str]:
+    """Addresses of an API description file named in the page's own source."""
+    found: list[str] = []
+    for pattern in _SPEC_URL:
+        for match in pattern.findall(body):
+            url = urljoin(base, match.strip())
+            if url.startswith("https://") and url not in found:
+                found.append(url)
+    return found[:5]
+
+
+def repo_spec_urls(body: str) -> list[str]:
+    """Raw addresses of an OpenAPI file in a public repository the page links to, when the repository is named like an API spec."""
+    repos = []
+    for owner, name in _REPO.findall(body):
+        name = name.removesuffix(".git")
+        if REPO_NAME.search(name) and (owner, name) not in repos:
+            repos.append((owner, name))
+    return [f"https://raw.githubusercontent.com/{o}/{n}/HEAD/{f}" for o, n in repos[:2] for f in REPO_SPEC_FILES]
+
+
+def discover(client: httpx.Client, check, page_url: str, body: str) -> dict | None:
+    """Look for the API description a script-drawn page loads. Returns a page in the same shape as fetch_docs, or None."""
+    origin = "https://" + (urlsplit(page_url).hostname or "")
+    budget = [MAX_DISCOVERY_FETCHES]
+
+    def quiet(url: str) -> tuple[str, str, str] | None:
+        if budget[0] <= 0:
+            return None
+        budget[0] -= 1
+        try:
+            return _get(client, url, check)
+        except DocsError:
+            return None
+
+    candidates = [*spec_urls_in(body, page_url), *(origin + p for p in SPEC_PATHS), *repo_spec_urls(body)]
+    for url in dict.fromkeys(candidates):
+        got = quiet(url)
+        spec = _spec_text(got[2], got[1]) if got else None
+        if spec:
+            return _page(got[0], spec)
+    for name in ("/llms-full.txt", "/llms.txt"):  # a site's own text index for language models
+        got = quiet(origin + name)
+        if got and len(got[2].strip()) >= MIN_CHARS and "html" not in got[1]:
+            host = urlsplit(got[0]).hostname
+            links = [{"url": u, "text": t} for t, u in _MD_LINK.findall(got[2]) if urlsplit(u).hostname == host]
+            return _page(got[0], got[2].strip(), links[:150])
+    got = quiet(origin + "/sitemap.xml")
+    if got:
+        host = urlsplit(got[0]).hostname
+        urls = [u for u in dict.fromkeys(_LOC.findall(got[2])) if urlsplit(u).hostname == host and not u.endswith(".xml") and DOC_WORDS.search(urlsplit(u).path)]
+        if urls:
+            urls = urls[:MAX_SITEMAP_LINKS]
+            return _page(got[0], "Pages on this site that look like API documentation:\n" + "\n".join(urls), [{"url": u, "text": urlsplit(u).path} for u in urls])
+    return None
+
+
+def fetch_docs(url: str, *, client: httpx.Client | None = None, check=check_url) -> dict:
+    """Returns {url, text, chars, truncated, links}. Raises DocsError with a message for the person.
+    A page that draws itself with JavaScript has almost no text, so the API description it loads is looked for instead (see `discover`):
+    the returned `url` is then that file, which is the page that was really read."""
     own = client is None
     client = client or httpx.Client(timeout=15, follow_redirects=False, headers={"User-Agent": "HiIntegrate-docs-reader/1.0", "Accept": "text/html,application/json,text/plain,*/*;q=0.5"})
     try:
-        for _ in range(MAX_REDIRECTS + 1):
-            try:
-                with client.stream("GET", current) as response:
-                    if response.is_redirect:
-                        location = response.headers.get("location")
-                        if not location:
-                            raise DocsError("the page redirected nowhere")
-                        current = check(urljoin(current, location))  # every hop must be public too
-                        continue
-                    if response.status_code != 200:
-                        raise DocsError(f"the page answered {response.status_code}")
-                    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
-                    if content_type and not content_type.startswith(TEXT_TYPES):
-                        raise DocsError(f"the page is {content_type}, not text. Use an HTML page or an OpenAPI file")
-                    chunks, size = [], 0
-                    for chunk in response.iter_bytes():
-                        size += len(chunk)
-                        if size > MAX_BYTES:
-                            raise DocsError("the page is larger than 8 MB")
-                        chunks.append(chunk)
-                    body = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
-                    break
-            except httpx.HTTPError as exc:
-                raise DocsError(f"could not fetch the page ({type(exc).__name__})") from None
-        else:
-            raise DocsError("the page redirected too many times")
+        current, content_type, body = _get(client, url, check)
+        is_html = "html" in content_type or bool(re.search(r"<(!doctype html|html|body|head)\b", body[:2000], re.IGNORECASE))
+        links = page_links(body, current) if is_html else []
+        text = _spec_text(body, content_type) or to_text(body, content_type)
+        if is_html and (len(text) < MIN_CHARS or looks_script_drawn(body, text)):
+            found = discover(client, check, current, body)
+            if found:
+                return found
+        if len(text) < MIN_CHARS:
+            raise DocsError("the page has almost no readable text (it needs JavaScript to show its content, and no API description file was found behind it). "
+                            "Copy the text from your browser and paste it, or paste a curl example or a sample response instead")
+        return _page(current, text, links)
     finally:
         if own:
             client.close()
-    is_html = "html" in content_type or bool(re.search(r"<(!doctype html|html|body|head)\b", body[:2000], re.IGNORECASE))
-    links = page_links(body, current) if is_html else []
-    text = _spec_text(body, content_type) or to_text(body, content_type)
-    if len(text) < MIN_CHARS:
-        raise DocsError("the page has almost no readable text (it may need JavaScript). Paste the text, a curl example or a sample response instead")
-    return {"url": current, "text": select_relevant(text), "chars": len(text), "truncated": len(text) > MAX_CHARS, "links": links}
 
 
 def prepare_text(text: str) -> str:

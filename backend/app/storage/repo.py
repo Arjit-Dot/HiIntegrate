@@ -150,6 +150,19 @@ def list_results(s: Session, account: str, target: str = "user", source: str | N
     return [record_dict(target, r) for r in rows], total
 
 
+def count_results_by(s: Session, account: str, target: str, field: str, source: str | None = None, top: int = 10) -> dict[str, int]:
+    """Exact counts of one field over EVERY stored record of a type (not a sample), most common first. For the AI summary."""
+    model = RECORD_TABLES[target]
+    column = getattr(model, field, None)
+    if column is None:
+        return {}
+    q = select(column, func.count()).where(model.account == account, column.is_not(None))
+    if source:
+        q = q.where(model.source == source)
+    rows = s.execute(q.group_by(column).order_by(func.count().desc(), column).limit(top))
+    return {str(value): n for value, n in rows}
+
+
 # ---------------------------------------------------------------- unified users (D-16, built per request, nothing stored)
 
 def _person_key():

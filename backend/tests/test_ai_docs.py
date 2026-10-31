@@ -466,12 +466,13 @@ def test_a_gone_endpoint_is_fed_back_but_a_wrong_login_is_not(api, monkeypatch):
 @pytest.mark.parametrize("setup,reason", [
     (lambda mp: None, "is not set yet"),  # no secret at all
     (lambda mp: pinned(mp, host=None), "not pinned to a host"),  # a secret the AI could send anywhere
-    (lambda mp: pinned(mp, host="somewhere-else.example.org"), "pinned to somewhere-else.example.org"),
+    # pinned to another service's host: the draft gets its own secret name instead of taking it over, and nothing is sent
+    (lambda mp: pinned(mp, host="somewhere-else.example.org"), "is not set yet"),
 ])
 def test_the_secret_is_never_sent_to_a_host_the_ai_chose(api, monkeypatch, setup, reason):
     setup(monkeypatch)
     service(api, REAL, calls := [])
-    body = generate(api, Script(ACME.replace("your-site", "mysite") if "pinned to" in reason else ACME))
+    body = generate(api, Script(ACME))
     assert body["test"]["ran"] is False and reason in body["test"]["skipped_reason"] and calls == []
 
 
@@ -496,7 +497,8 @@ def test_the_site_is_not_filled_when_the_pinned_host_does_not_fit_the_base_url(a
     pinned(monkeypatch, host="unrelated.example.org")
     service(api, REAL, calls := [])
     body = generate(api, Script(ACME))
-    assert body["config"]["vars"] == {"site": "your-site"} and body["test"]["ran"] is False and "pinned to unrelated.example.org" in body["test"]["skipped_reason"] and calls == []
+    assert body["config"]["vars"] == {"site": "your-site"} and body["test"]["ran"] is False and calls == []
+    assert body["config"]["auth"]["secret"] == "acme_token_2" and "is not set yet" in body["test"]["skipped_reason"]  # not the other host's secret
 
 
 def test_existing_secret_names_go_to_the_model_but_never_their_values(api, monkeypatch):
@@ -537,3 +539,179 @@ def test_saved_values_are_not_copied_from_another_secret_or_over_the_persons_own
     service(api, REAL, [])
     body = generate(api, Script(ACME))
     assert body["test"]["filled_vars"] == {"site": "acme"}  # from the pin only: the other integration uses a different secret
+
+
+# ---------------------------------------------------------------- mistakes no request reports (engine/lint.py)
+
+BAD_PAGING = ACME.replace("    records_path: data", "    pagination: { type: offset, offset_param: page, limit_param: per_page, limit: 100 }\n    records_path: data")
+GOOD_PAGING = ACME.replace("    records_path: data", "    pagination: { type: page_number, param: page, start: 1 }\n    records_path: data")
+
+
+def test_paging_that_cannot_work_is_corrected_even_when_nothing_can_be_tried(api):
+    model = Script(BAD_PAGING, GOOD_PAGING)
+    body = generate(api, model)  # no secret is set, so there is no real call: the settings alone gave it away
+    assert body["test"]["ran"] is False and len(model.prompts) == 2
+    assert "counts pages" in model.prompts[1] and "page=100" in model.prompts[1]
+    assert body["config"]["actions"]["list_users"]["pagination"]["type"] == "page_number"
+    assert "problems" not in body["test"] and not [n for n in body["test"]["notes"] if n.startswith("Check:")]
+
+
+def test_a_paging_mistake_the_ai_does_not_fix_is_shown_to_the_person(api):
+    body = generate(api, Script(BAD_PAGING, BAD_PAGING))
+    checks = [n for n in body["test"]["notes"] if n.startswith("Check: Paging:")]
+    assert len(checks) == 1 and "(action list_users)" in checks[0] and "problems" not in body["test"]
+    assert body["config"]["actions"]["list_users"]["pagination"]["type"] == "offset"
+
+
+def test_a_second_page_that_repeats_the_first_is_caught_and_corrected(api, monkeypatch):
+    pinned(monkeypatch)
+    calls = []
+    service(api, REAL, calls)  # every page is the same record, whatever the paging parameter says
+    model = Script(GOOD_PAGING, GOOD_PAGING)
+    body = generate(api, model)
+    assert len(model.prompts) == 2 and "same 1 record(s) as page 1" in model.prompts[1]
+    assert any("page=2" in c["url"] for c in calls)  # page 2 was really asked for
+    assert any(n.startswith("Check: Page 2 returned the same") for n in body["test"]["notes"])
+
+
+def test_a_variable_still_set_to_the_example_is_pointed_out_but_not_sent_to_the_ai_to_change(api, monkeypatch):
+    pinned(monkeypatch, host="your-site.example.com")  # the pinned host gives the site the example value
+    service(api, REAL, [])
+    body = generate(api, Script(ACME))
+    assert any(n.startswith("Check: Variable site is still the example value 'your-site'") for n in body["test"]["notes"])
+
+
+# ---------------------------------------------------------------- pages that draw themselves with JavaScript
+
+SPEC = {"openapi": "3.0.0", "info": {"title": "Acme", "description": "Users and alerts"}, "servers": [{"url": "https://api.acme.example/v2"}],
+        "paths": {"/users": {"get": {"summary": "List users", "responses": {"200": {"description": "ok"}}}},
+                  "/alerts": {"get": {"summary": "List alerts", "responses": {"200": {"description": "ok"}}}}}}
+SWAGGER_SHELL = '<html><body><div id="swagger-ui"></div><script>SwaggerUIBundle({ url: "/spec/v1.json", dom_id: "#swagger-ui" })</script></body></html>'
+REDOC_SHELL = '<html><body><redoc spec-url="https://cdn.acme.example/specs/acme.yaml"></redoc><script src="redoc.js"></script></body></html>'
+PLAIN_SHELL = '<html><body><div id="root"></div><script>render()</script></body></html>'
+
+
+def site(routes, calls=None):
+    """A fake site: path or full url -> a response. Anything else is a 404."""
+    def handler(request):
+        if calls is not None:
+            calls.append(str(request.url))
+        for key in (str(request.url), request.url.path):
+            if key in routes:
+                r = routes[key]
+                return r if isinstance(r, httpx.Response) else html(r)
+        return html("no", status=404)
+    return reader(handler)
+
+
+def json_spec():
+    return httpx.Response(200, json=SPEC)
+
+
+def test_a_swagger_ui_page_is_read_through_the_spec_it_loads():
+    page = fetch_docs("https://docs.acme.example/api", client=site({"/api": SWAGGER_SHELL, "/spec/v1.json": json_spec()}))
+    assert page["url"] == "https://docs.acme.example/spec/v1.json"   # the file that was really read
+    assert "GET /users" in page["text"] and "List alerts" in page["text"] and "Base URL: https://api.acme.example/v2" in page["text"]
+
+
+def test_a_redoc_spec_url_on_another_host_is_followed_and_yaml_is_read():
+    import yaml as y
+    spec_yaml = httpx.Response(200, text=y.safe_dump(SPEC), headers={"content-type": "application/yaml"})
+    page = fetch_docs("https://docs.acme.example/api", client=site({"/api": REDOC_SHELL, "https://cdn.acme.example/specs/acme.yaml": spec_yaml}))
+    assert page["url"] == "https://cdn.acme.example/specs/acme.yaml" and "GET /users" in page["text"]
+
+
+def test_a_usual_address_is_tried_when_the_page_does_not_name_the_spec():
+    calls = []
+    page = fetch_docs("https://docs.acme.example/api", client=site({"/api": PLAIN_SHELL, "/swagger.json": json_spec()}, calls))
+    assert page["url"] == "https://docs.acme.example/swagger.json" and "GET /alerts" in page["text"]
+    assert calls[0].endswith("/api") and any(c.endswith("/openapi.json") for c in calls)   # tried the others first
+
+
+def test_a_spec_in_a_public_repository_the_page_links_to_is_found():
+    shell = PLAIN_SHELL.replace("<div", '<a href="https://github.com/acme/acme-openapi">spec</a><div')
+    raw = "https://raw.githubusercontent.com/acme/acme-openapi/HEAD/openapi.json"
+    page = fetch_docs("https://docs.acme.example/api", client=site({"/api": shell, raw: json_spec()}))
+    assert page["url"] == raw and "GET /users" in page["text"]
+
+
+def test_a_repository_not_named_like_an_api_spec_is_ignored():
+    shell = PLAIN_SHELL.replace("<div", '<a href="https://github.com/acme/website">site</a><div')
+    calls = []
+    with pytest.raises(DocsError, match="almost no readable text"):
+        fetch_docs("https://docs.acme.example/api", client=site({"/api": shell}, calls))
+    assert not any("raw.githubusercontent.com" in c for c in calls)
+
+
+def test_llms_txt_gives_links_to_follow_when_there_is_no_spec():
+    index = "# Acme\n\n> Acme API docs for developers, with guides for every endpoint we offer and every way to sign in.\n\n" \
+            "- [Users API](https://docs.acme.example/api/users): list users\n- [Elsewhere](https://other.example/x): not this site\n"
+    page = fetch_docs("https://docs.acme.example/api", client=site({"/api": PLAIN_SHELL, "/llms.txt": httpx.Response(200, text=index, headers={"content-type": "text/plain"})}))
+    assert page["url"] == "https://docs.acme.example/llms.txt"
+    assert page["links"] == [{"url": "https://docs.acme.example/api/users", "text": "Users API"}]   # same site only
+
+
+def test_the_sitemap_offers_the_pages_that_look_like_api_documentation():
+    sitemap = ("<urlset>" + "".join(f"<url><loc>https://docs.acme.example{p}</loc></url>" for p in
+               ("/pricing", "/api/users", "/reference/alerts", "/blog/launch", "/other.xml")) + "</urlset>")
+    page = fetch_docs("https://docs.acme.example/api", client=site({"/api": PLAIN_SHELL, "/sitemap.xml": httpx.Response(200, text=sitemap, headers={"content-type": "application/xml"})}))
+    assert [link["url"] for link in page["links"]] == ["https://docs.acme.example/api/users", "https://docs.acme.example/reference/alerts"]
+
+
+def test_nothing_found_behind_a_script_page_says_what_to_do_instead():
+    with pytest.raises(DocsError) as err:
+        fetch_docs("https://docs.acme.example/api", client=site({"/api": PLAIN_SHELL}))
+    assert "needs JavaScript" in str(err.value) and "paste" in str(err.value)
+
+
+def test_a_spec_link_to_a_private_address_is_never_fetched():
+    calls = []
+    shell = '<html><body><div id="swagger-ui"></div><script>SwaggerUIBundle({ url: "https://127.0.0.1/spec.json" })</script></body></html>'
+    with pytest.raises(DocsError):
+        fetch_docs("https://docs.acme.example/api", client=site({"/api": shell}, calls))
+    assert not any("127.0.0.1" in c for c in calls)
+
+
+def test_the_search_for_a_spec_is_limited():
+    calls = []
+    shell = PLAIN_SHELL.replace("<div", "".join(f'<a href="https://github.com/o{i}/spec-{i}">x</a>' for i in range(30)) + "<div")
+    with pytest.raises(DocsError):
+        fetch_docs("https://docs.acme.example/api", client=site({"/api": shell}, calls))
+    assert len(calls) <= 1 + docs.MAX_DISCOVERY_FETCHES
+
+
+def test_a_normal_page_is_read_as_before_with_no_extra_requests():
+    calls = []
+    page = fetch_docs("https://docs.acme.example/api", client=site({"/api": PAGE}, calls))
+    assert len(calls) == 1 and page["url"] == "https://docs.acme.example/api" and "GET /v2/users" in page["text"]
+
+
+def test_a_script_page_that_still_has_enough_text_is_used_when_nothing_is_found():
+    body = '<html><body><noscript>x</noscript><h1>Users</h1>' + "<p>List the users of your organization with GET /v2/users and page through them.</p>" * 6 + "</body></html>"
+    page = fetch_docs("https://docs.acme.example/api", client=site({"/api": body}))
+    assert page["url"] == "https://docs.acme.example/api" and "GET /v2/users" in page["text"]
+
+
+def test_the_find_docs_crawl_can_follow_the_links_of_a_discovered_index(api):
+    """End to end: a service name, a script-drawn landing page, a sitemap with the real reference page."""
+    reference = "GET /rest/api/3/users/search returns the users. GET /rest/api/3/user returns one user. GET /rest/api/3/group/member lists members. Authenticate with basic auth."
+    sitemap = "<urlset><url><loc>https://docs.acme.example/api/users</loc></url></urlset>"
+    pages_ = {"https://docs.acme.example/start": PLAIN_SHELL, "https://docs.acme.example/sitemap.xml": sitemap,
+              "https://docs.acme.example/api/users": f"<html><body><pre>{reference}</pre>" + "<p>More about users.</p>" * 30 + "</body></html>"}
+
+    def fetch(url):
+        return fetch_docs(url, client=reader(lambda r: html(pages_[str(r.url)]) if str(r.url) in pages_ else html("no", status=404)))
+
+    model = Script({"urls": ["https://docs.acme.example/start"]}, {"urls": ["https://docs.acme.example/api/users"]}, GITHUB_YAML)
+    wire(api, model, fetch)
+    body = api.post("/api/v1/ai/generate-config", json={"service": "Acme"}).json()
+    assert body["source"]["url"] == "https://docs.acme.example/api/users"
+
+
+def test_a_draft_does_not_take_over_a_secret_that_belongs_to_another_service(api, monkeypatch):
+    pinned(monkeypatch, host="api.github.com")  # `acme_token` exists, but it is pinned to GitHub's host
+    calls = []
+    service(api, REAL, calls)
+    body = generate(api, Script(ACME))
+    assert body["config"]["auth"]["secret"] == "acme_token_2" and body["config"]["requires"]["secrets"] == ["acme_token_2"]
+    assert body["test"]["ran"] is False and calls == []  # nothing was sent, and the other service's token was not used

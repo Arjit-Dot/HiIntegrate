@@ -59,7 +59,8 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
     ask()
   }, [integration, action])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const canApply = !!fix && fix.changes.length > 0 && fix.errors.length === 0 && !!fix.proposed_config && !applied
+  const rescuesNone = !!fix?.verification && fix.verification.rescued === 0   // the dry run says it would help no record
+  const canApply = !!fix && fix.changes.length > 0 && fix.errors.length === 0 && !!fix.proposed_config && !applied && !rescuesNone
 
   async function apply() {
     if (!fix?.proposed_config) return
@@ -160,6 +161,7 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
               </Button>
             </div>
           )}
+          {!applied && rescuesNone && <div className="hint err" style={{ textAlign: 'right', marginTop: 6 }}>Not applied: the dry run shows this change rescues none of the quarantined records, so it would change the config without helping. Ask again, or fix it by hand.</div>}
           {!applied && canApply && <div className="hint" style={{ textAlign: 'right', marginTop: 6 }}>Apply updates {integration} in place. Nothing changes until you press it.</div>}
         </>
       )}

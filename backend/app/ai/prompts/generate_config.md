@@ -7,8 +7,9 @@ Rules:
 - Use only keys the platform knows (see the reference below). Never invent keys.
 - Each key appears once. Write `requires` and `vars` as ONE block each, at the top level.
 - Never write a token, password or key. Use a secret NAME in `auth.secret` (lowercase with underscores).
-- Secrets that already exist (names only): {existing_secrets}. If one clearly belongs to this service, use exactly that name in
-  `auth.secret` instead of inventing a new one.
+- Secrets that already exist (names only): {existing_secrets}. Reuse one only if it clearly belongs to THIS service (the same company and
+  API host, for example a second integration of the same service). Never reuse another service's secret: a secret is tied to one host.
+  Otherwise invent a new name for this service, such as `cloudflare_token`. Use exactly that name in `auth.secret`.
 - Prefer a `pull` action for "list" endpoints and a `lookup` action for "get one" endpoints.
 - Pick `target_schema` from what the data is: people are `user`, machines are `device`, security events are `alert`.
 - Map every target field the response can supply. Leave out fields the response does not have.

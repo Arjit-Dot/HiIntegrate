@@ -295,6 +295,7 @@ export default function AddEdit() {
             {draft.test?.ran && draft.test.ok && draft.test.missing_paths.length > 0 && <li><b>Tried against the real service:</b> these mapped fields found nothing, so check their paths: <code>{draft.test.missing_paths.join(', ')}</code>.</li>}
             {draft.test?.ran && !draft.test.ok && <li><b>Tried against the real service, but it did not work:</b> {draft.test.notes[0] ?? 'the call failed'}. Check the Variables and the secret, then press <b>Test connection</b>.</li>}
             {draft.test && !draft.test.ran && <li><b>Not tried yet:</b> {draft.test.skipped_reason}.</li>}
+            {(draft.test?.notes ?? []).filter(n => n.startsWith('Check: ')).map((n, i) => <li key={i}><b>Check:</b> {n.slice('Check: '.length)}</li>)}
             {!draft.test && <li>Press <b>Test connection</b> to see whether the mapped paths exist in the real response.</li>}
             <li>Nothing is saved until you press Save.</li>
           </ul>
@@ -381,7 +382,9 @@ export default function AddEdit() {
                 <div className="hint">{known?.set ? <Pill kind="set">set</Pill> : <Pill kind="notset">not set</Pill>} Write-only: stored encrypted, never shown again, and never part of the config. Leave it blank to keep the current value.</div>
                 <div className="hint">
                   {host
-                    ? known?.host && known.host !== host && !s.secretValue
+                    ? known?.host && known.host !== host && s.secretValue
+                      ? <span className="err" style={{ color: 'var(--bad)', fontWeight: 600 }}>Careful: <code>{s.secret}</code> is already pinned to <code>{known.host}</code> and is used by other integrations. Saving this value moves it to <code>{host}</code>, and those integrations will stop working. Use a different secret name.</span>
+                    : known?.host && known.host !== host && !s.secretValue
                       ? <>This secret is pinned to <code>{known.host}</code>. This integration sends requests to <code>{host}</code>, so it will be refused until you enter the value again.</>
                       : <>Pinned to <code>{host}</code> (from the Base URL). The platform refuses to send this secret anywhere else.</>
                     : 'The host comes from the Base URL, once it is filled in.'}

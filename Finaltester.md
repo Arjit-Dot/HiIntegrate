@@ -317,46 +317,55 @@ Expect `summary` in plain words ("the key was refused (401), check the token"), 
 
 ---
 
-## 4. Log (fill in)
+## 4. Log (run 1 Nov, through the API as accounts `finaltester` and `finaltester2`; the dashboard screens were not clicked)
 
 Result: **PASS**, **PARTIAL** (say what), **FAIL**, **SKIPPED**.
 
 | Stage | Service | Draft by name OK? | Real test ran? | Corrected? | Records saved | Quarantined | Result | Notes (what the AI got wrong) |
 |---|---|---|---|---|---|---|---|---|
-| 1 | GitHub | | | | | | | |
-| 2 | NVD | | | | | | | |
-| 3 | AbuseIPDB | | | | | | | |
-| 4 | Cloudflare | | | | | | | |
-| 5 | Jira | | | | | | | |
-| 6 | Okta | | | | | | | |
-| 7 | Elastic | | | | | | | |
-| A | Accounts and sign-in | | n/a | n/a | n/a | n/a | | |
-| 8 | Sophos | | n/a | n/a | n/a | n/a | | |
-| 9 | AWS | | n/a | n/a | n/a | n/a | | |
-| 10 | Mock | | n/a | n/a | | | | |
+| 1 | GitHub | Yes, 3rd page tried (GitHub's OpenAPI file is over 8 MB) | Yes (path A) | No | 223 org members over 3 pages (`org=github`, public members: this account has no org) | 0 | PASS | Paging `next_link` from `Link` was right. `org` left as `my-org`, flagged by the new check. The membership lookup answers 403 for a non-member, which is correct |
+| 2 | NVD | **No**: nvd.nist.gov is now a JavaScript app with no API description file | Yes, after the key was added | Fix with AI | 100 CVEs over 2 pages | 2 → 0 after Fix with AI | PASS (from file) | **AI failure: could not read NVD's docs (script-drawn site).** Added `docs/api-docs/nvd/` (reference + a real sample response) and drafted from it: offset paging and the nested paths were right; severity was mapped as `HIGH` instead of `high` |
+| 3 | AbuseIPDB | Pasted curl (F3) | Yes (path B) | Validation, 2 errors fixed | 50 blacklisted IPs | lookup: score → severity | PARTIAL | Severity mapped from the 0 to 100 score (cannot fit `low..critical`), and `description` mapped to a date. Fix with AI only rescued score 0 (`value_map` cannot express ranges) |
+| 4 | Cloudflare | Yes (developers.cloudflare.com/api) | Yes | No | 0 | 0 | **BLOCKED** | **The key in `.env.test` is refused by Cloudflare ("Invalid API Token")**, and the account id is unknown. The draft has no paging (Cloudflare pages with `page`/`per_page`) |
+| 5 | Jira | Yes | Yes (path A), domain filled from the pin | Issues: 3 rounds | 11 users over 2 pages, lookup OK | 0 | PASS (users), PARTIAL (issues) | Issues draft used the removed `/search` (410), then an unbounded JQL (400); both fixed by the new correction rounds. Still missing: the `fields` parameter, so timestamp and description stay empty |
+| 6 | Okta | Yes | Yes (path A), domain filled from the pin | Yes | 2 users, lookup OK, 0 devices | 0 | PASS (after fixes) | Used `bearer` instead of `SSWS`, then `name: SSWS` with prefix `SSWS` (no space). Fixed by the new login correction and the auth tidy-up |
+| 7 | Elastic | Yes (Kibana alerting rules) | No key | n/a | n/a | n/a | SKIPPED (draft only) | Drafted alerting *rules*, not detection alerts. `ApiKey ` prefix right |
+| A | Accounts and sign-in | | n/a | n/a | n/a | n/a | PASS | All of A.1 to A.10 and the 429 on the 9th try. A.11 to A.14 (browser, `.env` restarts) covered by the automated tests only |
+| 8 | Sophos | Yes | n/a | n/a | n/a | n/a | PARTIAL | Silently used `bearer` for an OAuth2 client-credentials API. Now warned when the docs mention client credentials; the reference page Sophos serves does not, so this run still had no warning |
+| 9 | AWS | No docs usable (14 pages) | n/a | n/a | n/a | n/a | PASS (nothing saved) | Refused by "no usable documentation", not by "SigV4 is not supported" |
+| 10 | Mock | Manual YAML | n/a | n/a | 3 users, 3 devices | 2 | PASS | `scripts/rehearse.py`: 4 of 4 PASS |
 
 | Feature | Result | Evidence (stage and step) |
 |---|---|---|
-| F1 docs by name | | |
-| F2 docs by URL | | |
-| F3 pasted text | | |
-| F4 attached document | | |
-| F5 validate and correct | | |
-| F6 real test and one correction | | |
-| F7 variables filled | | |
-| F8 suggest mapping, and no-AI check | | |
-| F9 summarize | | |
-| F10 fix with AI (before and after count) | | |
-| F11 explain a failed run | | |
-| F12 saved fallbacks | | |
-| G1 AI off | | |
-| G2 unsupported auth refused | | |
-| G3 no secrets or personal data to the model | | |
-| G4 private addresses refused | | |
-| G5 hostile text cannot move a key | | |
-| G6 fix cannot touch auth or base URL | | |
-| G7 accounts isolated | | |
-| A1 to A5 accounts and sign-in | | |
+| F1 docs by name | PASS (5 of 7) | GitHub, Cloudflare, Jira, Okta, Elastic, Sophos found; NVD (script-drawn) and AWS not |
+| F2 docs by URL | PASS | Jira issue-search page |
+| F3 pasted text | PASS | AbuseIPDB curl |
+| F4 attached document | PASS | NVD reference file in `docs/api-docs/nvd/` |
+| F5 validate and correct | PASS | AbuseIPDB, Cloudflare, Sophos: 1 or 2 errors fixed |
+| F6 real test and correction | PASS (after fixes) | Okta auth, Jira 410 then 400 |
+| F7 variables filled | PASS | Jira and Okta domain from the pin, Jira email from the saved integration |
+| F8 suggest mapping, and no-AI check | PASS | Okta record: id, email, status found; `profile.mail` correctly reported as not found |
+| F9 summarize | PASS (after fix) | Counts now add up to the total (was the 200-record sample only); no emails in any summary |
+| F10 fix with AI | PASS | NVD: 2 → 0 quarantined, lookup now `critical`. Mock: proposal rescued 0, and the dashboard now refuses to apply that |
+| F11 explain a failed run | PASS | `wrong_key`: explains the 401, no change; other action or unknown run → 404 |
+| F12 saved fallbacks | NOT RUN | Browser only |
+| G1 AI off | PASS (automated test) | Not run live: the key cannot be removed without stopping your API |
+| G2 unsupported auth refused | PARTIAL | See Sophos and AWS |
+| G3 no secrets or personal data to the model | PASS | 0 secret values in the API, worker and mock logs; no emails in summaries |
+| G4 private addresses refused | PASS | http, 169.254.169.254, localhost:8000 all refused |
+| G5 hostile text cannot move a key | PASS | The draft pointed at the pinned host only; a secret moved to another host is refused (13.7) |
+| G6 fix cannot touch auth or base URL | PASS | Every proposal touched only `actions.<name>.map/required` |
+| G7 accounts isolated | PASS | `finaltester2` sees nothing, 404 on the other account's runs and fixes, its AI draft did not use the other account's key |
+| A1 to A5 accounts and sign-in | PASS | Stage A |
+
+### AI failures and what was done
+
+- **NVD:** the AI could not read nvd.nist.gov (now a JavaScript app, no OpenAPI file). Added `docs/api-docs/nvd/README.md` and `sample-cves.json`, drafted from them: PASS.
+- **Okta:** the AI sent the token as `bearer` and then as header `SSWS`: fixed in the platform (login refusals now go back to the AI, and `name: SSWS` / a prefix with no space are tidied).
+- **Jira issues:** the AI used a removed endpoint, then an unbounded search: fixed in the platform (the service's own error message is passed on, and up to 3 correction rounds keep the best draft). Still missing a `fields` parameter.
+- **AbuseIPDB:** a 0 to 100 score cannot become `low..critical` with a value map: needs a range transform (a contract change, not done).
+- **Sophos:** OAuth2 client credentials cannot be done; the AI used `bearer` without saying so.
+- **Cloudflare:** not the AI: the key is invalid.
 
 ## 5. Tips and gotchas
 

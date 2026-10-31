@@ -106,6 +106,24 @@ def _strings(node):
             yield from _strings(v)
 
 
+AUTH_SCHEMES = {"ssws", "bearer", "token", "basic", "bot", "apikey", "key"}
+
+
+def _tidy_auth(auth: dict) -> None:
+    """Two slips models make with a header key: the scheme as the header NAME (`name: SSWS`), and a prefix with no space
+    (`SSWS` + token gives `SSWSabc...`). Both are fixed here, the way the documentation means it."""
+    if auth.get("type") != "api_key" or auth.get("in") != "header":
+        return
+    name, prefix = str(auth.get("name") or ""), auth.get("prefix")
+    if name.lower() in AUTH_SCHEMES:
+        auth["name"] = "Authorization"
+        prefix = prefix or name
+    if isinstance(prefix, str) and prefix and prefix.strip().lower() in AUTH_SCHEMES and not prefix.endswith(" "):
+        prefix = prefix.strip() + " "
+    if prefix:
+        auth["prefix"] = prefix
+
+
 def finalize(config: dict) -> dict:
     """Make the draft ready to review. Everything the person would otherwise have to type is filled with the model's
     example, so they only have to check it: every {{vars.x}} gets a value (from requires.vars, else a clear placeholder),
@@ -120,6 +138,7 @@ def finalize(config: dict) -> dict:
             vars_[name] = str(info.get("example") or f"your-{name.replace('_', '-')}")
     if vars_:
         cfg["vars"] = vars_
+    _tidy_auth(cfg.get("auth") or {})
     for action in (cfg.get("actions") or {}).values():
         for entry in (action.get("map") or {}).values():
             if isinstance(entry, dict) and isinstance(entry.get("value_map"), dict):
@@ -135,19 +154,56 @@ def _read_draft(answer: str) -> tuple[dict | None, list[dict]]:
 def _needs_fixing(test: dict) -> bool:
     """A test run says the paths are wrong when it reached the service and mapped fields found nothing, or the records path
     found no list. A call that failed for another reason (login, network) is not the draft's fault."""
+    if test.get("problems"):  # paging that cannot work: found from the settings alone, so it needs no real call
+        return True
     if not test.get("ran"):
         return False
     if test.get("ok"):
         return bool(test.get("missing_paths"))
     if test.get("status_code") in (405, 410):  # the endpoint or method is gone: the draft's fault, not the login's
         return True
+    # The service refused the request itself (a bad path, query or body), and no variable is still an example value, which
+    # would be the person's to fix: the draft is wrong, and the service's own message (in the notes) says how.
+    if test.get("status_code") in (400, 404, 422) and not any(n.startswith("Check: Variable") for n in test.get("notes", [])):
+        return True
+    # The saved secret was sent to its own host and refused: the value is the person's, but HOW it is sent (bearer or a header
+    # with a prefix such as `SSWS `) is the draft's choice and a common mistake.
+    if test.get("status_code") in (401, 403) and not any(n.startswith("Check: Variable") for n in test.get("notes", [])):
+        return True
     return any("unexpected response shape" in n for n in test.get("notes", []))
+
+
+OAUTH_HINTS = re.compile(r"client[_ ]credentials|grant_type|oauth2?/token|/oauth/token", re.IGNORECASE)
+TEST_FIXES = 3  # corrections after a real test
+
+
+def _test_rank(test: dict, config: dict) -> tuple[int, int]:
+    """How well a draft did against the real service, to keep the better of two: (level, mapped paths of the tested action).
+    Level: works with every path found and the record accepted > works > refused or failed. The path count stops a "fix" that
+    hides a missing field by swapping its path for a constant from winning."""
+    quarantined = any("would be quarantined" in n for n in test.get("notes", []))
+    if test.get("ok") and not test.get("missing_paths") and not test.get("problems") and not quarantined:
+        level = 3
+    elif test.get("ok"):
+        level = 2
+    else:
+        level = 1 if test.get("ran") else 0
+    action = (config.get("actions") or {}).get(test.get("action") or "", {})
+    paths = sum(1 for e in (action.get("map") or {}).values() if isinstance(e, str) or (isinstance(e, dict) and e.get("path")))
+    return level, paths
 
 
 def _describe_test(test: dict) -> str:
     lines = [f"Action tested: {test.get('action')}"]
     if test.get("status_code") in (405, 410):
         lines.append(f"The service answered {test['status_code']}: this endpoint or method is no longer available. Use a current endpoint from the documentation.")
+    elif test.get("status_code") in (401, 403):
+        lines.append(f"The service answered {test['status_code']}: it refused the login. The secret value is the person's and is probably right; "
+                     "check HOW the documentation says to send it: `auth.type` (bearer, basic or api_key), the header name and the prefix "
+                     "(for example `Authorization: SSWS <token>` is api_key with name Authorization and prefix `SSWS `, not bearer).")
+    elif test.get("status_code") in (400, 404, 422):
+        lines.append(f"The service answered {test['status_code']}: it refused the request as written (the path, the query parameters or the body). "
+                     "Its own message is in the notes below. Fix the request so the service accepts it, using the documentation.")
     if test.get("missing_paths"):
         lines.append("These mapped fields found nothing in the real record: " + ", ".join(test["missing_paths"]))
     lines += [f"Note: {n}" for n in test.get("notes", [])]
@@ -156,20 +212,55 @@ def _describe_test(test: dict) -> str:
     return "\n".join(lines)
 
 
-def generate_config(llm: LLMClient, text: str, *, existing_secrets: list[str] | None = None, tester=None) -> dict:
+def _host_pattern(base_url: str) -> re.Pattern | None:
+    """The host of a base URL as a pattern: `{{vars.x}}` stands for any text, so `{{vars.domain}}.atlassian.net` matches acme.atlassian.net."""
+    host = re.sub(r":\d+$", "", base_url.split("://", 1)[-1].split("/")[0].split("@")[-1])
+    if not host:
+        return None
+    parts = re.split(r"\{\{[^}]*\}\}", host)
+    # A placeholder may stand for one name or for the whole host (`https://{{vars.domain}}` with domain=acme.okta.com).
+    return re.compile(".+".join(re.escape(p) for p in parts), re.IGNORECASE)
+
+
+def own_secret(config: dict, secret_hosts: dict[str, str | None]) -> dict:
+    """A secret is pinned to one host, and entering a value for it again moves the pin. So a draft must not reuse an existing secret
+    that belongs to another service: when the name exists and is pinned to a host this config does not call, give the draft its own name."""
+    cfg = deepcopy(config)
+    auth = cfg.get("auth") or {}
+    name = auth.get("secret")
+    pinned = secret_hosts.get(name) if name else None
+    pattern = _host_pattern(cfg.get("base_url", ""))
+    if not (name and pinned and pattern) or pattern.fullmatch(pinned):
+        return cfg
+    stem = re.sub(r"[^a-z0-9_]", "_", str(cfg.get("name", "service")).lower()).strip("_") or "service"
+    new, n = f"{stem}_token", 2
+    while new in secret_hosts:
+        new, n = f"{stem}_token_{n}", n + 1
+    auth["secret"] = new
+    requires = cfg.get("requires")
+    if isinstance(requires, dict) and isinstance(requires.get("secrets"), list):
+        requires["secrets"] = [new if x == name else x for x in requires["secrets"]]
+    return cfg
+
+
+def generate_config(llm: LLMClient, text: str, *, existing_secrets: list[str] | None = None, tester=None,
+                    secret_hosts: dict[str, str | None] | None = None) -> dict:
     """Docs, curl or a sample response in, a draft config out. Validate, and feed the errors back up to 2 times.
     Then, if `tester` is given, try the draft against the real service once and correct paths that found nothing.
     `tester(config) -> (config, report)` lives in the route: it owns the database, the secrets and the safety checks.
     Returns {yaml, config, errors, attempts, test}; `attempts` lets the UI show each step."""
     system = prompt("generate_config", rules=prompt("rules"), example_github=_template("github"), example_template=_template("service-template"),
                     existing_secrets=", ".join(existing_secrets or []) or "none")
+    hosts = secret_hosts or {}
     user = scrub(text)
     attempts: list[dict] = []
     answer = _strip_fences(llm.generate(system, user))
     config, issues = None, []
+    wanted_oauth = False
     for attempt in range(1, RETRIES + 2):
         config, issues = load_config(answer)
         issues = issues + duplicate_keys(answer)
+        wanted_oauth = wanted_oauth or any("oauth2_client_credentials" in i.get("message", "") for i in issues)
         errors = _errors(issues)
         attempts.append({"attempt": attempt, "valid": config is not None and not errors, "error_count": len(errors)})
         if not errors and config is not None:
@@ -180,18 +271,38 @@ def generate_config(llm: LLMClient, text: str, *, existing_secrets: list[str] | 
         answer = _strip_fences(llm.generate(system, f"{user}\n\n---\nYour previous answer:\n{answer}\n\n{follow_up}"))
     test = None
     if config is not None and not _errors(issues):
-        config = finalize(config)
+        config = own_secret(finalize(config), hosts)
         if tester:
             config, test = tester(config)
-            if _needs_fixing(test):
+            first_missing = test.get("missing_paths", [])
+            # Each correction can expose the next problem (a removed endpoint, then a search the service refuses), so up to
+            # TEST_FIXES rounds are allowed. Only a draft that tests at least as well as the current one replaces it.
+            for _ in range(TEST_FIXES):
+                if not _needs_fixing(test):
+                    break
                 follow_up = prompt("fix_after_test", result=_describe_test(test))
                 fixed = _strip_fences(llm.generate(system, f"{user}\n\n---\nYour previous answer:\n{yaml.safe_dump(config, sort_keys=False, allow_unicode=True, width=110)}\n\n{follow_up}"))
                 fixed_config, fixed_issues = _read_draft(fixed)
-                if fixed_config is not None and not _errors(fixed_issues):
-                    config, test_after = tester(finalize(fixed_config))
+                if fixed_config is None or _errors(fixed_issues):
+                    break
+                candidate = own_secret(finalize(fixed_config), hosts)
+                same = lambda c: {k: v for k, v in c.items() if k != "vars"}  # the tester fills in vars, so they do not count
+                if same(candidate) == same(config):
                     attempts.append({"attempt": len(attempts) + 1, "valid": True, "error_count": 0})
-                    test = {**test_after, "corrected": True, "missing_before": test.get("missing_paths", [])}
+                    break  # the model changed nothing, so asking again would not help
+                new_config, test_after = tester(candidate)
+                attempts.append({"attempt": len(attempts) + 1, "valid": True, "error_count": 0})
+                if _test_rank(test_after, new_config) < _test_rank(test, config):
+                    break  # the fix made it worse: keep the draft we had
+                config, test = new_config, {**test_after, "corrected": True, "missing_before": first_missing}
         issues = validate_config(config)
+        # The docs describe a token exchange (OAuth2 client credentials) and the draft just says bearer: the same stand-in, unannounced.
+        wanted_oauth = wanted_oauth or ((config.get("auth") or {}).get("type") == "bearer" and bool(OAUTH_HINTS.search(text)))
+        if wanted_oauth:  # the service needs a token exchange the platform cannot do; say so instead of passing off a stand-in
+            issues.append({"path": "auth.type", "severity": "warning", "message":
+                           "The documentation asks for OAuth2 client credentials, which the platform does not support yet. The draft uses "
+                           f"{(config.get('auth') or {}).get('type')} instead, so it needs a token you get yourself, and such tokens usually "
+                           "expire within hours: scheduled runs will then fail until you enter a new one."})
         answer = yaml.safe_dump(config, sort_keys=False, allow_unicode=True, width=110)
     return {"yaml": answer, "config": config, "errors": issues, "attempts": attempts, "test": test}
 
@@ -315,12 +426,16 @@ def find_docs(llm: LLMClient, service: str, fetch) -> tuple[dict, list[dict]]:
 
 # ---------------------------------------------------------------- summary
 
-def summarize(llm: LLMClient, target: str, records: list[dict], total: int) -> str:
-    stats = {"total_stored": total, "records_counted": len(records)}
-    for field in ("source", "status", "severity", "os"):
-        counts = Counter(str(r[field]) for r in records if r.get(field) is not None)
-        if counts:
-            stats[f"by_{field}"] = dict(counts.most_common(10))
+SUMMARY_FIELDS = ("source", "status", "severity", "os")
+
+
+def summarize(llm: LLMClient, target: str, records: list[dict], total: int, counts: dict[str, dict[str, int]] | None = None) -> str:
+    """`counts` are exact counts over every stored record (from storage). Without them, the sample is counted, and says so."""
+    stats: dict = {"total_stored": total, "sample_size": len(records)}
+    for field in SUMMARY_FIELDS:
+        found = (counts or {}).get(field) if counts is not None else dict(Counter(str(r[field]) for r in records if r.get(field) is not None).most_common(10))
+        if found:
+            stats[f"by_{field}" + ("" if counts is not None else "_in_sample")] = found
     sample = [mask({k: v for k, v in r.items() if k != "raw"}) for r in records[:25]]
     user = f"Record type: {target}\nCounts: {json.dumps(stats)}\nSample (masked):\n{json.dumps(sample, default=str)}"
     return llm.generate(prompt("summarize"), user, temperature=0.3).strip()

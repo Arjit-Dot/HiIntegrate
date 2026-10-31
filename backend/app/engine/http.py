@@ -90,6 +90,31 @@ def _retry_after(value: str | None) -> float | None:
         return None
 
 
+def service_message(response: httpx.Response, limit: int = 200) -> str:
+    """The service's own reason for an error, from the usual places (Cloudflare `errors[0].message`, Okta `errorSummary`,
+    Jira `errorMessages`, GitHub `message`, NVD's `message` header), so a person sees why, not just the status. Shortened."""
+    found = None
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        errs = body.get("errors")
+        first = errs[0] if isinstance(errs, list) and errs else None
+        for v in (first.get("message") if isinstance(first, dict) else first if isinstance(first, str) else None,
+                  body.get("errorSummary"), (body.get("errorMessages") or [None])[0] if isinstance(body.get("errorMessages"), list) else None,
+                  body.get("message"), body.get("error_description"),
+                  body["error"].get("message") if isinstance(body.get("error"), dict) else body.get("error"), body.get("detail")):
+            if isinstance(v, str) and v.strip():
+                found = v
+                break
+    found = found or response.headers.get("message")
+    if not found:
+        return ""
+    found = " ".join(found.split())
+    return ": " + (found if len(found) <= limit else found[:limit] + "...")
+
+
 @dataclass
 class Sent:
     response: httpx.Response
@@ -112,7 +137,7 @@ def send(client: httpx.Client, request: httpx.Request, policy: Policy, *, sleep:
             if status < 400:
                 return Sent(response, retries, int((time.monotonic() - started) * 1000))
             if status in (401, 403):
-                raise RunError("auth_failed", f"authentication failed ({status}). Not retried.", status=status, retries=retries)
+                raise RunError("auth_failed", f"authentication failed ({status}){service_message(response)}. Not retried.", status=status, retries=retries)
             if status == 429:
                 wait = _retry_after(response.headers.get("Retry-After"))
                 if wait is not None and wait > policy.max_wait_seconds:
@@ -128,7 +153,7 @@ def send(client: httpx.Client, request: httpx.Request, policy: Policy, *, sleep:
             if status >= 500:
                 kind, failure = "5xx", RunError("server_error", f"server error ({status})", status=status, retries=retries)
             else:
-                raise RunError("client_error", f"request failed ({status})", status=status, retries=retries)
+                raise RunError("client_error", f"request failed ({status}){service_message(response)}", status=status, retries=retries)
         if kind not in policy.retry_on or retries >= policy.max_retries:
             failure.retries = retries
             raise failure
