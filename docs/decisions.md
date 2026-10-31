@@ -52,8 +52,10 @@ The **Covers** line at the top of each entry names the requirements it supports.
 11. [D-9: Mock servers](#d-9-the-two-mock-servers)
 12. [D-10: Tech choices and conventions](#d-10-tech-choices-and-conventions)
 13. [D-11: Golden fixtures](#d-11-golden-fixtures)
-14. [Revision log](#revision-log)
-15. [Open items](#open-items)
+14. [D-12: Build-speed decisions](#d-12-build-speed-decisions-closing-phase-0)
+15. [D-14: AI propose-fix](#d-14-ai-propose-fix)
+16. [Revision log](#revision-log)
+17. [Open items](#open-items)
 
 ## Status
 
@@ -72,6 +74,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-11 | Golden fixtures | Locked. Files written, with synthetic samples |
 | D-12 | Build-speed decisions (closing Phase 0) | Locked (decided on the team's behalf) |
 | D-13 | The frontend visual | Locked |
+| D-14 | `POST /ai/propose-fix` | **Draft, needs both people's approval** |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -119,6 +122,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-11 | Golden fixtures | Config, raw pages, normalized output, quarantine entry, run and health examples, device and alert samples | None directly | default, approved |
 | D-12 | Build-speed decisions | `https` only (local `http` allowed); no API login; any SMTP server; hash is 32/40/64 hex; Claude model from `LLM_MODEL`; worker syncs every 15 s; run IDs `run-<n>` | None directly | Claude, on the team's behalf |
 | D-13 | The frontend visual | `docs/ui-prototype.html` is the final visual; Person B builds the app to match it | FR-10, B-2, B-3, B-5 | agreed |
+| D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | Draft |
 
 ---
 
@@ -882,7 +886,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 | `GET /quarantine/export` | **Every** quarantined record, unpaged |
 | `GET /secrets`, `PUT /secrets/{name}` | Names only, and set a value |
 | `GET /templates`, `GET /templates/{id}` | Prebuilt configs |
-| `POST /ai/generate-config`, `POST /ai/summarize` | AI extras |
+| `POST /ai/generate-config`, `POST /ai/summarize`, `POST /ai/propose-fix` | AI extras (D-14) |
 
 *Behavior*
 - **Run:** a `pull` returns `202` with a `run_id` and finishes in the background (poll `GET /runs/{run_id}`). A `lookup` returns `200` with the mapped record. Starting an action that is already running returns `409 conflict`. The request body is `{"inputs": {...}}`. A lookup that fails at the service returns `502` with code `run_failed`, and the run is still recorded. A successful lookup carries its run in the `X-Run-Id` header.
@@ -1025,6 +1029,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 | `engine.run_action(config, action, inputs, trigger) -> RunResult` | Run one action |
 | `engine.test_action(config, action, inputs) -> TestResult` | First page only |
 | `storage.get_results(filter) -> list` | Used by the AI summary |
+| `engine.remap_records(config, action, raw_records) -> RemapResult` | Dry run for D-14: map stored raw records with a candidate config. Saves nothing and makes no network call (added in D-14) |
 | `secrets.get_secret(name) -> str` | Look up a secret by name |
 
 *Who does what*
@@ -1196,6 +1201,38 @@ One shared set of examples that both people treat as the truth:
 
 ---
 
+## D-14: AI propose-fix
+
+**Covers:** FR-9, B-2 (supports) · **Source:** Draft, added after the `contract-v1` tag and after D-13. **Needs both people's approval** before anyone builds on it.
+
+**Decision**
+- One route, `POST /ai/propose-fix`, with a `kind`:
+  - `quarantine`: the model sees the config, the quarantine reasons and fields, and a sample of the raw records, and proposes a config change (for example a missing `value_map` entry, a new `map` path, or a different `transform`).
+  - `run_failure`: the model sees the config and the run record (error code and message) and explains the cause. It may propose a change.
+- **The platform checks every proposal before showing it:**
+  1. `validate_config` runs on `proposed_config`. If it has errors, they are returned in `errors`, `verification` is null, and the UI must not offer Apply. The route retries the model once with the errors, as authoring does.
+  2. For `quarantine`, `engine.remap_records` maps the stored `raw` records again with the proposed config. The reply carries `checked`, `rescued` and `still_quarantined`, plus up to 3 mapped samples.
+- **Nothing is saved by this route.** Apply is the existing `PUT /integrations/{id}` with `proposed_config`, after a person approves. No new write route exists.
+- `engine.remap_records(config, action, raw_records)` is a new handoff function (D-8). It reuses the mapper, so it needs no database and no network.
+- **Limits:** at most 20 raw records go to the model, and at most 200 stored records are re-checked.
+- **Never sent to the model:** secret values, auth headers, request headers, or anything from `GET /secrets`. The config holds secret names only.
+- `501 unsupported` when `LLM_API_KEY` is not set. The product works fully without this route.
+- Errors: `404` if the integration or run does not exist, `422` for a bad request body.
+
+**Why**
+- The model only makes a guess. The mapper then proves it with a count, so a wrong proposal shows a low `rescued` number instead of corrupting data.
+- `raw` is stored untouched (D-4), so a fix can be tested without calling the service again.
+- Reusing `PUT /integrations/{id}` keeps one write path with one set of validation and approval rules.
+- Keeping the AI behind `api/ai.py` and the mapper as a pure function keeps the engine free of AI (D-8).
+- One route for both kinds means one change to the contract and one Prism mock for the frontend.
+
+**Open points for the team**
+- **Privacy:** raw quarantined records can hold names and emails, and they go to an external model. Options: send them as they are, or mask email local-parts and names before sending. The draft assumes **as they are, capped at 20 records**. Decide before real data is used.
+- **Ownership:** the route is Person B's (`api/ai.py`). `engine.remap_records` is Person A's, about 10 minutes.
+- **Contract tag:** `schema/openapi.yaml` changed after `contract-v1`. The open item for D-7.6 already plans `contract-v1.1`, so one new tag can cover D-7.6 and D-14 once the other person approves. Note the change in the Revision log (R-10).
+
+---
+
 ## Revision log
 
 ### R-1: Alignment with the organizers' goals (the changes-v2 document)
@@ -1305,6 +1342,15 @@ Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. 
 | Fix | The commit was rebuilt without the credentials. `main`, `docs/phase0-contract` and the `contract-v1` tag were force-pushed to the clean history. `.env.example` was deleted, and the README lists the variable names instead. Every `.env*` file is now ignored |
 | What it does not fix | Anything that already fetched the old commit still has the values, so every one must be rotated. The old commit may stay viewable by its hash on GitHub until GitHub removes it |
 | Rule | Stage files by name with `git add <file>`, never `git add -A`, and read `git diff --staged` first. Run a secret scanner before every push |
+
+### R-10: AI propose-fix (D-14)
+
+| Entry | Before | Now | Why |
+|---|---|---|---|
+| D-6 routes | Two AI routes | Adds `POST /ai/propose-fix` | A verified fix for quarantined records and failed runs |
+| D-8 handoffs | Five functions | Adds `engine.remap_records` | The dry run behind the verification count |
+
+Draft. Not approved by both people yet.
 
 ---
 
