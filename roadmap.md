@@ -222,11 +222,11 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [x] **Audit:** no secret appears in logs, API responses, the database, the repository or the Git history. Run gitleaks. `[FR-6]` *(All nine secret values on the machine, plus a planted canary, were searched for in the logs of all five containers, every readable API route and test reply, a Postgres dump, tracked files, and the full Git history of both the clone and the working repo: no match. The canary is stored encrypted in the database. Both images hold no `.env`. gitleaks (Docker image) scanned 50 commits: no leaks. Not covered: `docker inspect` shows a container's environment to anyone with Docker access, as on any Compose setup.)*
 - [x] **Failure rehearsal script** that runs the four organizer tests in order: wrong key, network off, 429, missing field. *(`backend/scripts/rehearse.py`: 4 of 4 pass against the composed stack, exit code 0. With the mock unreachable all four fail and the exit code is 1.)*
 
-### Person B (about 60 minutes) *(Phase 4 closed by Person A on 1 Nov)*
+### Person B (about 60 minutes) *(Phase 4 closed by Person A on 1 Nov; three items reopened by Person B the same day)*
 - [x] Frontend Dockerfile and nginx, with `/api` forwarded to the backend. *(10)* *(Built and validated on the hardened stack: dashboard, `/api` proxy, security headers.)*
-- [x] Walk through every screen and fix what is wrong. *(15)* *(Closed without a full click-through in a browser: the screens were exercised through the API and the build, not by eye.)*
-- [x] `README.md` (how to run, how to add a service, the API has no login), and `docs/demo-script.md`. *(10)* *(README has setup, running, Docker, security and the no-login note. **Not written:** `docs/demo-script.md` and a "how to add a service" README section.)*
-- [x] Record a screen capture of the full demo as a fallback. *(10)* *(**Not recorded.** Closed without it.)*
+- [ ] Walk through every screen and fix what is wrong. *(15)* *(Closed without a full click-through in a browser: the screens were exercised through the API and the build, not by eye. **Reopened by Person B, 1 Nov: still to do.**)*
+- [ ] `README.md` (how to run, how to add a service, the API has no login), and `docs/demo-script.md`. *(10)* *(README has setup, running, Docker, security and the no-login note. **Not written:** `docs/demo-script.md` and a "how to add a service" README section. **Reopened by Person B, 1 Nov: still to do. The API now needs sign-in (D-18), so the demo script should include it.**)*
+- [ ] Record a screen capture of the full demo as a fallback. *(10)* *(**Not recorded.** Closed without it. **Reopened by Person B, 1 Nov: still to do.**)*
 - [x] Save cached AI outputs (authoring, propose-fix, summary) as a fallback for the demo. *(5)* *(Saved in the browser: the last draft per service, the last proposal per action, the last summary per table and source.)*
 
 ### Security hardening (added 1 Nov, D-17: confirmed by both)
@@ -247,33 +247,47 @@ The Phase 4 audit found no secret in logs, replies, the database, files or Git h
 
 **Not built:** S-10 retention and delete routes, S-11 key rotation, S-12 file-based secrets, S-13 TLS and CI scanning, S-14 AI hardening (including pinning the address in the documentation fetcher).
 
-### Checkpoint 3 at 3:30am: feature freeze
-From a clean clone, `docker compose up`, then tick every item:
+### Checkpoint 3 at 3:30am: feature freeze · logged 1 Nov: **not passed** (10 of 11 requirements shown, 9 of 14 other items done, 2 partial, 3 open)
+From a clean clone, `docker compose up`, then tick every item.
 
-| ID | Requirement | Verified by |
-|---|---|---|
-| FR-1 | Auth: API key plus one more | GitHub (bearer), Jira (basic), Okta (API key with `SSWS`) |
-| FR-2 | Endpoints, method, query params | Any template |
-| FR-3 | Pagination, at least two styles | GitHub and Okta (next link), Jira (offset), the others on the mock |
-| FR-4 | Schedule | A pull running every minute |
-| FR-5 | Mapping, nested values, dates | Okta's nested reply, `last_login`, alert `timestamp` |
-| FR-6 | Secrets safe | The audit |
-| FR-7 | Retries with backoff | The flaky mock endpoint |
-| FR-8 | Rate limits and `Retry-After` | The rate-limited mock endpoint |
-| FR-9 | Bad data quarantine | The dirty mock dataset |
-| FR-10 | Health view | The dashboard list |
-| FR-11 | One store, common schema | `users`, `devices` and `alerts` tables |
+*Run once on a fresh clone of `main` at `f15b0c9` (before D-18, so without sign-in), with the hardened stack (D-17 S-1 to S-5), Person B's three tokens and SMTP settings, and the AI key unset. 347 backend tests passed on that commit (365 on `c9c7546`). The host clock was 5.5 hours ahead of real time at that run; it is fixed now. Everything below was checked in that run unless it says otherwise.*
+
+| ID | Requirement | Verified by | Result |
+|---|---|---|---|
+| FR-1 | Auth: API key plus one more | GitHub (bearer), Jira (basic), Okta (API key with `SSWS`) | **Shown.** All three pulled for real. |
+| FR-2 | Endpoints, method, query params | Any template | **Shown.** The three templates, run for real. |
+| FR-3 | Pagination, at least two styles | GitHub and Okta (next link), Jira (offset), the others on the mock | **Shown.** GitHub 2 pages, Okta alerts 4, Jira 2. Mock: page number 4, offset 3, cursor 3, next link 3. |
+| FR-4 | Schedule | A pull running every minute | **Shown.** The worker ran a one-minute mock pull by itself: 4 runs, exactly 60 s apart. |
+| FR-5 | Mapping, nested values, dates | Okta's nested reply, `last_login`, alert `timestamp` | **Shown.** Nested `profile.email`, an Okta `last_login` of `2026-10-31T17:02:56Z`, alert `timestamp` in ISO UTC. |
+| FR-6 | Secrets safe | The audit | **Shown.** Nine secret values, the dashboard password and a canary were searched for in five container logs, API replies, a Postgres dump, tracked files, the full Git history and all images: none in file contents or replies. The SMTP username matched 52 times, only as the author email on commits. gitleaks: no leaks after `.gitleaks.toml`. |
+| FR-7 | Retries with backoff | The flaky mock endpoint | **Shown.** Success after 2 retries. |
+| FR-8 | Rate limits and `Retry-After` | The rate-limited mock endpoint | **Shown.** A 429, then success after waiting 2.0 s. |
+| FR-9 | Bad data quarantine | The dirty mock dataset | **Shown.** 2 records quarantined (`transform_failed`, `missing_required_field`), the run carried on, Export works. |
+| FR-10 | Health view | The dashboard list | **Shown.** Healthy, degraded, failing and disabled all appeared. Okta showed `failing`, for the clock reason under B-1. |
+| FR-11 | One store, common schema | `users`, `devices` and `alerts` tables | **Partial.** Users hold GitHub, Jira and Okta, alerts hold Okta. Devices hold only 3 mock records: real Okta returns 0 (no Okta Verify device is enrolled; the active user has only a passkey). |
 
 Also tick:
-- [ ] The four failure tests pass in the rehearsal script.
-- [ ] Three real sources each pull.
-- [ ] All three schemas hold real records.
-- [ ] Cross-service aggregation: one person who exists on two or more real services appears as one row listing each service.
-- [ ] B-2 validation, B-3 test, B-4 email, B-5 form, B-1 incremental all work in the packaged build.
-- [ ] The AI summary, the AI draft (with its repair loop) and AI propose-fix all work. Propose-fix shows a real "rescued N of M" count on the dirty dataset, and Apply saves the change through `PUT /integrations/{id}`.
-- [ ] The product demos fully with all AI switched off (`LLM_API_KEY` unset gives `501`, and nothing else breaks).
-- [ ] `cd schema/tools && npm run check` still passes.
-- [ ] **D-17 is confirmed:** S-1 to S-5 are applied, and the clean-clone test and the secret audit pass again on the hardened stack. S-8 (the login) is not built unless it is approved and tagged, so say at the checkpoint that v1 has no login by design (D-6).
+- [x] The four failure tests pass in the rehearsal script. *(4 of 4 on the hardened stack, exit code 0; with the mock unreachable all four fail, exit code 1.)*
+- [x] Three real sources each pull. *(GitHub 200 records over 2 pages, Jira 11, Okta 2 users and 238 alerts.)*
+- [ ] All three schemas hold real records. *(**Open: devices.** Real Okta has 0 devices as of the last probe. Needs Okta Verify enrolled on a device, or Person A's org.)*
+- [x] Cross-service aggregation: one person who exists on two or more real services appears as one row listing each service. *(One person on Jira and Okta appears once.)*
+- [x] B-2 validation. *(The 14 invalid configs were all rejected through the packaged API.)*
+- [x] B-3 test connection. *(GitHub and Jira: HTTP 200, no missing paths.)*
+- [x] B-4 email. *(One alert at the second failure, `outcome: sent`, one email sent, no send errors. Delivery to the inbox was not checked.)*
+- [ ] B-5 form. *(**Partial.** All screens render in the packaged build, and the same API calls the form makes work. A person has not filled in the form by hand.)*
+- [ ] B-1 incremental. *(**Partial.** The second Okta run did send the first run's start time as `since`, as designed. Okta answered 400 because the host clock was 5.5 h ahead of Okta's, so the time was in its future. The clock is fixed (0 s from Okta) and Okta now accepts a `since` of 10 s, 1 min and 1 h ago, but the second run has **not been rerun** since. Arjit's R-19 records a passing run on his machine.)*
+- [ ] The AI summary, the AI draft (with its repair loop) and AI propose-fix all work. Propose-fix shows a real "rescued N of M" count on the dirty dataset, and Apply saves the change through `PUT /integrations/{id}`. *(**Open.** Not run: `LLM_API_KEY` was unset. It is set now and Google accepts it, with `gemini-3.5-flash` and the fallback available. The test plan is `Finaltester.md`; stages 0, A, 1, 10, 11, 12 and 14 cover these.)*
+- [x] The product demos fully with all AI switched off. *(`/ai/summarize`, `/ai/generate-config` and `/ai/propose-fix` answered `501`; integrations, results and quarantine kept working.)*
+- [x] `cd schema/tools && npm run check` still passes. *(Passed in the clone, and again on `c9c7546`.)*
+- [x] **D-17 is confirmed:** S-1 to S-5 are applied, and the clean-clone test and the secret audit pass again on the hardened stack. *(Built and verified on `8815cf9`, and again in this run. The login itself came through D-18 (S-8), now on `main`; `contract-v4` is not tagged yet.)*
+
+**To do before Checkpoint 3 can be ticked:**
+1. [ ] **Rerun the whole list on a fresh clone of the current `main`** (`c9c7546` or later), which includes D-18: register an account, then set `ENV_SECRETS_ACCOUNT` to its username (or enter the tokens on the Secrets page) and restart.
+2. [ ] **B-1:** run Okta `list_alerts` twice; the second run must succeed and fetch little or nothing.
+3. [ ] **Real Okta device:** enroll Okta Verify on a phone (or use Person A's org), then pull devices.
+4. [ ] **The three AI features** from `Finaltester.md` (stages 0, A, 1, 10, 11, 12, 14).
+5. [ ] **B-5 by hand:** fill in the Add form in a normal browser, Test, Save.
+6. [ ] Update this entry with the result, and tag `contract-v4` (Person A) once D-18 is confirmed.
 
 ## 9. Phase 5: rehearse (3:30 to 4:30am)
 
