@@ -1527,7 +1527,16 @@ D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each n
 
 **Tests:** `backend/tests/test_oauth2.py` (17 tests): the form body and the Bearer header; reuse of a token; a short-lived token fetched again; a revoked token replaced once, and a second 401 failing without a loop; a wrong secret named without printing it; a secret never sent to an unpinned host or a hostile token URL; two secrets not sharing a token; a reply without `access_token`; a connection failure; a whole run; the validator rules. Suite: 414 passed, 7 skipped. The contract check (both validators) passes.
 
-**Live check:** against the real Auth0 tenant, see `roadmap.md`. Until that is logged there, the template is unverified like the others were.
+**Live check (Person B, 1 Nov, real Auth0 tenant, secret pinned to the tenant host):**
+
+| Check | Result |
+|---|---|
+| Token request with client id and secret | **Works.** `200`, `expires_in` 86400 |
+| `list_users` through the engine (`app.cli test auth0 list_users`) | **Works.** `200` with the Bearer token. The first page had **no records because the tenant has no users yet**, so the user mapping (`user_id`, `name`, `email`, `blocked`, `last_login`) is not yet checked against real data |
+| `list_alerts` (`/api/v2/logs`) | **`403 insufficient_scope`.** The Management API replied "expected any of: read:logs, read:logs_users". The M2M app was not granted `read:logs`. A tenant setting, not a code fault. To fix: Auth0 dashboard, Applications, APIs, Auth0 Management API, Machine to Machine Applications, HiIntegrate, tick `read:logs` |
+| Granted scopes seen in the token | `read:users`, `update:users`, `delete:users`, `read:users_app_metadata`, `update:users_app_metadata`, `delete:users_app_metadata`, `read:user_custom_blocks`, `update:client_grants`. **More than the template needs** (it needs `read:users` and `read:logs` only). The write and delete scopes should be removed: the platform never writes to Auth0, and a leaked client secret could otherwise delete users |
+
+Still to check live: user mapping with real users, the log mapping after `read:logs` is granted, and the refresh-after-401 path (covered only by the fake-provider tests).
 
 ### Still wanted from Person A
 
