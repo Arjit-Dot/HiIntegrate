@@ -36,10 +36,10 @@ def extract_records(cfg: dict, action_name: str, body: Any) -> list:
 
 
 def fetch_page(client: httpx.Client, cfg: dict, action_name: str, *, inputs=None, state=None, now=None, url=None,
-               sleep: Callable[[float], None] | None = None) -> tuple[Any, httpx.Response, int, int]:
+               extra_params: dict | None = None, sleep: Callable[[float], None] | None = None) -> tuple[Any, httpx.Response, int, int]:
     """One page: build, check the secret's host, send with retries. Returns (body, response, retries, latency_ms)."""
     try:
-        prepared = build_request(cfg, action_name, inputs=inputs, state=state, now=now, url=url)
+        prepared = build_request(cfg, action_name, inputs=inputs, state=state, now=now, url=url, extra_params=extra_params)
     except PlaceholderError as exc:
         raise RunError("client_error", str(exc)) from None
     except SecretNotFound as exc:
