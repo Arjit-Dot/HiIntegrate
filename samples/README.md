@@ -2,7 +2,7 @@
 
 Raw API responses used for tests, the mapping preview and offline demos.
 
-**These are synthetic.** They are shaped like each service's documented responses, with made-up people, IDs and addresses (`example.com`, `acme.com`). They were **not captured from a live account**, so a real response may differ. When access to GitHub, Jira and Okta is confirmed, replace them with real captures, strip personal data and secrets, and run `npm run check` in `schema/tools`.
+**These are synthetic.** See "Checked against live accounts" below for what has been compared with real services. They are shaped like each service's documented responses, with made-up people, IDs and addresses (`example.com`, `acme.com`). They were **not captured from a live account**, so a real response may differ. When access to GitHub, Jira and Okta is confirmed, replace them with real captures, strip personal data and secrets, and run `npm run check` in `schema/tools`.
 
 | Folder | Files |
 |---|---|
@@ -12,3 +12,17 @@ Raw API responses used for tests, the mapping preview and offline demos.
 | `invalid/` | Configs that must be rejected, each with one deliberate mistake, and `expected-errors.json` with the errors each must give |
 
 The expected output for these samples is in `docs/examples/expected/`.
+
+## Checked against live accounts (31 Oct 2026)
+
+The synthetic files stay. A small live account cannot give the three pages, the empty last page or the bad records that the tests rely on, and real captures would put a real person's name and email in a public repo. Instead, one read-only call per endpoint was compared with the synthetic file for the same endpoint, looking only at field names and types.
+
+| Service | Result |
+|---|---|
+| Okta `GET /api/v1/users`, `/users/{id}` | **Matches.** Every field our map reads (`id`, `profile.email`, `status`, `lastLogin`, `profile.login`) exists. The real reply adds `_links`, and `profile.mobilePhone` and `profile.secondEmail` are `null`. The `Link` header has the same form. |
+| Okta `GET /api/v1/logs` | **Matches.** `uuid`, `eventType`, `severity`, `published` and `displayMessage` all exist. Real severities seen were `INFO` and `DEBUG`, both covered by the `value_map`. The real reply has many more fields, which the map ignores. |
+| Okta `GET /api/v1/devices` | **Not verified.** The org has no devices (empty list `[]`), so the field names are still from the documentation. |
+| GitHub `GET /user` | **Reached.** A real account can have `name`, `email` and `company` set to `null`, unlike our synthetic `get_user.json`. A mapping that makes one of them required would quarantine that user. |
+| GitHub `GET /orgs/{org}/members` | **Not verified.** The test account belongs to no organization. |
+| Jira `GET /rest/api/3/users/search` | **Not verified.** The site answered `404 Site temporarily unavailable`, so the site name or the site itself needs checking. |
+
