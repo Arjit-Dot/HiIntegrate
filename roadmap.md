@@ -193,13 +193,13 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 **Bonus targets: B-4 (alerts) and B-1 (incremental sync).**
 
 ### Person A (about 100 minutes, then help B or take the stretch item)
-- [ ] **Scheduler** in its own `worker` process (APScheduler). It registers each enabled pull, skips a run that is still going, and picks up config changes. `[FR-4]` *(20)*
-- [ ] **Health** per connection, with `consecutive_failures`, from the latest finished `schedule` or `manual` run **of each action**, so a failing action cannot hide behind a healthy one. `[FR-10]` *(10)*
-- [ ] **Email alert**: one email at the threshold, reset on success, sent through SMTP. A failed send is logged and never fails the run. `[B-4]` *(15)*
-- [ ] **Incremental sync**: keep `last_success_at` per action and send it as the configured parameter. `[B-1]` *(15)*
-- [ ] **`engine.remap_records(config, action, raw_records)`**: map stored quarantined `raw` records with a candidate config. Pure function: no database, no network, saves nothing. B's propose-fix route needs it by 12:45am (D-14). *(10)*
-- [ ] **Tests** (`pytest`): each pagination style, retry and backoff, 429, quarantine, mapping and transforms, validation, health, the alert firing once, a config with no `defaults` block, and `remap_records`. *(25)*
-- [ ] Edge cases: an empty page, a missing `Retry-After`, `max_pages`. *(5)*
+- [x] **Scheduler** in its own `worker` process (APScheduler). It registers each enabled pull, skips a run that is still going, and picks up config changes. `[FR-4]` *(20)*
+- [x] **Health** per connection, with `consecutive_failures`, from the latest finished `schedule` or `manual` run **of each action**, so a failing action cannot hide behind a healthy one. `[FR-10]` *(10)*
+- [x] **Email alert**: one email at the threshold, reset on success, sent through SMTP. A failed send is logged and never fails the run. `[B-4]` *(15)*
+- [x] **Incremental sync**: keep `last_success_at` per action and send it as the configured parameter. `[B-1]` *(15)*
+- [x] **`engine.remap_records(config, action, raw_records)`**: map stored quarantined `raw` records with a candidate config. Pure function: no database, no network, saves nothing. B's propose-fix route needs it by 12:45am (D-14). *(10)*
+- [x] **Tests** (`pytest`): each pagination style, retry and backoff, 429, quarantine, mapping and transforms, validation, health, the alert firing once, a config with no `defaults` block, and `remap_records`. *(25)*
+- [x] Edge cases: an empty page, a missing `Retry-After`, `max_pages`. *(5)*
 - [x] **Stretch, only if ahead:** schema drift check. If a mapped path vanishes from the response, mark the connection degraded and name the path. *(30)*
 
 ### Person B (about 155 minutes)
