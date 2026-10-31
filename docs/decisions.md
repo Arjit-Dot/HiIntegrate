@@ -1463,7 +1463,7 @@ D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each n
 
 ## D-20: Retention, key rotation, file-based secrets, TLS and CI (S-10 to S-13)
 
-**Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: merged to `main` and tagged `contract-v6` by Person B, on Person B's own call (R-20 gave S-7 to S-13 security work to Person B). Person A has not yet read D-20 and should confirm or ask for changes; a change after that needs a new tag, not a moved one.** S-10 changes `schema/openapi.yaml` (two `DELETE` routes). S-11 to S-13 change no contract file. The order rule of D-17 (build S-6 to S-9 after Checkpoint 3) does not cover S-10 to S-13, but they are also built before Checkpoint 3 is green: they stay off `main` until the must-haves are done.
+**Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: merged to `main` and tagged `contract-v6` by Person B, on Person B's own call. R-20 gave Person B only S-7 to S-9; S-10 to S-12 were Person A's in D-17, and Person B built them at the project owner's request, so Person A in particular should confirm. Person A has not yet read D-20 and should confirm or ask for changes; a change after that needs a new tag, not a moved one.** S-10 changes `schema/openapi.yaml` (two `DELETE` routes). S-11 to S-13 change no contract file. The order rule of D-17 (build S-6 to S-9 after Checkpoint 3) does not cover S-10 to S-13, but they are also built before Checkpoint 3 is green: they stay off `main` until the must-haves are done.
 
 | Item | What it does |
 |---|---|
