@@ -49,7 +49,14 @@ export default function Runs() {
                 <td>{r.records_valid.toLocaleString()}</td>
                 <td>{r.records_invalid ? <Pill kind="degraded">{r.records_invalid}</Pill> : 0}</td>
                 <td>{r.retries}</td>
-                <td className="small">{r.error ? <Pill kind="failed">{r.error.code}</Pill> : ''}</td>
+                <td className="small">
+                  {r.error && (
+                    // schema_drift is a warning on a run that succeeded (R-14); every other code is a failure.
+                    r.error.code === 'schema_drift'
+                      ? <><Pill kind="degraded">schema drift</Pill><div className="muted small" style={{ maxWidth: 280, marginTop: 4 }}>{r.error.message}</div></>
+                      : <Pill kind="failed">{r.error.code}</Pill>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
