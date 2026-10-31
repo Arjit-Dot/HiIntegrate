@@ -2,9 +2,9 @@
 
 Handoff function (D-8):  get_secret(name) -> Secret
 
-Phase 1: values come from the environment as SECRET_<NAME> (upper case). The optional
-companion SECRET_<NAME>_HOST pins the secret to one host. Phase 2 adds the encrypted store
-in front of the environment, behind the same function.
+Two sources behind one function. The encrypted store (the `secrets` table, Fernet, keyed by
+ENCRYPTION_KEY) is checked first, then the environment as SECRET_<NAME>, with the optional
+companion SECRET_<NAME>_HOST. A stored secret always has a host (D-7.6).
 
 Only variables starting with SECRET_ are ever read, so a config can never reach the app's
 own keys (DATABASE_URL, ENCRYPTION_KEY and so on). A Secret never prints its value.
@@ -15,9 +15,15 @@ from app.secrets.store import (
     SecretError,
     SecretHostMismatch,
     SecretNotFound,
+    StoreUnavailable,
     check_host,
     get_secret,
     list_secrets,
+    set_secret,
+    store_available,
 )
 
-__all__ = ["Secret", "SecretError", "SecretHostMismatch", "SecretNotFound", "check_host", "get_secret", "list_secrets"]
+__all__ = [
+    "Secret", "SecretError", "SecretHostMismatch", "SecretNotFound", "StoreUnavailable",
+    "check_host", "get_secret", "list_secrets", "set_secret", "store_available",
+]

@@ -36,10 +36,11 @@ def extract_records(cfg: dict, action_name: str, body: Any) -> list:
 
 
 def fetch_page(client: httpx.Client, cfg: dict, action_name: str, *, inputs=None, state=None, now=None, url=None,
-               extra_params: dict | None = None, sleep: Callable[[float], None] | None = None) -> tuple[Any, httpx.Response, int, int]:
+               extra_params: dict | None = None, secret_lookup=None, sleep: Callable[[float], None] | None = None) -> tuple[Any, httpx.Response, int, int]:
     """One page: build, check the secret's host, send with retries. Returns (body, response, retries, latency_ms)."""
     try:
-        prepared = build_request(cfg, action_name, inputs=inputs, state=state, now=now, url=url, extra_params=extra_params)
+        prepared = build_request(cfg, action_name, inputs=inputs, state=state, now=now, url=url, extra_params=extra_params,
+                                 secret_lookup=secret_lookup)
     except PlaceholderError as exc:
         raise RunError("client_error", str(exc)) from None
     except SecretNotFound as exc:
@@ -71,7 +72,7 @@ def _missing_fields(action: dict, raw: Any) -> list[str]:
 
 
 def test_action(cfg: dict, action_name: str, inputs: dict | None = None, *, client: httpx.Client | None = None,
-                sleep: Callable[[float], None] | None = None, now: datetime | None = None) -> dict:
+                sleep: Callable[[float], None] | None = None, now: datetime | None = None, secret_lookup=None) -> dict:
     """The D-8 handoff behind POST /integrations/{id}/test (B-3): first page only, nothing saved."""
     action = cfg["actions"][action_name]
     own = client is None
@@ -79,7 +80,7 @@ def test_action(cfg: dict, action_name: str, inputs: dict | None = None, *, clie
     result = {"ok": False, "status_code": None, "latency_ms": None, "pages_fetched": 0, "raw_sample": None,
               "mapped_sample": None, "missing_paths": [], "notes": []}
     try:
-        body, response, retries, latency = fetch_page(client, cfg, action_name, inputs=inputs, now=now, sleep=sleep)
+        body, response, retries, latency = fetch_page(client, cfg, action_name, inputs=inputs, now=now, secret_lookup=secret_lookup, sleep=sleep)
         result.update(status_code=response.status_code, latency_ms=latency, pages_fetched=1)
         records = extract_records(cfg, action_name, body)
         if retries:

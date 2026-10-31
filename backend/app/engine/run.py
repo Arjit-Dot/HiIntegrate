@@ -65,7 +65,8 @@ def _throttle(cfg: dict, action: dict, sleep: Callable[[float], None]) -> None:
 
 def run_action(cfg: dict, action_name: str, inputs: dict | None = None, trigger: str = "manual", *,
                state: dict | None = None, client: httpx.Client | None = None, on_page: OnPage | None = None,
-               sleep: Callable[[float], None] = time.sleep, now: datetime | None = None, run_id: str = "run") -> RunResult:
+               sleep: Callable[[float], None] = time.sleep, now: datetime | None = None, run_id: str = "run",
+               secret_lookup=None) -> RunResult:
     action = cfg["actions"][action_name]
     started = time.monotonic()
     started_at = now or datetime.now(UTC)
@@ -86,7 +87,7 @@ def run_action(cfg: dict, action_name: str, inputs: dict | None = None, trigger:
         while True:
             _throttle(cfg, action, sleep)
             body, response, retries, _ = fetch_page(client, cfg, action_name, inputs=inputs, state=state, now=now, url=url,
-                                                    extra_params=extra if url is None else None, sleep=sleep)
+                                                    extra_params=extra if url is None else None, secret_lookup=secret_lookup, sleep=sleep)
             result.retries += retries
             result.pages_fetched += 1
             raws = extract_records(cfg, action_name, body)
