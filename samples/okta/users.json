@@ -1,0 +1,102 @@
+[
+  {
+    "id": "00u1ada",
+    "status": "ACTIVE",
+    "created": "2024-05-01T09:00:00.000Z",
+    "activated": "2024-05-01T09:05:00.000Z",
+    "statusChanged": "2025-11-01T09:00:00.000Z",
+    "lastLogin": "2025-12-31T17:20:00.000Z",
+    "lastUpdated": "2025-12-15T09:00:00.000Z",
+    "passwordChanged": "2025-06-01T09:00:00.000Z",
+    "type": {
+      "id": "oty1abc"
+    },
+    "profile": {
+      "firstName": "Ada",
+      "lastName": "Lovelace",
+      "login": "ada@acme.com",
+      "email": "ada@acme.com"
+    },
+    "credentials": {
+      "provider": {
+        "type": "OKTA",
+        "name": "OKTA"
+      }
+    }
+  },
+  {
+    "id": "00u1alan",
+    "status": "SUSPENDED",
+    "created": "2024-05-01T09:00:00.000Z",
+    "activated": "2024-05-01T09:05:00.000Z",
+    "statusChanged": "2025-11-01T09:00:00.000Z",
+    "lastLogin": "2025-11-02T08:30:00.000Z",
+    "lastUpdated": "2025-12-15T09:00:00.000Z",
+    "passwordChanged": "2025-06-01T09:00:00.000Z",
+    "type": {
+      "id": "oty1abc"
+    },
+    "profile": {
+      "firstName": "Alan",
+      "lastName": "Turing",
+      "login": "Alan@Acme.com",
+      "email": "Alan@Acme.com"
+    },
+    "credentials": {
+      "provider": {
+        "type": "OKTA",
+        "name": "OKTA"
+      }
+    }
+  },
+  {
+    "id": "00u1edsger",
+    "status": "DEPROVISIONED",
+    "created": "2024-05-01T09:00:00.000Z",
+    "activated": "2024-05-01T09:05:00.000Z",
+    "statusChanged": "2025-11-01T09:00:00.000Z",
+    "lastLogin": "2025-01-15T12:00:00.000Z",
+    "lastUpdated": "2025-12-15T09:00:00.000Z",
+    "passwordChanged": "2025-06-01T09:00:00.000Z",
+    "type": {
+      "id": "oty1abc"
+    },
+    "profile": {
+      "firstName": "Edsger",
+      "lastName": "Dijkstra",
+      "login": "edsger@acme.com",
+      "email": "edsger@acme.com"
+    },
+    "credentials": {
+      "provider": {
+        "type": "OKTA",
+        "name": "OKTA"
+      }
+    }
+  },
+  {
+    "id": "00u1new",
+    "status": "STAGED",
+    "created": "2024-05-01T09:00:00.000Z",
+    "activated": "2024-05-01T09:05:00.000Z",
+    "statusChanged": "2025-11-01T09:00:00.000Z",
+    "lastLogin": null,
+    "lastUpdated": "2025-12-15T09:00:00.000Z",
+    "passwordChanged": "2025-06-01T09:00:00.000Z",
+    "type": {
+      "id": "oty1abc"
+    },
+    "profile": {
+      "firstName": "New",
+      "lastName": "Hire",
+      "login": "newhire@acme.com",
+      "email": "newhire@acme.com"
+    },
+    "credentials": {
+      "provider": {
+        "type": "OKTA",
+        "name": "OKTA"
+      }
+    }
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "valid": false,
+  "errors": [
+    {
+      "path": "auth.secret",
+      "message": "must be a name (letters, digits, underscores, up to 64), not a key",
+      "severity": "error"
+    },
+    {
+      "path": "actions.list_users.pagnation",
+      "message": "is not a known key",
+      "severity": "error"
+    },
+    {
+      "path": "actions.list_users.schedule",
+      "message": "must look like \"every 10s\", \"every 5m\", \"every 2h\" or \"every 1d\" (minimum 10 seconds)",
+      "severity": "error"
+    }
+  ]
+}

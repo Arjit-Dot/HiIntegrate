@@ -1,0 +1,18 @@
+[
+  {
+    "login": "dennis-r",
+    "id": 4027,
+    "node_id": "MDQ6VXNlcjQwMjc=",
+    "avatar_url": "https://avatars.example.com/u/4027",
+    "type": "User",
+    "site_admin": false
+  },
+  {
+    "login": "margaret-h",
+    "id": 4028,
+    "node_id": "MDQ6VXNlcjQwMjg=",
+    "avatar_url": "https://avatars.example.com/u/4028",
+    "type": "User",
+    "site_admin": false
+  }
+]

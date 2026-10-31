@@ -1,0 +1,23 @@
+# Secrets and local data (docs/decisions.md D-7.4). Never commit these.
+# Note: /secrets/ is anchored to the repo root, so the backend/app/secrets package is not ignored.
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+/secrets/
+/.secrets/
+
+# Dependencies and build output
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+
+# Editors and the operating system
+.DS_Store
+.idea/
+.vscode/

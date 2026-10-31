@@ -1,0 +1,69 @@
+version: 1
+name: jira
+display_name: "Jira"
+category: ticketing
+description: "Lists the users of a Jira Cloud site and looks up one user. Not yet verified against a live account."
+enabled: true
+
+vars:
+  site: "acme"
+  email: "me@acme.com"
+
+requires:
+  vars:
+    site: { label: "Jira site (the part before .atlassian.net)", example: "acme" }
+    email: { label: "Account email", example: "me@acme.com" }
+  secrets: [jira_token]
+
+base_url: "https://{{vars.site}}.atlassian.net"
+
+auth: { type: basic, username: "{{vars.email}}", secret: jira_token }
+
+defaults:
+  headers: { Accept: "application/json" }
+
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    schedule: every 30m
+    request: { method: GET, path: /rest/api/3/users/search }
+    pagination:
+      type: offset
+      offset_param: startAt
+      limit_param: maxResults
+      limit: 100
+      max_pages: 100
+    records_path: "@"
+    map:
+      id: { path: accountId, transform: string }
+      name: displayName
+      email: { path: emailAddress, transform: lowercase }
+      status:
+        path: active
+        value_map: { "true": active, "false": inactive }
+        default: unknown
+    required: [id]
+    on_invalid: quarantine
+
+  get_user:
+    mode: lookup
+    target_schema: user
+    inputs:
+      account_id: { type: string, required: true }
+    request:
+      method: GET
+      path: /rest/api/3/user
+      query: { accountId: "{{input.account_id}}" }
+    records_path: "@"
+    map:
+      id: { path: accountId, transform: string }
+      name: displayName
+      email: { path: emailAddress, transform: lowercase }
+      status:
+        path: active
+        value_map: { "true": active, "false": inactive }
+        default: unknown
+    required: [id]
+    on_invalid: quarantine
+    store: false

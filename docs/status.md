@@ -17,9 +17,11 @@ A connector factory for security tools. A config file describes a service (URL, 
 | Area | Status |
 |---|---|
 | Design and contract decisions (D-1 to D-11) | Written down, with reasons, in `decisions.md`. D-1 to D-5.2 were agreed one by one. D-5.3 and D-6 to D-11 were set by default and not reviewed point by point |
+| Contract files (`schema/integration.schema.json`, `result.schema.json`, `openapi.yaml`) | **Written.** `npm run check` passes, the OpenAPI file lints clean, and a Prism mock serves it. Not yet signed off by both people |
+| Service configs and fixtures (`templates/`, `samples/`, `docs/examples/`) | **Written.** The samples are synthetic and the configs are not verified against live accounts |
 | Roadmap | Updated to match the decisions and the organizers' goals |
 | Folder layout | Created |
-| Code, schema files, templates, samples | **Not started** |
+| Backend and frontend code | **Not started.** The dashboard exists only as a prototype (`ui-prototype.html`) |
 
 ## What we decided
 
@@ -57,7 +59,7 @@ A connector factory for security tools. A config file describes a service (URL, 
 - **Also specified:** error detection in a response body, a `requires` block so the add form knows what to ask for, and a proactive throttle.
 
 ### Reliability (built into the engine)
-- 3 attempts with 1, 2 and 4 second backoff on timeouts, connection errors and server errors. Never on client errors.
+- Up to 3 retries (waiting 1, 2 and 4 seconds) on timeouts, connection errors and server errors. Never on client errors.
 - On a 429, wait for `Retry-After`. Fall back to the backoff if the header is missing. Fail clearly if the wait is too long.
 - A bad record is quarantined with a reason and the original record, and the run carries on.
 - Each run saves a record: status, counts, duration and any error.
@@ -80,7 +82,8 @@ Set by default in D-10, not discussed point by point.
 | Item | Where |
 |---|---|
 | Review the default decisions (D-5.3, D-6 to D-11) before tagging `contract-v1` | Phase 0 |
-| Write the contract files (`integration.schema.json`, `result.schema.json`, `openapi.yaml`) and the fixture files | Phase 0 |
+| Both people read the contract files, then tag `contract-v1` | Phase 0 |
+| Replace the synthetic samples with real captures, and check the GitHub, Jira and Okta configs against live accounts | Phase 0 and 1 |
 | The API has no login in v1 | D-6 |
 | A real email account for alerts, and its SMTP settings | Phase 0 |
 | Okta access: confirm the Users, Devices and System Log endpoints return data, and enroll a device | Phase 0 |

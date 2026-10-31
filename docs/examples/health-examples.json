@@ -1,0 +1,40 @@
+{
+  "healthy": {
+    "status": "healthy",
+    "last_run_at": "2026-01-01T09:05:06Z",
+    "records_pulled": 8,
+    "last_error": null,
+    "consecutive_failures": 0
+  },
+  "degraded": {
+    "status": "degraded",
+    "last_run_at": "2026-01-01T09:10:03Z",
+    "records_pulled": 2,
+    "last_error": null,
+    "consecutive_failures": 0
+  },
+  "failing": {
+    "status": "failing",
+    "last_run_at": "2026-01-01T09:15:01Z",
+    "records_pulled": 0,
+    "last_error": {
+      "code": "auth_failed",
+      "message": "Authentication failed (401). Not retried."
+    },
+    "consecutive_failures": 3
+  },
+  "never_run": {
+    "status": "never_run",
+    "last_run_at": null,
+    "records_pulled": 0,
+    "last_error": null,
+    "consecutive_failures": 0
+  },
+  "disabled": {
+    "status": "disabled",
+    "last_run_at": "2025-12-29T10:00:00Z",
+    "records_pulled": 880,
+    "last_error": null,
+    "consecutive_failures": 0
+  }
+}

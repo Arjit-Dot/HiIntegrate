@@ -1,0 +1,10 @@
+[
+  {
+    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5b10a4",
+    "accountId": "5b10a4",
+    "accountType": "atlassian",
+    "displayName": "Edsger Dijkstra",
+    "emailAddress": "edsger@acme.com",
+    "active": true
+  }
+]

@@ -1,0 +1,680 @@
+openapi: 3.1.0
+info:
+  title: Integration Platform API
+  version: 1.0.0
+  description: |
+    The contract between the dashboard (Person B) and the backend (Person A).
+
+    - Base path `/api/v1`. JSON only, except that configs may also be sent as YAML text.
+    - Timestamps are ISO 8601 UTC. Integrations are identified by their `name` slug.
+    - Errors always use `{"error": {"code", "message", "details"}}`.
+    - Lists use `limit` (default 50, maximum 500) and `offset` (default 0), and reply `{items, total, limit, offset}`.
+    - There is no login in v1. The API is meant for local or Docker use.
+    - Record and run shapes live in `result.schema.json`. The config shape lives in `integration.schema.json`.
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Backend. The frontend mock (Prism) runs on http://localhost:4010 from this file.
+
+security: []   # No login in v1. The API is meant for local or Docker use (see docs/decisions.md D-6).
+
+tags:
+  - { name: Integrations, description: "Add, change, validate and test integrations." }
+  - { name: Runs, description: "Run actions and read run history." }
+  - { name: Data, description: "Stored records and quarantine." }
+  - { name: Secrets, description: "Write-only secret names and values." }
+  - { name: Templates, description: "Prebuilt configs." }
+  - { name: AI, description: "Optional extras. The engine never calls them." }
+
+paths:
+  /health:
+    get:
+      tags: [Integrations]
+      summary: The service is up
+      operationId: getHealth
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [status], properties: { status: { const: ok } } }
+              example: { status: ok }
+
+  /integrations:
+    get:
+      tags: [Integrations]
+      summary: List integrations, with their health
+      operationId: listIntegrations
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - { name: category, in: query, schema: { enum: [identity, threat_intel, ticketing, alerting, other] } }
+        - { name: status, in: query, description: Health status., schema: { enum: [never_run, healthy, degraded, failing, disabled] } }
+        - { name: q, in: query, description: Search by name., schema: { type: string } }
+      responses:
+        "200":
+          description: A page of integrations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/IntegrationSummary" } }
+              example:
+                items:
+                  - name: github
+                    display_name: GitHub
+                    category: identity
+                    enabled: true
+                    auth_type: bearer
+                    schemas: [user]
+                    actions: [{ name: list_members, mode: pull }, { name: get_user, mode: lookup }]
+                    health: { status: healthy, last_run_at: "2026-01-01T09:05:00Z", records_pulled: 1240, last_error: null, consecutive_failures: 0 }
+                total: 1
+                limit: 50
+                offset: 0
+    post:
+      tags: [Integrations]
+      summary: Create an integration from a config
+      description: The body is a config, as JSON or as YAML text. The config is validated first.
+      operationId: createIntegration
+      requestBody: { $ref: "#/components/requestBodies/Config" }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Integration" } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /integrations/validate:
+    post:
+      tags: [Integrations]
+      summary: Check a config and return every error with its field path
+      description: Nothing is saved. Bonus B-2.
+      operationId: validateIntegration
+      requestBody: { $ref: "#/components/requestBodies/Config" }
+      responses:
+        "200":
+          description: The result. `valid` is false when `errors` has any entry with severity `error`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidateResponse" }
+              example:
+                valid: false
+                errors:
+                  - { path: "actions.list_users.pagnation", message: is not a known key, severity: error }
+                  - { path: auth.secret, message: "must be a name (letters, digits, underscores, up to 64), not a key", severity: error }
+
+  /integrations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/integrationId"
+    get:
+      tags: [Integrations]
+      summary: Read an integration
+      operationId: getIntegration
+      responses:
+        "200":
+          description: The config and its health
+          content: { application/json: { schema: { $ref: "#/components/schemas/Integration" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Integrations]
+      summary: Replace an integration's config
+      description: |
+        Replaces the whole config. To add an action, send the config with the new action included.
+        The `name` in the body must match `{id}`. Changing it is not allowed, because records are keyed by it.
+      operationId: replaceIntegration
+      requestBody: { $ref: "#/components/requestBodies/Config" }
+      responses:
+        "200":
+          description: Saved
+          content: { application/json: { schema: { $ref: "#/components/schemas/Integration" } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Integrations]
+      summary: Remove an integration
+      operationId: deleteIntegration
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /integrations/{id}/enabled:
+    parameters:
+      - $ref: "#/components/parameters/integrationId"
+    patch:
+      tags: [Integrations]
+      summary: Turn scheduled runs on or off
+      operationId: setEnabled
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [enabled], properties: { enabled: { type: boolean } } }
+      responses:
+        "200":
+          description: The updated summary
+          content: { application/json: { schema: { $ref: "#/components/schemas/IntegrationSummary" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /integrations/{id}/health:
+    parameters:
+      - $ref: "#/components/parameters/integrationId"
+    get:
+      tags: [Integrations]
+      summary: The health of one integration
+      operationId: getIntegrationHealth
+      responses:
+        "200":
+          description: Health
+          content:
+            application/json:
+              schema: { $ref: "result.schema.json#/$defs/health" }
+              example: { status: failing, last_run_at: "2026-01-01T09:06:00Z", records_pulled: 0, last_error: { code: auth_failed, message: Authentication failed (401) }, consecutive_failures: 3 }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /integrations/{id}/test:
+    parameters:
+      - $ref: "#/components/parameters/integrationId"
+    post:
+      tags: [Integrations]
+      summary: Call the service once and show the raw reply beside the mapped record
+      description: First page only. Nothing is saved. The run is recorded with trigger `test` and is ignored by the health view. Bonus B-3.
+      operationId: testIntegration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action]
+              properties:
+                action: { type: string }
+                inputs: { type: object, additionalProperties: true, description: Needed for a lookup action. }
+      responses:
+        "200":
+          description: The test result. `ok` is false when the call failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestResponse" }
+              example:
+                ok: true
+                status_code: 200
+                latency_ms: 312
+                pages_fetched: 1
+                raw_sample: { id: 4021, login: ada-l }
+                mapped_sample: { id: "4021", name: ada-l, status: active, source: github, fetched_at: "2026-01-01T09:05:00Z" }
+                missing_paths: [email]
+                notes: []
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /integrations/{id}/actions/{action}/run:
+    parameters:
+      - $ref: "#/components/parameters/integrationId"
+      - { name: action, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9_]*$" } }
+    post:
+      tags: [Runs]
+      summary: Run an action
+      description: |
+        A `pull` returns `202` with a `run_id` and finishes in the background. Poll `GET /runs/{run_id}`.
+        A `lookup` returns `200` with the mapped record straight away. Its inputs are type-checked before any request is sent.
+        Starting an action that is already running returns `409`.
+        A lookup whose call fails returns `502` with code `run_failed`, and the run is still recorded.
+      operationId: runAction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                inputs: { type: object, additionalProperties: true, description: "The lookup's inputs, by name." }
+            example: { inputs: { id: "00u1ada" } }
+      responses:
+        "200":
+          description: A lookup. The mapped record.
+          headers:
+            X-Run-Id: { description: The run recorded for this lookup., schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "result.schema.json" }
+              example: { id: "00u1ada", name: ada@acme.com, email: ada@acme.com, status: active, last_login: "2025-12-31T17:20:00Z", source: okta, fetched_at: "2026-01-01T09:05:00Z" }
+        "202":
+          description: A pull. It was started.
+          content:
+            application/json:
+              schema: { type: object, required: [run_id, status], properties: { run_id: { type: string }, status: { const: running } } }
+              example: { run_id: run-5533, status: running }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+        "502":
+          description: A lookup failed at the service. The run is recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: { code: run_failed, message: Authentication failed (401), details: { run_id: run-5534, error_code: auth_failed } } }
+
+  /runs:
+    get:
+      tags: [Runs]
+      summary: Run history, newest first
+      operationId: listRuns
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - { name: integration, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { enum: [running, success, failed] } }
+      responses:
+        "200":
+          description: A page of runs
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: "result.schema.json#/$defs/run_record" } }
+              example:
+                items:
+                  - { run_id: run-5532, integration: okta, action: list_users, mode: pull, trigger: schedule, status: failed, started_at: "2026-01-01T09:06:00Z", finished_at: "2026-01-01T09:06:01Z", duration_ms: 400, pages_fetched: 0, records_pulled: 0, records_valid: 0, records_invalid: 0, retries: 0, error: { code: auth_failed, message: Authentication failed (401) } }
+                  - { run_id: run-5531, integration: github, action: list_members, mode: pull, trigger: schedule, status: success, started_at: "2026-01-01T09:05:00Z", finished_at: "2026-01-01T09:05:06Z", duration_ms: 6200, pages_fetched: 13, records_pulled: 1240, records_valid: 1240, records_invalid: 0, retries: 0, error: null }
+                total: 2
+                limit: 50
+                offset: 0
+
+  /runs/{run_id}:
+    parameters:
+      - { name: run_id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Runs]
+      summary: One run
+      operationId: getRun
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema: { $ref: "result.schema.json#/$defs/run_record" }
+              example:
+                run_id: run-5531
+                integration: github
+                action: list_members
+                mode: pull
+                trigger: schedule
+                status: success
+                started_at: "2026-01-01T09:05:00Z"
+                finished_at: "2026-01-01T09:05:06Z"
+                duration_ms: 6200
+                pages_fetched: 13
+                records_pulled: 1240
+                records_valid: 1240
+                records_invalid: 0
+                retries: 0
+                error: null
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /results:
+    get:
+      tags: [Data]
+      summary: Stored records of one type
+      operationId: listResults
+      parameters:
+        - { name: target, in: query, required: true, schema: { enum: [user, device, alert] } }
+        - { name: source, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of records
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          anyOf:
+                            - $ref: "result.schema.json#/$defs/user"
+                            - $ref: "result.schema.json#/$defs/device"
+                            - $ref: "result.schema.json#/$defs/alert"
+              example:
+                items:
+                  - { id: "4021", name: ada-l, status: active, source: github, fetched_at: "2026-01-01T09:05:00Z" }
+                  - { id: "5b10a1", name: Grace Hopper, email: grace@acme.com, status: active, source: jira, fetched_at: "2026-01-01T09:00:00Z" }
+                  - { id: "00u1alan", name: Alan Turing, email: alan@acme.com, status: suspended, last_login: "2025-11-02T08:30:00Z", source: okta, fetched_at: "2026-01-01T09:05:00Z" }
+                total: 3
+                limit: 50
+                offset: 0
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quarantine:
+    get:
+      tags: [Data]
+      summary: Quarantined records, paged
+      operationId: listQuarantine
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - $ref: "#/components/parameters/qSource"
+        - $ref: "#/components/parameters/qAction"
+        - $ref: "#/components/parameters/qRun"
+        - $ref: "#/components/parameters/qSchema"
+        - $ref: "#/components/parameters/qReason"
+      responses:
+        "200":
+          description: A page of quarantined records
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: "result.schema.json#/$defs/quarantine_record" } }
+              example:
+                items:
+                  - { source: github, action: list_members, target_schema: user, run_id: run-0001, raw: { login: ghost-account, type: User }, reason: missing_required_field, field: id, created_at: "2026-01-01T09:05:03Z" }
+                  - { source: okta, action: list_users, target_schema: user, run_id: run-0001, raw: { id: 00u1bad, lastLogin: "31/31/2025" }, reason: transform_failed, field: last_login, created_at: "2026-01-01T09:05:03Z" }
+                total: 2
+                limit: 50
+                offset: 0
+
+  /quarantine/export:
+    get:
+      tags: [Data]
+      summary: Every quarantined record, unpaged
+      description: Takes the same filters as `/quarantine` and ignores `limit` and `offset`. Sent as a file download.
+      operationId: exportQuarantine
+      parameters:
+        - $ref: "#/components/parameters/qSource"
+        - $ref: "#/components/parameters/qAction"
+        - $ref: "#/components/parameters/qRun"
+        - $ref: "#/components/parameters/qSchema"
+        - $ref: "#/components/parameters/qReason"
+      responses:
+        "200":
+          description: A JSON array
+          headers:
+            Content-Disposition: { description: 'attachment; filename="quarantine.json"', schema: { type: string } }
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "result.schema.json#/$defs/quarantine_record" } }
+              example:
+                - { source: github, action: list_members, target_schema: user, run_id: run-0001, raw: { login: ghost-account, type: User }, reason: missing_required_field, field: id, created_at: "2026-01-01T09:05:03Z" }
+
+  /secrets:
+    get:
+      tags: [Secrets]
+      summary: List secret names. Values are never returned.
+      operationId: listSecrets
+      responses:
+        "200":
+          description: Names and whether each is set
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/SecretInfo" }
+              example: { items: [{ name: github_token, set: true, updated_at: "2025-12-30T10:00:00Z" }, { name: smtp_password, set: false, updated_at: null }] }
+
+  /secrets/{name}:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_]{1,64}$" } }
+    put:
+      tags: [Secrets]
+      summary: Set or replace a secret's value
+      description: Write-only. Returns `501` until the encrypted store exists (Phase 2), because environment variables are the only source before that.
+      operationId: setSecret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [value], properties: { value: { type: string, minLength: 1, writeOnly: true } } }
+      responses:
+        "204": { description: Stored }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
+  /templates:
+    get:
+      tags: [Templates]
+      summary: Prebuilt configs
+      operationId: listTemplates
+      responses:
+        "200":
+          description: Template summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/TemplateSummary" }
+              example:
+                items:
+                  - { id: github, display_name: GitHub, category: identity, description: "Lists the members of a GitHub organization and looks up one user.", requires: { vars: { org: { label: "GitHub organization", example: my-org } }, secrets: [github_token] } }
+                  - { id: generic-user, display_name: "Generic user source", category: identity, description: "Starter for any service that lists users." }
+
+  /templates/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Templates]
+      summary: One template, as a config and as YAML text
+      operationId: getTemplate
+      responses:
+        "200":
+          description: The template
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, config, yaml]
+                properties:
+                  id: { type: string }
+                  config: { $ref: "integration.schema.json" }
+                  yaml: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/generate-config:
+    post:
+      tags: [AI]
+      summary: Draft a config from API docs, a curl example or a sample response
+      description: The draft is validated and returned for a human to review. Nothing is saved. Secrets are never sent to the model.
+      operationId: generateConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [text], properties: { text: { type: string, minLength: 1 } } }
+      responses:
+        "200":
+          description: A draft
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [yaml, errors]
+                properties:
+                  yaml: { type: string }
+                  config: { type: object, additionalProperties: true }
+                  errors: { type: array, items: { $ref: "#/components/schemas/ValidationIssue" } }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
+  /ai/summarize:
+    post:
+      tags: [AI]
+      summary: A plain-language summary of the stored records
+      operationId: summarize
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                target: { enum: [user, device, alert] }
+                source: { type: string }
+      responses:
+        "200":
+          description: The summary
+          content:
+            application/json:
+              schema: { type: object, required: [summary], properties: { summary: { type: string } } }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
+components:
+  parameters:
+    limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
+    offset: { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+    integrationId:
+      name: id
+      in: path
+      required: true
+      description: The integration's `name` slug.
+      schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]*$" }
+    qSource: { name: source, in: query, schema: { type: string } }
+    qAction: { name: action, in: query, schema: { type: string } }
+    qRun: { name: run_id, in: query, schema: { type: string } }
+    qSchema: { name: target_schema, in: query, schema: { enum: [user, device, alert] } }
+    qReason: { name: reason, in: query, schema: { enum: [missing_required_field, transform_failed, invalid_value] } }
+
+  requestBodies:
+    Config:
+      required: true
+      description: A config as JSON, or as YAML text. Both parse to the same thing.
+      content:
+        application/json:
+          schema: { $ref: "integration.schema.json" }
+        text/yaml:
+          schema: { type: string }
+
+  responses:
+    ValidationError:
+      description: The request or the config is invalid. `details.errors` lists each problem with its field path.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: validation_error, message: The config is not valid, details: { errors: [{ path: base_url, message: is required, severity: error }] } } }
+    NotFound:
+      description: There is no such integration, run or template.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: not_found, message: No integration named okta, details: null } }
+    Conflict:
+      description: The name is taken, or the action is already running.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: conflict, message: list_users is already running, details: { run_id: run-5528 } } }
+    Unsupported:
+      description: Not available yet (for example, the encrypted secret store before Phase 2, or a reserved feature).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: unsupported, message: The secret store is not available yet, details: null } }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { enum: [validation_error, not_found, conflict, unsupported, run_failed, internal_error] }
+            message: { type: string }
+            details: { description: "Extra information, or null." }
+    Page:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: { type: array, items: {} }
+        total: { type: integer, minimum: 0 }
+        limit: { type: integer }
+        offset: { type: integer }
+    ValidationIssue:
+      type: object
+      required: [path, message, severity]
+      properties:
+        path: { type: string, description: "The field path, such as actions.list_users.schedule." }
+        line: { type: integer, description: "Optional. The line in the YAML text, for editor markers." }
+        message: { type: string }
+        severity: { enum: [error, warning] }
+    ValidateResponse:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid: { type: boolean }
+        errors: { type: array, items: { $ref: "#/components/schemas/ValidationIssue" } }
+    TestResponse:
+      type: object
+      required: [ok, status_code, latency_ms, pages_fetched, raw_sample, mapped_sample, missing_paths, notes]
+      properties:
+        ok: { type: boolean }
+        status_code: { type: [integer, "null"] }
+        latency_ms: { type: [integer, "null"] }
+        pages_fetched: { type: integer }
+        raw_sample: { description: The first record as the service sent it. }
+        mapped_sample: { description: The same record after mapping. }
+        missing_paths:
+          type: array
+          items: { type: string }
+          description: Mapped paths that were not found in the reply.
+        notes: { type: array, items: { type: string } }
+    IntegrationSummary:
+      type: object
+      required: [name, category, enabled, auth_type, schemas, actions, health]
+      properties:
+        name: { type: string }
+        display_name: { type: string }
+        category: { enum: [identity, threat_intel, ticketing, alerting, other] }
+        enabled: { type: boolean }
+        auth_type: { enum: [api_key, bearer, basic, oauth2_client_credentials] }
+        schemas: { type: array, items: { enum: [user, device, alert] } }
+        actions:
+          type: array
+          items:
+            type: object
+            required: [name, mode]
+            properties: { name: { type: string }, mode: { enum: [pull, lookup, webhook] } }
+        health: { $ref: "result.schema.json#/$defs/health" }
+    Integration:
+      type: object
+      required: [config, health]
+      properties:
+        config: { $ref: "integration.schema.json" }
+        health: { $ref: "result.schema.json#/$defs/health" }
+    SecretInfo:
+      type: object
+      required: [name, set, updated_at]
+      properties:
+        name: { type: string }
+        set: { type: boolean }
+        updated_at: { type: [string, "null"] }
+    TemplateSummary:
+      type: object
+      required: [id, display_name, category, description]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        category: { enum: [identity, threat_intel, ticketing, alerting, other] }
+        description: { type: string }
+        requires: { type: object, additionalProperties: true, description: "What the user must supply, from the config's requires block." }

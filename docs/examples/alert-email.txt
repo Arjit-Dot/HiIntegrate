@@ -1,0 +1,11 @@
+To: secops@example.com
+Subject: [Integration Platform] okta is failing (3 failed runs in a row)
+
+The integration "okta" has failed 3 runs in a row.
+
+Last error:  auth_failed
+Message:     Authentication failed (401). Not retried.
+Last run:    2026-01-01T09:15:01Z (list_users, schedule)
+
+Nothing was lost. Records saved by earlier runs are unchanged.
+This message is sent once. It is sent again only after a successful run and three new failures.

@@ -69,7 +69,8 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-8 | Module boundaries and handoff functions | Locked by default |
 | D-9 | The two mock servers | Locked by default |
 | D-10 | Tech choices and conventions | Decided by Claude for scalability, not reviewed |
-| D-11 | Golden fixtures (list decided, files not yet written) | Locked by default |
+| D-11 | Golden fixtures | Locked by default. Files written, with synthetic samples |
+| Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
 
@@ -87,7 +88,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-2.7 | Map and transforms | String or object entries; 7 transforms; `value_map` | FR-5 | Extends roadmap |
 | D-2.8 | Pagination | 4 styles; `max_pages` default 100 | FR-3 | Roadmap |
 | D-2.9 | Schedule | `every <N><unit>`, 10 s minimum, no cron | FR-4 | Roadmap |
-| D-2.10 | Retries | 3 attempts, backoff 1, 2, 4 s, timeouts, connection errors and 5xx | FR-7 | Roadmap |
+| D-2.10 | Retries | Up to 3 retries after the first try, backoff 1, 2, 4 s, timeouts, connection errors and 5xx | FR-7 | Roadmap |
 | D-2.11 | Rate limits | Wait for `Retry-After` up to 60 s; backoff if missing; fail if too long | FR-8 | Extends roadmap |
 | D-2.12 | Bad records | `quarantine` (default) or `skip` | FR-9 | Roadmap |
 | D-2.13 | Lookup inputs | `string`, `int`, `ip`, `domain`, `hash`, `enum` | FR-2 | Extends roadmap |
@@ -361,7 +362,7 @@ auth: { type: api_key, in: header, name: Authorization, prefix: "SSWS ", secret:
 **Covers:** FR-7 · **Source:** Roadmap · **Revised:** changes-v2
 
 **Decision**
-- 3 attempts in total, with backoff of `[1, 2, 4]` seconds between tries.
+- Up to **3 retries after the first try** (`max_retries`), waiting `[1, 2, 4]` seconds before each retry. If there are more retries than waits, the last wait repeats.
 - Retried: timeouts, connection errors (connection reset, DNS failure) and 5xx responses.
 - Never retried: 4xx responses (400, 401, 404 and so on). 429 has its own rule (D-2.11).
 - Overridable in the config's `defaults` block or per action. These are built-in engine defaults, so a config with no `defaults` block still behaves reliably.
@@ -771,6 +772,8 @@ Three points. Points 1 and 2 were agreed one by one. Point 3 was set by default.
 | `retries` | Retries used | |
 | `error` | `code` and `message` | Empty unless `failed` |
 
+`error.code` is one of `auth_failed`, `connection_error`, `timeout`, `server_error`, `rate_limited`, `bad_response`, `api_error` and `client_error`. `api_error` is used when `error_when` fires. `bad_response` means the records were not where `records_path` says.
+
 **Why**
 - The run record is the single source for the run history page, the health view and the "497 valid, 3 invalid" summary, so everything those need is stored on it.
 - `trigger` separates scheduled, manual and test runs, so a test call doesn't count as real activity.
@@ -852,7 +855,7 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 
 *Conventions*
 - Base path `/api/v1`. JSON only. Timestamps are ISO 8601 UTC. Integrations are identified by their `name` slug (lowercase letters, digits, hyphen or underscore).
-- Errors use one shape: `{"error": {"code", "message", "details"}}`. Codes: `validation_error`, `not_found`, `conflict`, `unsupported`, `internal_error`.
+- Errors use one shape: `{"error": {"code", "message", "details"}}`. Codes: `validation_error`, `not_found`, `conflict`, `unsupported`, `run_failed`, `internal_error`.
 - Lists use `limit` (default 50, maximum 500) and `offset` (default 0), and reply `{"items": [], "total": 0, "limit": 50, "offset": 0}`.
 - The API has **no login in v1**. It is meant for local or Docker use. See Open items.
 
@@ -877,12 +880,13 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 | `POST /ai/generate-config`, `POST /ai/summarize` | AI extras |
 
 *Behavior*
-- **Run:** a `pull` returns `202` with a `run_id` and finishes in the background (poll `GET /runs/{run_id}`). A `lookup` returns `200` with the mapped record. Starting an action that is already running returns `409 conflict`.
+- **Run:** a `pull` returns `202` with a `run_id` and finishes in the background (poll `GET /runs/{run_id}`). A `lookup` returns `200` with the mapped record. Starting an action that is already running returns `409 conflict`. The request body is `{"inputs": {...}}`. A lookup that fails at the service returns `502` with code `run_failed`, and the run is still recorded. A successful lookup carries its run in the `X-Run-Id` header.
 - **Validate** replies `{"valid": false, "errors": [{"path", "line", "message", "severity"}]}`. `line` is optional.
 - **Test** replies `{"ok", "status_code", "latency_ms", "pages_fetched", "raw_sample", "mapped_sample", "missing_paths", "notes"}`.
 - **Filters:** `/runs` takes `integration` and `status`. `/results` takes `target` and `source`. `/quarantine` and its export take `source`, `action`, `run_id` and `target_schema`.
 - **Export:** a JSON array with the quarantine fields (D-4), including `raw`. CSV is a stretch.
 - A config using a reserved feature (D-2.22) gets `501 unsupported`.
+- **Dashboard:** each integration that has lookup actions gets a **Run** panel. You pick a lookup action, fill its inputs (types are checked before any request), and see the mapped record, whether it was saved, and the run it created. Pulls are not run from here, because they run on a schedule. The request body is proposed as `{"inputs": {...}}`, which is not locked yet.
 
 **Why**
 - A fixed base path, one error shape and one paging shape mean the frontend writes each pattern once.
@@ -1062,13 +1066,13 @@ Not decided. Until it is, the working assumption is letters, digits and undersco
 
 ## D-11: Golden fixtures
 
-**Covers:** None directly · **Source:** default (the list is from the roadmap and `changes-v2`). **Only the reference config (item 11) is written. The other files are not.**
+**Covers:** None directly · **Source:** default (the list is from the roadmap and `changes-v2`). **All the files are written.** The raw samples are **synthetic** (shaped like each service's documented responses, not captured live).
 
 **Decision**
 
 One shared set of examples that both people treat as the truth:
 
-1. `templates/github.yaml`, the reference config.
+1. `templates/github.yaml`, the first real service config (with `jira.yaml` and `okta.yaml`, see item 15).
 2. Three raw GitHub member pages, and one raw `get_user` response.
 3. The expected normalized `user`, `device` and `alert` output.
 4. A bad record and its expected quarantine entry.
@@ -1082,8 +1086,14 @@ One shared set of examples that both people treat as the truth:
    - `okta.yaml` is the second full config. It uses `auth.prefix`, a `base_url` placeholder, `requires`, a time placeholder, and three actions with different `target_schema` values.
 10. An example alert email.
 11. `docs/reference-config.yaml`, the annotated reference config that uses every field once. It is written (see the file) and must pass the validator once the validator exists.
+12. Three starter templates, one per schema: `templates/generic-user.yaml`, `templates/generic-device.yaml` and `templates/generic-alert.yaml`. Each has a `pull` action and a `lookup` action, maps every field of its schema, and marks the lines to change with `CHANGE`. They are written. They use made-up URLs, so they are starting points and are not verified against any real service.
+13. `docs/ui-prototype.html`, a single-file prototype of the dashboard with sample data. It shows the screens, the required fields, the dropdowns, and a Run panel for lookups with simulated failures. It is not connected to a backend.
+14. The contract files themselves: `schema/integration.schema.json`, `schema/result.schema.json` and `schema/openapi.yaml`, with `schema/README.md` as the index.
+15. `templates/service-template.yaml`, the base template any new service starts from, and the real service configs `templates/github.yaml`, `jira.yaml` and `okta.yaml`. These are not yet verified against live accounts.
+16. `samples/invalid/`: configs that must be rejected, with `expected-errors.json`.
+17. `schema/tools/`: a reference check (`npm run check`) that the schemas, configs, samples and expected output all agree.
 
-- Raw samples go in `samples/<service>/`. Configs go in `templates/<name>.yaml`. Expected outputs and examples go in `docs/`.
+- Raw samples go in `samples/<service>/`. Configs go in `templates/<name>.yaml`. Expected outputs and examples go in `docs/examples/`.
 - Sample files are cleaned of personal data and secrets before they are saved.
 
 **Why**
@@ -1153,22 +1163,38 @@ The four questions from `changes-v2.md` section 6 are answered.
 
 `changesv3.md` names Slack and Jira as the services that need these features. Slack is no longer a source, so `error_when` is exercised by the mock API.
 
+### R-5: Writing the contract files settled these (Phase 0)
+
+Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. Each was open or inconsistent before. They are listed in `schema/README.md` too, and are the first thing to review at sign-off.
+
+| Item | Before | Now | Why |
+|---|---|---|---|
+| Retry count | "3 attempts in total" with 3 backoff values, which never used the third | `max_retries`: retries after the first try. The last wait repeats | The old wording was inconsistent. Fixed in D-2.10, the roadmap and the reference configs |
+| `version` | Value not fixed | The integer `1`. v1 accepts only 1 | Simple, and a clear error for anything else |
+| Value not in `value_map` | Open | Uses `default` if given, otherwise the record is quarantined as `invalid_value` | Closes the D-2.7 open item |
+| `error_when` run error code | Open (`bad_response` or `api_error`) | `api_error`. `bad_response` stays for "records not where records_path says" | An error in the body is a different problem from a wrong shape |
+| `requires.secrets` | Open | A list of secret names | Every example already used names |
+| Fan-out key | Open | `fan_out`, reserved | The schema needs a name to reserve |
+| `incremental` | Shape not fixed | `{ param, value }` | Enough to send a "changed since" value |
+| Enum input values | Key not fixed | `values` | |
+| Map entry without a path | Not stated | Allowed when it has a `default` (GitHub's `status: { default: active }`) | GitHub has no status field |
+| Config body formats | Not stated | JSON or `text/yaml` | The editor works in YAML |
+| Lookup run body and failure | Not stated | Body `{"inputs": {...}}`. A failure at the service returns `502` with `run_failed` | A failed lookup still creates a run |
+| Paging stop rules | Not stated | Written in `schema/README.md` | The engine and the mock need the same rules |
+
 ---
 
 ## Open items
 
 | Item | Blocks | Settle when |
 |---|---|---|
-| What a value not in `value_map` does (D-2.7) | `value_map` implementation | Next time D-2 is touched, or before the validator is built |
-| `hash` input kinds (D-2.13) | Hash lookups such as VirusTotal | That service is added |
-| Export of all quarantined records (requested; route and format to decide) | D-6 API contract | When we reach D-6 |
-| Run error codes and per-page saving (`changes-v2` C-6): `auth_failed`, `connection_error`, `timeout`, `server_error`, `rate_limited`, `bad_response`, `client_error` | D-5 | When we reach D-5 |
 | Confirm with the organizers that an email alert for repeated failures is acceptable (they were asked about Slack) | Bonus B-4 | Before the demo |
 | Okta `device` data needs at least one enrolled device (D-1) | `device` schema demo, Goal 6 | Phase 0 access check |
-| Run error code used by `error_when` (D-2.15) | `error_when` implementation | Before the engine is built |
-| Shape of `requires.secrets`, and whether the validator checks that `vars` and secrets are declared (D-2.18) | `requires` implementation and the add form | Before the form is built |
-| Whether `base_url` must be `https` after substitution (D-2.17). A mistyped tenant could send the token to the wrong host | Validator | Before the validator is built |
-| Key name for the reserved fan-out feature (D-2.22) | Nothing in v1 | When fan-out is built |
+| Whether `base_url` must be `https` after substitution (D-2.17). The schema allows `http://` so a local mock works. A mistyped tenant could send the token to the wrong host | Validator | Before the validator is built |
+| The contract files (`schema/`) are written but not yet read and signed off by both people | The `contract-v1` tag | Sign-off, then `git tag contract-v1` |
+| The raw samples in `samples/` are synthetic, not captured live | Test realism | Replace when GitHub, Jira and Okta access is confirmed |
+| `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 0 access check, then Phase 1 |
+| `hash` inputs accept any string in the schema. The kinds (MD5, SHA-1, SHA-256) are not fixed | Hash lookups such as VirusTotal | That service is added |
 | D-6 to D-11 were set by default and not reviewed point by point | The contract | Review before the contract is tagged `contract-v1` |
 | D-10 was decided by Claude to be easily scalable, and not reviewed point by point. The main cost is a Postgres container and a separate worker in Phase 1 and 2 | The build plan | Review before `contract-v1` |
 | Rate-limit state (`min_interval_ms`) is per process in v1, so it needs shared storage before running more than one worker (D-10) | Scaling out | After v1 |
@@ -1176,4 +1202,3 @@ The four questions from `changes-v2.md` section 6 are answered.
 | Which real email account sends alerts, and its SMTP settings (D-5.3). I haven't verified any provider's setup steps | B-4 | Phase 0 access check |
 | CSV format for the quarantine export (D-6) | Nothing in v1 | If time allows |
 | D-7.3: what a valid secret name looks like (working assumption: letters, digits, underscores, up to 64) | D-2.14 rule 5, the secrets route | Decide later |
-| The fixture files in D-11 are listed but not written | Phase 0 exit | Phase 0 |

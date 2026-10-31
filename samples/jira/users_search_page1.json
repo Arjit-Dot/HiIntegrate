@@ -1,0 +1,25 @@
+[
+  {
+    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5b10a1",
+    "accountId": "5b10a1",
+    "accountType": "atlassian",
+    "displayName": "Grace Hopper",
+    "emailAddress": "Grace@Acme.com",
+    "active": true
+  },
+  {
+    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5b10a2",
+    "accountId": "5b10a2",
+    "accountType": "atlassian",
+    "displayName": "Old Contractor",
+    "active": false
+  },
+  {
+    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5b10a3",
+    "accountId": "5b10a3",
+    "accountType": "atlassian",
+    "displayName": "Alan Turing",
+    "emailAddress": "alan@acme.com",
+    "active": true
+  }
+]

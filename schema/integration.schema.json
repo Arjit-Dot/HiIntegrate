@@ -1,0 +1,1082 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hiintegrate.local/schema/integration.schema.json",
+  "title": "Integration config",
+  "description": "The rulebook for one integration config (one service). Unknown keys are errors. Rules that JSON Schema cannot express are listed in schema/README.md and enforced by the validator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "name",
+    "base_url",
+    "auth",
+    "actions"
+  ],
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "Schema version this config follows. v1 accepts only 1."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "maxLength": 64,
+      "description": "Slug ID. It becomes the source on every record. Do not rename after records exist."
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "category": {
+      "enum": [
+        "identity",
+        "threat_intel",
+        "ticketing",
+        "alerting",
+        "other"
+      ],
+      "default": "other"
+    },
+    "description": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "vars": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/scalar"
+      },
+      "description": "Static values reused as {{vars.name}}. Not secrets."
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a user must supply when adding this integration. The add form is built from it.",
+      "properties": {
+        "vars": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "example": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "secrets": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/secretName"
+          }
+        }
+      }
+    },
+    "base_url": {
+      "type": "string",
+      "pattern": "^https?://[^{}\\s]*(\\{\\{\\s*vars\\.[A-Za-z_][A-Za-z0-9_]*\\s*\\}\\}[^{}\\s]*)*$",
+      "description": "Root URL. May contain {{vars.x}} and no other placeholder."
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "secret"
+      ],
+      "description": "How the engine logs in. Every type names its secret with 'secret'. oauth2_client_credentials is reserved: it passes the schema and the validator rejects it as not implemented yet.",
+      "properties": {
+        "type": {
+          "enum": [
+            "api_key",
+            "bearer",
+            "basic",
+            "oauth2_client_credentials"
+          ]
+        },
+        "in": {
+          "enum": [
+            "header",
+            "query"
+          ],
+          "description": "api_key: where the key goes."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "api_key: the header or query parameter name."
+        },
+        "prefix": {
+          "type": "string",
+          "description": "api_key: text placed before the secret, such as 'SSWS '."
+        },
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "description": "basic: not a secret. May use {{vars.x}}."
+        },
+        "secret": {
+          "$ref": "#/$defs/secretName"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "api_key"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "in",
+              "name"
+            ],
+            "properties": {
+              "username": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bearer"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "in": false,
+              "name": false,
+              "prefix": false,
+              "username": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "basic"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "username"
+            ],
+            "properties": {
+              "in": false,
+              "name": false,
+              "prefix": false
+            }
+          }
+        }
+      ]
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Overrides of the engine's built-in defaults. Optional. Any action can override them.",
+      "properties": {
+        "timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 30
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "retry": {
+          "$ref": "#/$defs/retry"
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/rate_limit"
+        }
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "to"
+      ],
+      "description": "Email once when failed runs in a row reach after_failures. Resets on a success.",
+      "properties": {
+        "after_failures": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3
+        },
+        "to": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/action"
+      },
+      "description": "The things this config can do. At least one."
+    }
+  },
+  "$defs": {
+    "scalar": {
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "jmespath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A JMESPath expression. '@' means the whole response."
+    },
+    "secretName": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]{1,64}$",
+      "description": "The NAME of a secret. Never its value."
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Retries after the first try. Waits come from backoff_seconds, and the last wait repeats if there are more retries than waits.",
+      "properties": {
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3
+        },
+        "backoff_seconds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
+          "default": [
+            1,
+            2,
+            4
+          ]
+        },
+        "retry_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "timeout",
+              "connection_error",
+              "5xx"
+            ]
+          },
+          "default": [
+            "timeout",
+            "connection_error",
+            "5xx"
+          ]
+        }
+      }
+    },
+    "rate_limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_interval_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum gap between requests to the same service. Default: none."
+        },
+        "max_wait_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 60,
+          "description": "If a 429 asks for a longer wait, the run fails with rate_limited."
+        }
+      }
+    },
+    "mapEntry": {
+      "type": [
+        "string",
+        "object"
+      ],
+      "description": "A string is shorthand for a path. An object adds transform, default, format and value_map.",
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/jmespath"
+          },
+          "transform": {
+            "enum": [
+              "string",
+              "int",
+              "float",
+              "bool",
+              "lowercase",
+              "uppercase",
+              "datetime"
+            ]
+          },
+          "default": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Used when the path is missing or null. Also used for a value that is not in value_map."
+          },
+          "format": {
+            "type": "string",
+            "description": "Date pattern for unusual date text. Only with transform: datetime."
+          },
+          "value_map": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The service's values to ours. Quote the keys so YAML keeps them as text."
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "required": [
+              "default"
+            ]
+          }
+        ],
+        "dependentSchemas": {
+          "format": {
+            "required": [
+              "transform"
+            ],
+            "properties": {
+              "transform": {
+                "const": "datetime"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "minLength": 1
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "path"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "GET",
+            "POST"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Appended to base_url. May use {{vars.x}}, {{now - 24h}} and, in a lookup, {{input.x}}."
+        },
+        "query": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/scalar"
+          }
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "body": {
+          "type": [
+            "object",
+            "string"
+          ]
+        }
+      }
+    },
+    "pagination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "description": "How to ask for the next page. Pull actions only.",
+      "properties": {
+        "type": {
+          "enum": [
+            "next_link",
+            "offset",
+            "page_number",
+            "cursor"
+          ]
+        },
+        "source": {
+          "enum": [
+            "header",
+            "body"
+          ],
+          "description": "next_link: where the link is."
+        },
+        "header": {
+          "type": "string",
+          "minLength": 1,
+          "description": "next_link from a header: the header name, such as Link."
+        },
+        "path": {
+          "$ref": "#/$defs/jmespath",
+          "description": "next_link from the body: the path to the link."
+        },
+        "offset_param": {
+          "type": "string",
+          "minLength": 1
+        },
+        "limit_param": {
+          "type": "string",
+          "minLength": 1
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "total_path": {
+          "$ref": "#/$defs/jmespath",
+          "description": "offset: where the total count is. Optional."
+        },
+        "param": {
+          "type": "string",
+          "minLength": 1,
+          "description": "page_number: the page parameter."
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "page_number: the first page."
+        },
+        "stop_when_empty": {
+          "type": "boolean",
+          "default": true
+        },
+        "cursor_param": {
+          "type": "string",
+          "minLength": 1
+        },
+        "next_cursor_path": {
+          "$ref": "#/$defs/jmespath"
+        },
+        "max_pages": {
+          "$ref": "#/$defs/maxPages"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "next_link"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "offset_param": false,
+              "limit_param": false,
+              "limit": false,
+              "total_path": false,
+              "param": false,
+              "start": false,
+              "stop_when_empty": false,
+              "cursor_param": false,
+              "next_cursor_path": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "next_link"
+              },
+              "source": {
+                "const": "header"
+              }
+            },
+            "required": [
+              "type",
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "header"
+            ],
+            "properties": {
+              "path": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "next_link"
+              },
+              "source": {
+                "const": "body"
+              }
+            },
+            "required": [
+              "type",
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "path"
+            ],
+            "properties": {
+              "header": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "offset"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "offset_param",
+              "limit_param",
+              "limit"
+            ],
+            "properties": {
+              "source": false,
+              "header": false,
+              "path": false,
+              "param": false,
+              "start": false,
+              "stop_when_empty": false,
+              "cursor_param": false,
+              "next_cursor_path": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "page_number"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "param",
+              "start"
+            ],
+            "properties": {
+              "source": false,
+              "header": false,
+              "path": false,
+              "offset_param": false,
+              "limit_param": false,
+              "limit": false,
+              "total_path": false,
+              "cursor_param": false,
+              "next_cursor_path": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "cursor"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "cursor_param",
+              "next_cursor_path"
+            ],
+            "properties": {
+              "source": false,
+              "header": false,
+              "path": false,
+              "offset_param": false,
+              "limit_param": false,
+              "limit": false,
+              "total_path": false,
+              "param": false,
+              "start": false,
+              "stop_when_empty": false
+            }
+          }
+        }
+      ]
+    },
+    "maxPages": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 100,
+      "description": "Safety cap on pages per run."
+    },
+    "inputs": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "description": "Values the caller must supply. Lookup actions only. Types are checked before any request is sent.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "string",
+              "int",
+              "ip",
+              "domain",
+              "hash",
+              "enum"
+            ]
+          },
+          "required": {
+            "type": "boolean",
+            "default": true
+          },
+          "values": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "description": "Allowed values, for an enum input."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "enum"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "values"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "not": {
+                    "const": "enum"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "values": false
+              }
+            }
+          }
+        ]
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "target_schema"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "pull",
+            "lookup",
+            "webhook"
+          ],
+          "description": "pull: scheduled, many records. lookup: on demand, one record. webhook: reserved, not implemented."
+        },
+        "target_schema": {
+          "enum": [
+            "user",
+            "device",
+            "alert"
+          ]
+        },
+        "request": {
+          "$ref": "#/$defs/request"
+        },
+        "records_path": {
+          "$ref": "#/$defs/jmespath",
+          "default": "@"
+        },
+        "map": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/mapEntry"
+          }
+        },
+        "required": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          },
+          "description": "Our fields every record must have, beyond the platform minimum (id and source). Every name must exist in map."
+        },
+        "on_invalid": {
+          "enum": [
+            "quarantine",
+            "skip"
+          ],
+          "default": "quarantine"
+        },
+        "error_when": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "equals"
+          ],
+          "description": "A condition on the response body that means 'this is an error', even on HTTP 200.",
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/jmespath"
+            },
+            "equals": {},
+            "message_path": {
+              "$ref": "#/$defs/jmespath"
+            }
+          }
+        },
+        "store": {
+          "type": "boolean",
+          "default": true
+        },
+        "retry": {
+          "$ref": "#/$defs/retry"
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/rate_limit"
+        },
+        "schedule": {
+          "type": "string",
+          "pattern": "^every ([1-9][0-9]+s|[1-9][0-9]*[mhd])$",
+          "description": "every <N><unit>, unit s, m, h or d. Minimum 10 seconds. Pull only."
+        },
+        "pagination": {
+          "$ref": "#/$defs/pagination"
+        },
+        "incremental": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "param",
+            "value"
+          ],
+          "description": "Send a 'changed since' value on each run. Pull only. No v1 service uses it.",
+          "properties": {
+            "param": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "type": "string",
+              "description": "Usually {{state.last_success_at}}."
+            }
+          }
+        },
+        "inputs": {
+          "$ref": "#/$defs/inputs"
+        },
+        "response_format": {
+          "enum": [
+            "json",
+            "csv",
+            "xml"
+          ],
+          "default": "json",
+          "description": "Reserved. Only json is implemented."
+        },
+        "fan_out": {
+          "description": "Reserved, not implemented. Fetch a list, then call a detail endpoint per item."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "pull"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "request",
+              "map",
+              "schedule"
+            ],
+            "properties": {
+              "inputs": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "lookup"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "request",
+              "map",
+              "inputs"
+            ],
+            "properties": {
+              "schedule": false,
+              "pagination": false,
+              "incremental": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target_schema": {
+                "const": "user"
+              }
+            },
+            "required": [
+              "target_schema"
+            ]
+          },
+          "then": {
+            "properties": {
+              "map": {
+                "type": "object",
+                "propertyNames": {
+                  "enum": [
+                    "id",
+                    "name",
+                    "email",
+                    "status",
+                    "last_login"
+                  ]
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              "required": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "id",
+                    "name",
+                    "email",
+                    "status",
+                    "last_login"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target_schema": {
+                "const": "device"
+              }
+            },
+            "required": [
+              "target_schema"
+            ]
+          },
+          "then": {
+            "properties": {
+              "map": {
+                "type": "object",
+                "propertyNames": {
+                  "enum": [
+                    "id",
+                    "hostname",
+                    "ip",
+                    "os",
+                    "owner",
+                    "last_seen"
+                  ]
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              "required": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "id",
+                    "hostname",
+                    "ip",
+                    "os",
+                    "owner",
+                    "last_seen"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target_schema": {
+                "const": "alert"
+              }
+            },
+            "required": [
+              "target_schema"
+            ]
+          },
+          "then": {
+            "properties": {
+              "map": {
+                "type": "object",
+                "propertyNames": {
+                  "enum": [
+                    "id",
+                    "type",
+                    "severity",
+                    "timestamp",
+                    "description"
+                  ]
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              "required": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "id",
+                    "type",
+                    "severity",
+                    "timestamp",
+                    "description"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

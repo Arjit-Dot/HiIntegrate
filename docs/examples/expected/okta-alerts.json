@@ -1,0 +1,38 @@
+[
+  {
+    "id": "9f1d5c10-0001",
+    "type": "user.session.start",
+    "severity": "low",
+    "timestamp": "2026-01-01T09:00:00Z",
+    "description": "User login to Okta",
+    "source": "okta",
+    "fetched_at": "2026-01-01T09:05:00Z"
+  },
+  {
+    "id": "9f1d5c10-0002",
+    "type": "user.account.lock",
+    "severity": "medium",
+    "timestamp": "2026-01-01T09:01:30Z",
+    "description": "Max sign in attempts exceeded",
+    "source": "okta",
+    "fetched_at": "2026-01-01T09:05:00Z"
+  },
+  {
+    "id": "9f1d5c10-0003",
+    "type": "policy.evaluate_sign_on",
+    "severity": "high",
+    "timestamp": "2026-01-01T09:02:10Z",
+    "description": "Sign-on policy evaluation failed",
+    "source": "okta",
+    "fetched_at": "2026-01-01T09:05:00Z"
+  },
+  {
+    "id": "9f1d5c10-0004",
+    "type": "user.session.end",
+    "severity": "low",
+    "timestamp": "2026-01-01T09:03:41Z",
+    "description": "User logout from Okta",
+    "source": "okta",
+    "fetched_at": "2026-01-01T09:05:00Z"
+  }
+]

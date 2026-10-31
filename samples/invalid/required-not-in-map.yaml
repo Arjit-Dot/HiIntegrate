@@ -1,0 +1,88 @@
+# INVALID ON PURPOSE. A name in required that is not in map.
+# Expected errors are in expected-errors.json.
+version: 1
+name: generic-user
+display_name: Generic user source
+category: identity
+description: Starter for any service that lists users. Copy it and change the marked lines.
+enabled: true
+vars:
+  domain: acme
+requires:
+  vars:
+    domain:
+      label: Service domain
+      example: acme
+  secrets:
+    - api_token
+base_url: https://{{vars.domain}}.example.com
+auth:
+  type: bearer
+  secret: api_token
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    request:
+      method: GET
+      path: /api/users
+    pagination:
+      type: offset
+      offset_param: offset
+      limit_param: limit
+      limit: 100
+      max_pages: 100
+    schedule: every 15m
+    records_path: items
+    map:
+      id:
+        path: id
+        transform: string
+      name: name
+      email:
+        path: email
+        transform: lowercase
+      status:
+        path: status
+        value_map:
+          active: active
+          disabled: inactive
+          suspended: suspended
+        default: unknown
+    required:
+      - id
+      - last_login
+    on_invalid: quarantine
+  get_user:
+    mode: lookup
+    target_schema: user
+    inputs:
+      id:
+        type: string
+        required: true
+    request:
+      method: GET
+      path: /api/users/{{input.id}}
+    records_path: '@'
+    map:
+      id:
+        path: id
+        transform: string
+      name: name
+      email:
+        path: email
+        transform: lowercase
+      status:
+        path: status
+        value_map:
+          active: active
+          disabled: inactive
+          suspended: suspended
+        default: unknown
+      last_login:
+        path: last_login
+        transform: datetime
+    required:
+      - id
+    on_invalid: quarantine
+    store: false

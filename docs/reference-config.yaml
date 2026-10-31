@@ -12,6 +12,13 @@
 # - It must pass the validator once the validator exists (add it as a test).
 # - Decision references (D-2.x and so on) point to docs/decisions.md.
 #
+# HOW THIS FILE IS ARRANGED (by the platform requirements in roadmap.md)
+#   Top level: identity, FR-6 secrets, FR-2 endpoint, FR-1 auth,
+#              FR-7/FR-8 shared retry and rate limits, FR-10 health alert.
+#   Each action, in this order: FR-2 request, FR-3 pagination, FR-4 schedule,
+#              FR-5 mapping, FR-9 bad data, FR-7/FR-8 overrides, FR-11 storage.
+#   Search for "FR-" to jump to the field that delivers a requirement.
+#
 # Names that are NOT fixed by a decision yet. They are finalized when
 # schema/integration.schema.json is written:
 #   - the value of `version`
@@ -71,6 +78,8 @@ enabled: true
 # CONNECTION
 # ---------------------------------------------------------------------------
 
+# ---- FR-6 SECRETS: what the user must supply (names only) ----
+
 # WHAT: static values you define once and reuse as {{vars.name}}. Optional.
 # WHY:  change the tenant or page size in one line instead of editing every
 #       action. Vars are NOT secrets: they are plain, shareable settings (D-2.5).
@@ -88,11 +97,15 @@ requires:
     domain: { label: "Tenant domain", example: "acme" }
   secrets: [example_token]
 
+# ---- FR-2 ENDPOINT: where the service lives ----
+
 # WHAT: root URL of the service. REQUIRED.
 # WHY:  {{vars.x}} is allowed here so one template works for any tenant, as
 #       Jira and Okta put the tenant in the domain. Only `vars` is allowed,
 #       because the URL must be fixed before a run starts (D-2.17).
 base_url: "https://{{vars.domain}}.example-platform.com"
+
+# ---- FR-1 AUTH: how the engine logs in ----
 
 # WHAT: how the engine logs in. REQUIRED. One auth block per config.
 # WHY:  every auth block names its secret with `secret:`. The value is looked up
@@ -115,6 +128,8 @@ auth:
   # WHAT: the NAME of the secret, never its value. Letters, digits, underscores.
   secret: example_token
 
+# ---- FR-7 RETRIES and FR-8 RATE LIMITS: shared defaults (built in) ----
+
 # WHAT: settings shared by every action. Optional. Any action can override them.
 # WHY:  the engine already has these as BUILT-IN defaults, so a config with no
 #       `defaults` block still retries, waits on 429 and quarantines. Use this
@@ -123,9 +138,9 @@ defaults:
   timeout_seconds: 30
   headers: { Accept: "application/json" }
   retry:
-    # 3 attempts in total, waiting 1, 2 then 4 seconds. Retries timeouts, dropped
+    # Up to 3 retries after the first try, waiting 1, 2 then 4 seconds. Retries timeouts, dropped
     # connections and 5xx. NEVER 4xx: a wrong key or bad request would only repeat.
-    max_attempts: 3
+    max_retries: 3
     backoff_seconds: [1, 2, 4]
     retry_on: [timeout, connection_error, "5xx"]
   rate_limit:
@@ -136,6 +151,8 @@ defaults:
     # WHAT: minimum gap between requests to this service. Default: none.
     # WHY:  slows the engine down BEFORE a 429, not only after one (D-2.20).
     min_interval_ms: 100
+
+# ---- FR-10 HEALTH: alert after repeated failures (bonus B-4) ----
 
 # WHAT: an email alert for repeated failures. Optional (bonus B-4).
 # WHY:  one email is sent when the number of failed runs in a row reaches
@@ -173,12 +190,7 @@ actions:
     #       fields below must be that schema's fields (D-3).
     target_schema: user
 
-    # WHAT: how often the scheduler runs this pull. `every <N><unit>`, unit s, m,
-    #       h or d. Minimum 10 seconds. PULL ONLY.
-    # WHY:  plain words are easy to read, and the 10-second floor lets the demo
-    #       run fast enough to watch. No cron in v1 (D-2.9).
-    schedule: every 5m
-
+    # ---- FR-2 REQUEST: endpoint, method, query ----
     # WHAT: the HTTP call. `method` and `path` are required, the rest optional.
     # WHY:  {{vars.x}} fills the page size. {{input.x}} is NOT allowed here,
     #       because this is a pull.
@@ -189,6 +201,7 @@ actions:
       headers: {}
       # body: { ... }   # for POST requests
 
+    # ---- FR-3 PAGINATION: four styles, at least two required ----
     # WHAT: how to ask for the next page. PULL ONLY.
     # WHY:  four styles are defined. At least two must work (FR-3). `max_pages`
     #       (default 100) stops a misbehaving service from looping forever (D-2.8).
@@ -203,6 +216,14 @@ actions:
       #   { type: page_number, param: page, start: 1, stop_when_empty: true }
       #   { type: cursor, cursor_param: after, next_cursor_path: meta.next }
 
+    # ---- FR-4 SCHEDULE: how often it runs ----
+    # WHAT: how often the scheduler runs this pull. `every <N><unit>`, unit s, m,
+    #       h or d. Minimum 10 seconds. PULL ONLY.
+    # WHY:  plain words are easy to read, and the 10-second floor lets the demo
+    #       run fast enough to watch. No cron in v1 (D-2.9).
+    schedule: every 5m
+
+    # ---- FR-5 MAPPING: nested paths, value maps, dates ----
     # WHAT: where the list of records sits in the response (JMESPath).
     # WHY:  "@" means the response itself is the list. Some services wrap it,
     #       for example `data.items`. JMESPath is used for EVERY path, so the
@@ -241,6 +262,7 @@ actions:
         transform: datetime
         # format: "%d/%m/%Y %H:%M"
 
+    # ---- FR-9 BAD DATA: required fields and what to do with bad records ----
     # WHAT: our fields every record MUST have, beyond the platform minimum
     #       (`id` and `source`). Every name must exist in `map`.
     # WHY:  a config can ADD to the minimum, never remove from it (D-3.4).
@@ -253,6 +275,7 @@ actions:
     #       drop hides problems, so quarantine is the default (D-2.12, D-4).
     on_invalid: quarantine
 
+    # ---- FR-11 STORAGE: save into the common schema ----
     # WHAT: whether results are saved. Default true.
     # WHY:  `false` returns a result without saving it (D-2.4).
     store: true
@@ -277,8 +300,8 @@ actions:
   list_alerts:
     mode: pull
     target_schema: alert
-    schedule: every 1m
 
+    # ---- FR-2 REQUEST ----
     request:
       method: GET
       path: /api/v1/events
@@ -288,6 +311,7 @@ actions:
       #       arithmetic (D-2.19).
       query: { since: "{{now - 24h}}", until: "{{now}}" }
 
+    # ---- FR-3 PAGINATION ----
     pagination:
       type: offset
       offset_param: offset
@@ -296,6 +320,10 @@ actions:
       total_path: meta.total   # optional: lets the engine know when to stop
       max_pages: 20
 
+    # ---- FR-4 SCHEDULE ----
+    schedule: every 1m
+
+    # ---- FR-5 MAPPING: records_path, body-level error check, field map ----
     records_path: events
 
     # WHAT: a condition on the response BODY that means "this is an error",
@@ -316,15 +344,17 @@ actions:
       timestamp: { path: time, transform: datetime }
       description: message
 
+    # ---- FR-9 BAD DATA ----
     required: [id, timestamp]
 
     # `skip` instead of `quarantine`: an unreadable alert is dropped, only counted.
     on_invalid: skip
 
+    # ---- FR-7 RETRY and FR-8 RATE LIMIT: per-action overrides ----
     # WHAT: overrides of `defaults` for THIS action only.
     # WHY:  alerts are fetched often, so ask for a larger retry budget and a
     #       longer gap between requests than the rest of the config (D-2.10, D-2.20).
-    retry: { max_attempts: 5 }
+    retry: { max_retries: 5 }
     rate_limit: { min_interval_ms: 500 }
 
   # ===========================================================================
@@ -350,6 +380,7 @@ actions:
       # ip:     { type: ip,     required: false }
       # limit:  { type: int,    required: false }
 
+    # ---- FR-2 REQUEST ----
     request:
       method: GET
       # WHAT: {{input.x}} fills the path from the caller's value. Allowed ONLY
@@ -359,6 +390,7 @@ actions:
 
     # No `schedule`, `pagination` or `incremental`: those are pull-only.
     # "@" means the whole response IS the record.
+    # ---- FR-5 MAPPING ----
     records_path: "@"
 
     map:
@@ -370,8 +402,10 @@ actions:
       owner: "owner.name || 'unassigned'"
       last_seen: { path: lastSeen, transform: datetime }
 
+    # ---- FR-9 BAD DATA ----
     required: [id]
     on_invalid: quarantine
 
+    # ---- FR-11 STORAGE ----
     # Return the answer to the caller without saving it (D-2.4).
     store: false

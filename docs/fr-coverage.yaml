@@ -1,0 +1,163 @@
+# =============================================================================
+# FR COVERAGE: each must-have requirement, in order, and how the config
+# file handles it.
+# =============================================================================
+# Read top to bottom: FR-1, FR-2, ... FR-11.
+# For each one:
+#   requirement : what the organizers asked for
+#   config      : which config field(s) deliver it, with a small example
+#   engine      : what the platform does at run time (not written in the config)
+#   verified_by : how we prove it works (from the Checkpoint 3 table in roadmap.md)
+#   decisions   : where the choice is logged in docs/decisions.md
+# Examples use the fictional config in docs/reference-config.yaml.
+# =============================================================================
+
+FR-1:
+  requirement: "Auth: API key plus one more type"
+  config:
+    fields: [auth.type, auth.secret, auth.in, auth.name, auth.prefix, auth.username]
+    types:
+      api_key: "A key in a header or the query string. Optional `prefix`, e.g. 'SSWS '."
+      bearer: "Authorization: Bearer <token>"
+      basic: "Username (in the file) plus a password or token (a secret)."
+      oauth2_client_credentials: "Reserved in the schema, not implemented. Rejected as 'not supported yet'."
+    example:
+      auth: { type: api_key, in: header, name: Authorization, prefix: "Token ", secret: example_token }
+  engine: "Auth handlers add the header or query parameter when the request is built."
+  verified_by: "GitHub (bearer), Jira (basic), Okta (api key with an SSWS prefix)"
+  decisions: [D-2.3, D-2.16]
+
+FR-2:
+  requirement: "Endpoints, method, query params"
+  config:
+    fields: [base_url, actions.<name>.request.method, .path, .query, .headers, .body]
+    example:
+      base_url: "https://{{vars.domain}}.example-platform.com"
+      request: { method: GET, path: /api/v1/users, query: { limit: "{{vars.page_size}}" } }
+    placeholders:
+      "{{vars.x}}": "static settings, allowed in base_url and request"
+      "{{input.x}}": "caller value, allowed only in a lookup action"
+      "{{now}}, {{now - 24h}}": "time values for since/until style queries"
+  engine: "Request builder fills the placeholders, then sends the call with a timeout."
+  verified_by: "Any template"
+  decisions: [D-2.5, D-2.17, D-2.19]
+
+FR-3:
+  requirement: "Pagination, at least two styles"
+  config:
+    fields: [actions.<name>.pagination.type, .max_pages]
+    styles:
+      page_number: { fields: [param, start, stop_when_empty] }
+      offset: { fields: [offset_param, limit_param, limit, total_path] }
+      cursor: { fields: [cursor_param, next_cursor_path] }
+      next_link: { fields: [source, header, path] }
+    example:
+      pagination: { type: offset, offset_param: offset, limit_param: limit, limit: 100, max_pages: 20 }
+  engine: "Loops page by page until the end. Stops at max_pages (default 100) so a bad service cannot loop forever."
+  verified_by: "GitHub (next link), Jira (offset). Aim for all four."
+  decisions: [D-2.8]
+
+FR-4:
+  requirement: "Schedule"
+  config:
+    fields: [actions.<name>.schedule]
+    format: "every <N><unit>, unit s, m, h or d. Minimum 10 seconds."
+    example:
+      schedule: every 5m
+    notes: "Pull actions only. A lookup runs on demand and has no schedule."
+  engine: "The scheduler parses the text and runs the saved pull on time."
+  verified_by: "A pull running every minute"
+  decisions: [D-2.9]
+
+FR-5:
+  requirement: "Mapping, nested values, dates"
+  config:
+    fields: [records_path, map, map.<field>.path, .transform, .value_map, .default, .format]
+    features:
+      nested_values: "JMESPath paths such as profile.email or networkInterfaces[0].address"
+      fallback: "'profile.displayName || profile.login' uses the first one that exists"
+      transforms: [string, int, float, bool, lowercase, uppercase, datetime]
+      value_map: "Turns the service's words into our fixed list, with a default."
+      dates: "datetime accepts ISO 8601 or epoch seconds/milliseconds and always outputs ISO 8601 UTC."
+    example:
+      records_path: "@"
+      map:
+        email: { path: profile.email, transform: lowercase }
+        last_login: { path: lastLoginAt, transform: datetime }
+  engine: "Extractor finds the record list, the normalizer applies each map entry."
+  verified_by: "Alert timestamp, device last_seen, user last_login conversion (Okta)"
+  decisions: [D-2.6, D-2.7]
+
+FR-6:
+  requirement: "Secrets safe"
+  config:
+    fields: [auth.secret, requires.secrets]
+    rule: "The file holds only the NAME of a secret, never its value. A value that looks like a key is rejected."
+    example:
+      requires: { secrets: [example_token] }
+      auth: { secret: example_token }
+  engine: "get_secret(name) reads it at run time. Phase 1 uses environment variables, Phase 2 an encrypted write-only store (PUT /secrets/{name})."
+  verified_by: "Log and database audit, plus the secret scanner"
+  decisions: [D-2.3, D-7]
+
+FR-7:
+  requirement: "Retries with backoff"
+  config:
+    fields: [defaults.retry.max_retries, defaults.retry.backoff_seconds, defaults.retry.retry_on, actions.<name>.retry]
+    example:
+      defaults: { retry: { max_retries: 3, backoff_seconds: [1, 2, 4], retry_on: [timeout, connection_error, "5xx"] } }
+    notes: "Optional. These are also the built-in defaults, so a config with no defaults block still retries."
+  engine: "Retries timeouts, connection errors and 5xx with backoff. Never retries 4xx."
+  verified_by: "Flaky mock endpoint"
+  decisions: [D-2.10, D-2.20]
+
+FR-8:
+  requirement: "Rate limits and Retry-After"
+  config:
+    fields: [defaults.rate_limit.max_wait_seconds, defaults.rate_limit.min_interval_ms, actions.<name>.rate_limit]
+    example:
+      defaults: { rate_limit: { max_wait_seconds: 60, min_interval_ms: 100 } }
+    notes: "Optional. Built-in default max_wait_seconds is 60."
+  engine: "On HTTP 429 waits for Retry-After (or the backoff if missing). If the wait exceeds max_wait_seconds the run fails with rate_limited. min_interval_ms spaces requests before a 429 happens."
+  verified_by: "Rate-limited mock endpoint"
+  decisions: [D-2.11, D-2.20]
+
+FR-9:
+  requirement: "Bad data quarantine"
+  config:
+    fields: [actions.<name>.required, actions.<name>.on_invalid, actions.<name>.error_when]
+    values:
+      quarantine: "Default. Save the bad record with the reason and the original."
+      skip: "Drop it, still counted as invalid."
+    example:
+      required: [id, email]
+      on_invalid: quarantine
+    notes: "A config can add required fields, never remove the minimum (id and source). error_when catches APIs that answer HTTP 200 with an error body."
+  engine: "A record that fails mapping or required checks is quarantined. The run continues and reports e.g. '3 of 500 invalid'."
+  verified_by: "Dirty mock dataset"
+  decisions: [D-2.12, D-2.15, D-3.4, D-4]
+
+FR-10:
+  requirement: "Health view"
+  config:
+    fields: [enabled, alerts.after_failures, alerts.to]
+    example:
+      enabled: true
+      alerts: { after_failures: 3, to: ["secops@example.com"] }
+    notes: "The health view itself needs no config. Only the optional failure email (bonus B-4) and the enabled switch live in the file."
+  engine: "Every run writes a run record (duration, pages, counts, retries, error). Health is computed per connection: status, last run, records pulled, last error, consecutive_failures. A disabled connection shows as disabled."
+  verified_by: "Dashboard list"
+  decisions: [D-5]
+
+FR-11:
+  requirement: "One store, common schema"
+  config:
+    fields: [actions.<name>.target_schema, actions.<name>.store, actions.<name>.map]
+    schemas: [user, device, alert]
+    example:
+      target_schema: user
+      store: true
+    notes: "target_schema is set per action, so one config can fill several tables. store: false returns a lookup result without saving it."
+  engine: "Records are upserted on (source, id) into the users, devices or alerts table. The platform adds source and fetched_at itself."
+  verified_by: "users table with three sources, devices and alerts tables from Okta"
+  decisions: [D-2.2, D-2.4, D-3]

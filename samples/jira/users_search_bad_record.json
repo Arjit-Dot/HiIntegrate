@@ -1,0 +1,12 @@
+[
+  {
+    "accountId": "5b10a1",
+    "displayName": "Grace Hopper",
+    "emailAddress": "grace@acme.com",
+    "active": true
+  },
+  {
+    "displayName": "Orphan Account",
+    "active": true
+  }
+]

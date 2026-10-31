@@ -1,0 +1,9 @@
+{
+  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5b10a1",
+  "accountId": "5b10a1",
+  "accountType": "atlassian",
+  "displayName": "Grace Hopper",
+  "emailAddress": "Grace@Acme.com",
+  "active": true,
+  "timeZone": "Europe/London"
+}

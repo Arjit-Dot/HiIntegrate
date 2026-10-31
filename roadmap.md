@@ -95,7 +95,7 @@ Confirm every field name, whether it is required, and its allowed values.
 - **Transforms:** `string`, `int`, `float`, `bool`, `lowercase`, `uppercase`, `datetime`. `datetime` auto-detects ISO 8601 and epoch seconds or milliseconds, accepts an optional `format`, and always outputs ISO 8601 UTC `[FR-5]`.
 - **Pagination types `[FR-3]`:** `page_number` (`param`, `start`, `stop_when_empty`), `offset` (`offset_param`, `limit_param`, `limit`, optional `total_path`), `cursor` (`cursor_param`, `next_cursor_path`), `next_link` (`source: header|body`, `header` or `path`). Default `max_pages` is 100.
 - **Schedule grammar `[FR-4]`:** `every <N><unit>` with unit `s`, `m`, `h`, or `d`. Minimum interval 10 seconds (so the demo can run fast). The frontend offers a number-plus-unit picker, and the backend still validates the format.
-- **Retry defaults `[FR-7]`:** 3 attempts, backoff `[1, 2, 4]` seconds, on timeouts, connection errors (reset, DNS failure), and 5xx. Never on 4xx. Built into the engine, so a config with no `defaults` block still behaves reliably (this needs an explicit test).
+- **Retry defaults `[FR-7]`:** up to 3 retries after the first try (`max_retries`), waiting `[1, 2, 4]` seconds (the last wait repeats if there are more retries), on timeouts, connection errors (reset, DNS failure), and 5xx. Never on 4xx. Built into the engine, so a config with no `defaults` block still behaves reliably (this needs an explicit test).
 - **Rate limit defaults `[FR-8]`:** on HTTP 429 wait for `Retry-After`, then retry. If the header is missing, use the retry backoff. If the wait exceeds `max_wait_seconds` (default 60), fail the run with `rate_limited`. A `rate_limit` block (in `defaults` or per action) also takes `min_interval_ms`, a minimum gap between requests to the same service.
 - **`on_invalid` values `[FR-9]`:** `quarantine` (default) or `skip`.
 - **Input types for lookups:** `string`, `int`, `ip` (IPv4 or IPv6), `domain`, `hash`, `enum`. Which hash kinds are accepted is still open.
@@ -249,11 +249,11 @@ Used by both people as the shared truth:
 9. Template notes: `github.yaml` uses `requires` (org, token); `jira.yaml` uses a `base_url` placeholder and `requires`; `okta.yaml` is the second full config and uses `auth.prefix`, a `base_url` placeholder, `requires`, a time placeholder, and three actions with different `target_schema` values
 
 ### Phase 0 exit checklist
-- [ ] D-1 to D-11 written in `docs/decisions.md`
+- [x] D-1 to D-11 written in `docs/decisions.md`
 - [ ] Access confirmed: GitHub token, Jira API token, and an Okta developer org with an API token, at least one enrolled device, and some System Log events
-- [ ] `integration.schema.json`, `result.schema.json`, and `openapi.yaml` committed
-- [ ] Prism mock runs from `openapi.yaml`
-- [ ] Golden fixtures committed
+- [x] `integration.schema.json`, `result.schema.json`, and `openapi.yaml` written (`schema/`). `npm run check` passes and the OpenAPI file lints clean
+- [x] Prism mock runs from `openapi.yaml` (checked: it serves the routes on port 4010, without the `/api/v1` prefix)
+- [x] Golden fixtures written (`samples/`, `templates/`, `docs/examples/`). The samples are synthetic, so replace them with real captures once access is confirmed
 - [ ] Both people have read both drafts and signed off
 - [ ] Commit tagged `contract-v1`
 

@@ -1,0 +1,103 @@
+{
+  "base-url-input-placeholder.yaml": [
+    {
+      "path": "base_url",
+      "message": "may only contain {{vars.x}} placeholders, and must start with http:// or https://",
+      "severity": "error"
+    }
+  ],
+  "input-in-pull.yaml": [
+    {
+      "path": "actions.list_users.request.path",
+      "message": "{{input.id}} is allowed only in lookup actions",
+      "severity": "error"
+    }
+  ],
+  "lookup-missing-inputs.yaml": [
+    {
+      "path": "actions.get_user.inputs",
+      "message": "is required",
+      "severity": "error"
+    }
+  ],
+  "missing-id-map.yaml": [
+    {
+      "path": "actions.list_users.map.id",
+      "message": "is required",
+      "severity": "error"
+    }
+  ],
+  "pull-has-inputs.yaml": [
+    {
+      "path": "actions.list_users.inputs",
+      "message": "is not allowed here (wrong mode or auth type)",
+      "severity": "error"
+    }
+  ],
+  "required-not-in-map.yaml": [
+    {
+      "path": "actions.list_users.required",
+      "message": "last_login is listed in required but is not in map",
+      "severity": "error"
+    }
+  ],
+  "reserved-oauth2.yaml": [
+    {
+      "path": "auth.type",
+      "message": "oauth2_client_credentials is reserved and not supported yet",
+      "severity": "error"
+    }
+  ],
+  "schedule-too-fast.yaml": [
+    {
+      "path": "actions.list_users.schedule",
+      "message": "must look like \"every 10s\", \"every 5m\", \"every 2h\" or \"every 1d\" (minimum 10 seconds)",
+      "severity": "error"
+    }
+  ],
+  "secret-is-a-key.yaml": [
+    {
+      "path": "auth.secret",
+      "message": "must be a name (letters, digits, underscores, up to 64), not a key",
+      "severity": "error"
+    }
+  ],
+  "several-problems.yaml": [
+    {
+      "path": "auth.secret",
+      "message": "must be a name (letters, digits, underscores, up to 64), not a key",
+      "severity": "error"
+    },
+    {
+      "path": "actions.list_users.pagnation",
+      "message": "is not a known key",
+      "severity": "error"
+    },
+    {
+      "path": "actions.list_users.schedule",
+      "message": "must look like \"every 10s\", \"every 5m\", \"every 2h\" or \"every 1d\" (minimum 10 seconds)",
+      "severity": "error"
+    }
+  ],
+  "typo-pagination.yaml": [
+    {
+      "path": "actions.list_users.pagnation",
+      "message": "is not a known key",
+      "severity": "error"
+    }
+  ],
+  "unknown-placeholder-scope.yaml": [
+    {
+      "path": "actions.list_users.request.path",
+      "message": "unknown placeholder {{secrets.k}}. Use vars, input, state or now",
+      "severity": "error"
+    }
+  ],
+  "wrong-schema-field.yaml": [
+    {
+      "path": "actions.list_users.map.username",
+      "message": "is not a field of the target schema",
+      "severity": "error"
+    }
+  ]
+}

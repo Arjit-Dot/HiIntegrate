@@ -1,0 +1,435 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hiintegrate.local/schema/result.schema.json",
+  "title": "Normalized results and run data",
+  "description": "The shapes the platform stores and returns: the three record types (user, device, alert), quarantine records, run records and health. A record is identified by (source, id). The platform sets source, fetched_at and raw. The config's map sets the rest.",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/user"
+    },
+    {
+      "$ref": "#/$defs/device"
+    },
+    {
+      "$ref": "#/$defs/alert"
+    }
+  ],
+  "$defs": {
+    "user": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source",
+        "fetched_at"
+      ],
+      "description": "A person. Table: users. Identity: (source, id).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID in the source system. Required."
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "The integration name. Set by the platform. Required."
+        },
+        "fetched_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "When the platform fetched the record. Set by the platform. Required."
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[^A-Z]*$",
+          "description": "Lowercased."
+        },
+        "status": {
+          "enum": [
+            "active",
+            "inactive",
+            "suspended",
+            "unknown",
+            null
+          ]
+        },
+        "last_login": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "ISO 8601 UTC, or null when the service does not supply it."
+        },
+        "raw": {
+          "type": "object",
+          "description": "The original record, kept for debugging. Set by the platform. Optional."
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source",
+        "fetched_at"
+      ],
+      "description": "A device. Table: devices. Identity: (source, id).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID in the source system. Required."
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "The integration name. Set by the platform. Required."
+        },
+        "fetched_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "When the platform fetched the record. Set by the platform. Required."
+        },
+        "hostname": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_seen": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "ISO 8601 UTC, or null when the service does not supply it."
+        },
+        "raw": {
+          "type": "object",
+          "description": "The original record, kept for debugging. Set by the platform. Optional."
+        }
+      }
+    },
+    "alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source",
+        "fetched_at"
+      ],
+      "description": "An event or alert. Table: alerts. Identity: (source, id).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID in the source system. Required."
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "The integration name. Set by the platform. Required."
+        },
+        "fetched_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "When the platform fetched the record. Set by the platform. Required."
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical",
+            "unknown",
+            null
+          ]
+        },
+        "timestamp": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "ISO 8601 UTC, or null when the service does not supply it."
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw": {
+          "type": "object",
+          "description": "The original record, kept for debugging. Set by the platform. Optional."
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "auth_failed",
+            "connection_error",
+            "timeout",
+            "server_error",
+            "rate_limited",
+            "bad_response",
+            "api_error",
+            "client_error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "quarantine_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "action",
+        "target_schema",
+        "run_id",
+        "raw",
+        "reason",
+        "field",
+        "created_at"
+      ],
+      "description": "A record that failed the rules, kept with the reason. The run carried on without it.",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "target_schema": {
+          "enum": [
+            "user",
+            "device",
+            "alert"
+          ]
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "raw": {
+          "description": "The original record, untouched."
+        },
+        "reason": {
+          "enum": [
+            "missing_required_field",
+            "transform_failed",
+            "invalid_value"
+          ]
+        },
+        "field": {
+          "type": "string",
+          "description": "Our field that caused it."
+        },
+        "created_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "ISO 8601 UTC."
+        }
+      }
+    },
+    "run_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "integration",
+        "action",
+        "mode",
+        "trigger",
+        "status",
+        "started_at",
+        "finished_at",
+        "duration_ms",
+        "pages_fetched",
+        "records_pulled",
+        "records_valid",
+        "records_invalid",
+        "retries",
+        "error"
+      ],
+      "description": "One row per run. Feeds run history and health.",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "integration": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "pull",
+            "lookup"
+          ]
+        },
+        "trigger": {
+          "enum": [
+            "schedule",
+            "manual",
+            "test"
+          ]
+        },
+        "status": {
+          "enum": [
+            "running",
+            "success",
+            "failed"
+          ]
+        },
+        "started_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "ISO 8601 UTC."
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "ISO 8601 UTC, or null when the service does not supply it."
+        },
+        "duration_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "pages_fetched": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "records_pulled": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "records_valid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "records_invalid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/error"
+            }
+          ],
+          "description": "Null unless the run failed."
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "last_run_at",
+        "records_pulled",
+        "last_error",
+        "consecutive_failures"
+      ],
+      "description": "One label per connection, from the latest finished scheduled or manual run. Test runs are ignored. 'disabled' overrides the rest.",
+      "properties": {
+        "status": {
+          "enum": [
+            "never_run",
+            "healthy",
+            "degraded",
+            "failing",
+            "disabled"
+          ]
+        },
+        "last_run_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "description": "ISO 8601 UTC, or null when the service does not supply it."
+        },
+        "records_pulled": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_error": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/error"
+            }
+          ]
+        },
+        "consecutive_failures": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

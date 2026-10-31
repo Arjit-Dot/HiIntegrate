@@ -1,0 +1,61 @@
+version: 1
+name: github
+display_name: "GitHub"
+category: identity
+description: "Lists the members of a GitHub organization and looks up one user. Not yet verified against a live account."
+enabled: true
+
+vars:
+  org: "my-org"
+
+requires:
+  vars:
+    org: { label: "GitHub organization", example: "my-org" }
+  secrets: [github_token]
+
+base_url: "https://api.github.com"
+
+auth: { type: bearer, secret: github_token }
+
+defaults:
+  headers:
+    Accept: "application/vnd.github+json"
+    X-GitHub-Api-Version: "2022-11-28"
+
+actions:
+  list_members:
+    mode: pull
+    target_schema: user
+    schedule: every 15m
+    request:
+      method: GET
+      path: "/orgs/{{vars.org}}/members"
+      query: { per_page: 100 }
+    pagination:
+      type: next_link
+      source: header
+      header: Link
+      max_pages: 100
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      name: login
+      status: { default: active }
+    required: [id]
+    on_invalid: quarantine
+
+  get_user:
+    mode: lookup
+    target_schema: user
+    inputs:
+      username: { type: string, required: true }
+    request: { method: GET, path: "/users/{{input.username}}" }
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      name: "name || login"
+      email: { path: email, transform: lowercase }
+      status: { default: active }
+    required: [id]
+    on_invalid: quarantine
+    store: false

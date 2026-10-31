@@ -1,0 +1,34 @@
+[
+  {
+    "id": "guo1laptop",
+    "status": "ACTIVE",
+    "created": "2025-02-01T09:00:00.000Z",
+    "lastUpdated": "2026-01-01T09:00:00.000Z",
+    "profile": {
+      "displayName": "ada-laptop",
+      "platform": "MACOS",
+      "manufacturer": "Example Corp",
+      "model": "MacBook Pro",
+      "osVersion": "15.0",
+      "serialNumber": "SN-GUO1LAPTOP",
+      "registered": true,
+      "secureHardwarePresent": true
+    }
+  },
+  {
+    "id": "guo1phone",
+    "status": "ACTIVE",
+    "created": "2025-02-01T09:00:00.000Z",
+    "lastUpdated": "2025-12-31T18:44:00.000Z",
+    "profile": {
+      "displayName": "alan-phone",
+      "platform": "IOS",
+      "manufacturer": "Example Corp",
+      "model": "iPhone 16",
+      "osVersion": "19.0",
+      "serialNumber": "SN-GUO1PHONE",
+      "registered": true,
+      "secureHardwarePresent": true
+    }
+  }
+]

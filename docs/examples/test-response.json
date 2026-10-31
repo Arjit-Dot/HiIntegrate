@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "status_code": 200,
+  "latency_ms": 312,
+  "pages_fetched": 1,
+  "raw_sample": {
+    "login": "ada-l",
+    "id": 4021,
+    "type": "User"
+  },
+  "mapped_sample": {
+    "id": "4021",
+    "name": "ada-l",
+    "status": "active",
+    "source": "github",
+    "fetched_at": "2026-01-01T09:05:00Z"
+  },
+  "missing_paths": [],
+  "notes": [
+    "Only the first page was fetched.",
+    "email is not in the members list, so it stays empty. Use get_user for it."
+  ]
+}

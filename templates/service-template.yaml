@@ -1,0 +1,41 @@
+# The base template for any service. Copy it, change the lines marked CHANGE,
+# and delete what you don't need. Every field is explained in
+# docs/reference-config.yaml. The rules are in schema/integration.schema.json.
+
+version: 1
+name: new-service                          # CHANGE: a unique slug. It becomes `source` on every record
+display_name: "New service"                # CHANGE
+category: other                            # identity, threat_intel, ticketing, alerting or other
+description: "One sentence about what this integration does."   # CHANGE
+enabled: true
+
+vars:
+  domain: "acme"                           # CHANGE (or delete vars, requires and the placeholder in base_url)
+
+requires:
+  vars:
+    domain: { label: "Service domain", example: "acme" }
+  secrets: [api_token]
+
+base_url: "https://{{vars.domain}}.example.com"   # CHANGE
+
+auth: { type: bearer, secret: api_token }  # CHANGE: bearer, api_key or basic. The secret is a NAME
+
+actions:
+  list_items:                              # CHANGE: a name for this action
+    mode: pull                             # pull (scheduled, many records) or lookup (on demand, one record)
+    target_schema: user                    # CHANGE: user, device or alert
+    schedule: every 15m
+    request: { method: GET, path: /api/items }   # CHANGE
+    pagination:                            # CHANGE, or delete if the service returns everything at once
+      type: offset
+      offset_param: offset
+      limit_param: limit
+      limit: 100
+    records_path: items                    # CHANGE: where the list sits in the response. "@" means the response itself
+    map:                                   # CHANGE: our field on the left, the path in the response on the right
+      id: { path: id, transform: string }
+      name: name
+      email: { path: email, transform: lowercase }
+    required: [id]
+    on_invalid: quarantine

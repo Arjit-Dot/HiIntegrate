@@ -1,3 +1,9 @@
+# Same config as reference-config.yaml, without the explanations.
+# Arranged by requirement: FR-6 secrets, FR-2 endpoint, FR-1 auth, FR-7/FR-8
+# shared defaults, FR-10 health alert. Each action: FR-2 request, FR-3 pagination,
+# FR-4 schedule, FR-5 mapping, FR-9 bad data, FR-7/FR-8 overrides, FR-11 storage.
+
+# ---- IDENTITY ----
 version: 1
 name: example-platform
 display_name: "Example Platform"
@@ -5,6 +11,7 @@ category: identity
 description: "Fictional platform used to show every field in the config schema."
 enabled: true
 
+# ---- FR-6 SECRETS (names only) ----
 vars:
   domain: "acme"
   page_size: 200
@@ -14,8 +21,10 @@ requires:
     domain: { label: "Tenant domain", example: "acme" }
   secrets: [example_token]
 
+# ---- FR-2 ENDPOINT ----
 base_url: "https://{{vars.domain}}.example-platform.com"
 
+# ---- FR-1 AUTH ----
 auth:
   type: api_key
   in: header
@@ -23,36 +32,47 @@ auth:
   prefix: "Token "
   secret: example_token
 
+# ---- FR-7 RETRIES and FR-8 RATE LIMITS (shared defaults) ----
 defaults:
   timeout_seconds: 30
   headers: { Accept: "application/json" }
   retry:
-    max_attempts: 3
+    max_retries: 3
     backoff_seconds: [1, 2, 4]
     retry_on: [timeout, connection_error, "5xx"]
   rate_limit:
     max_wait_seconds: 60
     min_interval_ms: 100
 
+# ---- FR-10 HEALTH (alert after repeated failures) ----
 alerts:
   after_failures: 3
   to: ["secops@example.com"]
 
 actions:
+  # ===== PULL into the user schema =====
   list_users:
     mode: pull
     target_schema: user
-    schedule: every 5m
+
+    # FR-2 request
     request:
       method: GET
       path: /api/v1/users
       query: { limit: "{{vars.page_size}}" }
       headers: {}
+
+    # FR-3 pagination
     pagination:
       type: next_link
       source: header
       header: Link
       max_pages: 100
+
+    # FR-4 schedule
+    schedule: every 5m
+
+    # FR-5 mapping
     records_path: "@"
     map:
       id: { path: id, transform: string }
@@ -63,18 +83,26 @@ actions:
         value_map: { ACTIVE: active, SUSPENDED: suspended, DEPROVISIONED: inactive }
         default: unknown
       last_login: { path: lastLoginAt, transform: datetime }
+
+    # FR-9 bad data
     required: [id, email]
     on_invalid: quarantine
+
+    # FR-11 storage
     store: true
 
+  # ===== PULL into the alert schema =====
   list_alerts:
     mode: pull
     target_schema: alert
-    schedule: every 1m
+
+    # FR-2 request
     request:
       method: GET
       path: /api/v1/events
       query: { since: "{{now - 24h}}", until: "{{now}}" }
+
+    # FR-3 pagination
     pagination:
       type: offset
       offset_param: offset
@@ -82,6 +110,11 @@ actions:
       limit: 100
       total_path: meta.total
       max_pages: 20
+
+    # FR-4 schedule
+    schedule: every 1m
+
+    # FR-5 mapping
     records_path: events
     error_when: { path: ok, equals: false, message_path: error }
     map:
@@ -93,21 +126,30 @@ actions:
         default: unknown
       timestamp: { path: time, transform: datetime }
       description: message
+
+    # FR-9 bad data
     required: [id, timestamp]
     on_invalid: skip
-    retry: { max_attempts: 5 }
+
+    # FR-7 retry and FR-8 rate limit (overrides)
+    retry: { max_retries: 5 }
     rate_limit: { min_interval_ms: 500 }
 
+  # ===== LOOKUP into the device schema =====
   get_device:
     mode: lookup
     target_schema: device
     inputs:
       hostname: { type: string, required: true }
       detail: { type: enum, values: [basic, full], required: true }
+
+    # FR-2 request
     request:
       method: GET
       path: "/api/v1/devices/{{input.hostname}}"
       query: { detail: "{{input.detail}}" }
+
+    # FR-5 mapping
     records_path: "@"
     map:
       id: id
@@ -116,6 +158,10 @@ actions:
       os: "os.name"
       owner: "owner.name || 'unassigned'"
       last_seen: { path: lastSeen, transform: datetime }
+
+    # FR-9 bad data
     required: [id]
     on_invalid: quarantine
+
+    # FR-11 storage
     store: false

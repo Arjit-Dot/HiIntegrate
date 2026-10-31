@@ -13,8 +13,11 @@ Be clear about where the project stands.
 | Area | Status |
 |---|---|
 | Design and contract (config schema, output schemas, API, reliability rules, secrets, stack) | Decided and written down |
+| Contract files: the config schema, the output schema and the API (`../schema/`) | **Written and checked.** A reference check passes, the API file lints clean, and a mock server serves it |
+| Service configs for GitHub, Jira and Okta, plus a base template and three starters (`../templates/`) | Written. Not yet verified against live accounts |
+| Sample responses and expected output (`../samples/`, `examples/`) | Written. The samples are synthetic, shaped like each service's documented responses |
 | Annotated reference config | Written ([`reference-config.yaml`](reference-config.yaml)) |
-| Backend, frontend, templates, samples | Implementation follows the roadmap in [`../roadmap.md`](../roadmap.md) |
+| Backend and frontend code | Implementation follows the roadmap in [`../roadmap.md`](../roadmap.md). The dashboard exists as a prototype ([`ui-prototype.html`](ui-prototype.html)) |
 | Live checks against GitHub, Jira and Okta | Not done yet |
 
 We designed the contract first so two people can build in parallel against the same rules. Update this table as the build progresses.
@@ -104,7 +107,7 @@ Every connector gets these behaviors without extra configuration:
 | Situation | Behavior |
 |---|---|
 | Wrong or expired key (401, 403) | Fail at once with a clear message. No retry, because retrying repeats the mistake. |
-| Network drop, timeout, server error | 3 attempts, waiting 1, 2 and 4 seconds. Pages already saved stay saved. |
+| Network drop, timeout, server error | Up to 3 retries, waiting 1, 2 and 4 seconds. Pages already saved stay saved. |
 | Too many requests (429) | Wait for `Retry-After`, fall back to the backoff if the header is missing, and fail clearly if the wait is too long. |
 | Bad record | Quarantine it with a reason and the original record, and carry on with the run. |
 | API replies 200 with an error body | `error_when` fails the run with the message. |
@@ -171,7 +174,7 @@ How the design addresses each requirement. Verification against live services ha
 | FR-4 | Schedule | `every 5m`, 10-second minimum |
 | FR-5 | Mapping, nested values, dates | JMESPath, `value_map`, `datetime` |
 | FR-6 | Secrets safe | Names only, encrypted store, write-only API, redaction, Git rules |
-| FR-7 | Retries | 3 attempts with backoff |
+| FR-7 | Retries | Up to 3 retries with backoff |
 | FR-8 | Rate limits | `Retry-After` handling and an optional throttle |
 | FR-9 | Bad data | Quarantine with reason |
 | FR-10 | Health view | Five statuses and a run record per run |

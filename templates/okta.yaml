@@ -1,0 +1,130 @@
+version: 1
+name: okta
+display_name: "Okta"
+category: identity
+description: "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account."
+enabled: true
+
+vars:
+  domain: "acme"
+
+requires:
+  vars:
+    domain: { label: "Okta domain (the part before .okta.com)", example: "acme" }
+  secrets: [okta_token]
+
+base_url: "https://{{vars.domain}}.okta.com"
+
+auth: { type: api_key, in: header, name: Authorization, prefix: "SSWS ", secret: okta_token }
+
+defaults:
+  headers: { Accept: "application/json" }
+
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    schedule: every 15m
+    request: { method: GET, path: /api/v1/users, query: { limit: 200 } }
+    pagination: { type: next_link, source: header, header: Link, max_pages: 100 }
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      name: "profile.displayName || profile.login"
+      email: { path: profile.email, transform: lowercase }
+      status:
+        path: status
+        value_map:
+          ACTIVE: active
+          RECOVERY: active
+          PASSWORD_EXPIRED: active
+          SUSPENDED: suspended
+          LOCKED_OUT: suspended
+          STAGED: inactive
+          PROVISIONED: inactive
+          DEPROVISIONED: inactive
+        default: unknown
+      last_login: { path: lastLogin, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
+
+  list_devices:
+    mode: pull
+    target_schema: device
+    schedule: every 15m
+    request: { method: GET, path: /api/v1/devices, query: { limit: 200 } }
+    pagination: { type: next_link, source: header, header: Link, max_pages: 100 }
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      hostname: profile.displayName
+      os: profile.platform
+      last_seen: { path: lastUpdated, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
+
+  list_alerts:
+    mode: pull
+    target_schema: alert
+    schedule: every 5m
+    request:
+      method: GET
+      path: /api/v1/logs
+      query: { since: "{{now - 24h}}", limit: 100 }
+    pagination: { type: next_link, source: header, header: Link, max_pages: 100 }
+    records_path: "@"
+    map:
+      id: { path: uuid, transform: string }
+      type: eventType
+      severity:
+        path: severity
+        value_map: { DEBUG: low, INFO: low, WARN: medium, ERROR: high }
+        default: unknown
+      timestamp: { path: published, transform: datetime }
+      description: displayMessage
+    required: [id, timestamp]
+    on_invalid: quarantine
+
+  get_user:
+    mode: lookup
+    target_schema: user
+    inputs:
+      id: { type: string, required: true }
+    request: { method: GET, path: "/api/v1/users/{{input.id}}" }
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      name: "profile.displayName || profile.login"
+      email: { path: profile.email, transform: lowercase }
+      status:
+        path: status
+        value_map:
+          ACTIVE: active
+          RECOVERY: active
+          PASSWORD_EXPIRED: active
+          SUSPENDED: suspended
+          LOCKED_OUT: suspended
+          STAGED: inactive
+          PROVISIONED: inactive
+          DEPROVISIONED: inactive
+        default: unknown
+      last_login: { path: lastLogin, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
+    store: false
+
+  get_device:
+    mode: lookup
+    target_schema: device
+    inputs:
+      id: { type: string, required: true }
+    request: { method: GET, path: "/api/v1/devices/{{input.id}}" }
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      hostname: profile.displayName
+      os: profile.platform
+      last_seen: { path: lastUpdated, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
+    store: false

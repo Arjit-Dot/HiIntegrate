@@ -1,0 +1,23 @@
+[
+  {
+    "login": "ada-l",
+    "id": 4021,
+    "node_id": "MDQ6VXNlcjQwMjE=",
+    "avatar_url": "https://avatars.example.com/u/4021",
+    "type": "User",
+    "site_admin": false
+  },
+  {
+    "login": "ghost-account",
+    "type": "User",
+    "site_admin": false
+  },
+  {
+    "login": "alan-t",
+    "id": 4022,
+    "node_id": "MDQ6VXNlcjQwMjI=",
+    "avatar_url": "https://avatars.example.com/u/4022",
+    "type": "User",
+    "site_admin": false
+  }
+]

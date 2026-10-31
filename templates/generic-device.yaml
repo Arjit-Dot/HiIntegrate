@@ -1,0 +1,94 @@
+# Starter template for a service that supplies DEVICES.
+# Change the lines marked CHANGE, then add it through the form or the API.
+#
+# The file is arranged by the platform requirements (FR-1 to FR-11), top to bottom:
+#   Identity, then FR-6 secrets, FR-2 request, FR-1 auth, then per action:
+#   FR-2 request, FR-3 pagination, FR-4 schedule, FR-5 mapping,
+#   FR-9 bad data, FR-11 storage.
+# FR-7 retries and FR-8 rate limits are built in, so this file needs no block for them.
+
+# ---- IDENTITY: who this integration is --------------------------------------
+version: 1
+name: generic-device                       # CHANGE: a unique slug for your service
+display_name: "Generic device source"      # CHANGE
+category: other
+description: "Starter for any service that lists devices. Copy it and change the marked lines."
+enabled: true
+
+# ---- FR-6 SECRETS: what the user must supply (names only, never values) -----
+vars:
+  domain: "acme"                         # CHANGE
+requires:
+  vars:
+    domain: { label: "Service domain", example: "acme" }
+  secrets: [api_token]
+
+# ---- FR-2 ENDPOINT: the service's root URL ----------------------------------
+base_url: "https://{{vars.domain}}.example.com"   # CHANGE
+
+# ---- FR-1 AUTH: how to log in (the secret is referenced by name) ------------
+auth: { type: bearer, secret: api_token }
+
+actions:
+  # ===== PULL: runs on a schedule, many records ==============================
+  list_devices:
+    mode: pull
+    target_schema: device
+
+    # FR-2 request: method, path, query
+    request:
+      method: GET
+      path: /api/devices                           # CHANGE
+    # FR-3 pagination: how to get the next page
+    pagination:
+      type: offset
+      offset_param: offset
+      limit_param: limit
+      limit: 100
+      max_pages: 100
+
+    # FR-4 schedule: how often to run
+    schedule: every 15m
+
+    # FR-5 mapping: their fields to our device fields
+    records_path: items                           # CHANGE
+    map:                                          # CHANGE each path on the right
+      id: { path: id, transform: string }
+      hostname: hostname
+      ip: ip_address
+      os: os
+      owner: owner
+      last_seen: { path: last_seen, transform: datetime }
+
+    # FR-9 bad data: which fields must exist, and what to do with a bad record
+    required: [id]
+    on_invalid: quarantine
+
+    # FR-11 storage: saved into the common device table (default, so not written here)
+
+  # ===== LOOKUP: one record on demand ========================================
+  get_device:
+    mode: lookup
+    target_schema: device
+    inputs:
+      id: { type: string, required: true }
+
+    # FR-2 request
+    request: { method: GET, path: "/api/devices/{{input.id}}" }   # CHANGE
+
+    # FR-5 mapping
+    records_path: "@"
+    map:                                          # CHANGE each path on the right
+      id: { path: id, transform: string }
+      hostname: hostname
+      ip: ip_address
+      os: os
+      owner: owner
+      last_seen: { path: last_seen, transform: datetime }
+
+    # FR-9 bad data
+    required: [id]
+    on_invalid: quarantine
+
+    # FR-11 storage: false means return the answer without saving it
+    store: false

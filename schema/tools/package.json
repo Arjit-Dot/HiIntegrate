@@ -1,0 +1,16 @@
+{
+  "name": "contract-tools",
+  "private": true,
+  "type": "module",
+  "description": "Reference checks for the contract: schemas, configs, fixtures and the mapping rules.",
+  "scripts": {
+    "check": "node check-contract.mjs",
+    "write": "node check-contract.mjs --write"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "jmespath": "^0.16.0",
+    "js-yaml": "^4.1.0"
+  }
+}

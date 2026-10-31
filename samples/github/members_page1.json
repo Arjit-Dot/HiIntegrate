@@ -1,0 +1,26 @@
+[
+  {
+    "login": "ada-l",
+    "id": 4021,
+    "node_id": "MDQ6VXNlcjQwMjE=",
+    "avatar_url": "https://avatars.example.com/u/4021",
+    "type": "User",
+    "site_admin": false
+  },
+  {
+    "login": "alan-t",
+    "id": 4022,
+    "node_id": "MDQ6VXNlcjQwMjI=",
+    "avatar_url": "https://avatars.example.com/u/4022",
+    "type": "User",
+    "site_admin": false
+  },
+  {
+    "login": "grace-h",
+    "id": 4023,
+    "node_id": "MDQ6VXNlcjQwMjM=",
+    "avatar_url": "https://avatars.example.com/u/4023",
+    "type": "User",
+    "site_admin": false
+  }
+]
