@@ -2,7 +2,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Editor from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
 import { api, ApiError, type Config, type SecretInfo, type TestResponse } from '../api/client'
@@ -30,6 +30,7 @@ export default function AddEdit() {
   const [issues, setIssues] = useState<Issue[]>([])
   const [validating, setValidating] = useState(false)
   const [secrets, setSecrets] = useState<SecretInfo[]>([])
+  const [taken, setTaken] = useState<string[]>([])               // names already used, so a clash is caught before Save
   const [test, setTest] = useState<TestResponse | null>(null)
   const [testErr, setTestErr] = useState('')
   const [testInputs, setTestInputs] = useState('{\n  "id": "1"\n}')
@@ -42,6 +43,7 @@ export default function AddEdit() {
   })
 
   useEffect(() => { api.listSecrets().then(r => setSecrets(r.items)).catch(() => {}) }, [])
+  useEffect(() => { api.listIntegrations().then(r => setTaken(r.items.map(i => i.name))).catch(() => {}) }, [])
   useEffect(() => {
     if (!id) return
     api.getIntegration(id).then(r => {
@@ -54,11 +56,14 @@ export default function AddEdit() {
   // "Use this template" (D-15: a template is only a starting point, so saving creates a NEW integration).
   useEffect(() => {
     if (id || !templateId) return
-    api.getTemplate(templateId).then(r => {
+    Promise.all([api.getTemplate(templateId), api.listIntegrations().then(r => r.items.map(i => i.name)).catch(() => [] as string[])]).then(([r, names]) => {
       const c = r.config as Config
       setBase(c); setRequires(c.requires)
       const st = configToState(c)
-      setS(st); setEditedAction(st.actionName)
+      // The template's own name may already be an integration. Suggest a free one (github, github-2, github-3, ...).
+      let name = st.name, n = 2
+      while (names.includes(name)) name = `${st.name}-${n++}`
+      setS({ ...st, name }); setEditedAction(st.actionName)
     }).catch(e => setLoadError(e.message))
   }, [id, templateId])
 
@@ -96,6 +101,7 @@ export default function AddEdit() {
     if (!(await runValidate())) { setPane('validate'); return null }
     const cfg = parsed.config!
     const name = String(cfg.name)
+    if (!id && !exists && taken.includes(name)) { toast(`An integration named ${name} already exists. Pick another name, or edit it.`); return null }
     if (s.secretValue && raw === null) {
       const host = hostOf(s.base_url, s.vars)
       if (!host) { toast('Fill in a valid Base URL first: the secret is pinned to its host.'); return null }
@@ -111,6 +117,7 @@ export default function AddEdit() {
       return name
     } catch (e) {
       if (e instanceof ApiError && e.status === 400) setPane('validate')
+      if (e instanceof ApiError && e.status === 409 && !exists) { setTaken(p => [...p, name]); toast(`An integration named ${name} already exists. Pick another name, or edit it.`); return null }
       toast((e as Error).message)
       return null
     }
@@ -171,7 +178,8 @@ export default function AddEdit() {
           <div className="section">
             <h2><span className="step">1</span>Identity</h2>
             <div className="grid">
-              <div><label className="req">Name</label><input type="text" {...bind('name')} disabled={!!id} /><div className="hint">Slug: lowercase letters, digits, - or _. It becomes the <code>source</code> on every record.{id && ' Cannot change after creation.'}</div></div>
+              <div><label className="req">Name</label><input type="text" {...bind('name')} disabled={!!id} /><div className="hint">Slug: lowercase letters, digits, - or _. It becomes the <code>source</code> on every record.{id && ' Cannot change after creation.'}</div>
+                {!id && !exists && taken.includes(s.name) && <div className="hint err">An integration named <code>{s.name}</code> already exists. Pick another name, or <Link to={`/integrations/${encodeURIComponent(s.name)}/edit`}>edit that one</Link>.</div>}</div>
               <div><label>Display name</label><input type="text" {...bind('display_name')} /></div>
               <div><label>Category</label>
                 <select {...bind('category')}>{['identity', 'threat_intel', 'ticketing', 'alerting', 'other'].map(c => <option key={c}>{c}</option>)}</select></div>
