@@ -6,6 +6,13 @@
       "severity": "error"
     }
   ],
+  "http-base-url.yaml": [
+    {
+      "path": "base_url",
+      "message": "must use https:// (http:// is allowed only for localhost, 127.0.0.1 and mock-api)",
+      "severity": "error"
+    }
+  ],
   "input-in-pull.yaml": [
     {
       "path": "actions.list_users.request.path",

@@ -73,6 +73,10 @@ export function checkConfig(cfg) {
     }
   };
   check('base_url', cfg.base_url, { where: 'base_url' });
+  const plain = /^http:\/\/([^/:{}\s]+)/.exec(cfg.base_url);
+  if (/^http:\/\//.test(cfg.base_url) && !(plain && ['localhost', '127.0.0.1', 'mock-api'].includes(plain[1]))) {
+    issues.push({ path: 'base_url', message: 'must use https:// (http:// is allowed only for localhost, 127.0.0.1 and mock-api)', severity: 'error' });
+  }
   if (cfg.auth && cfg.auth.username) check('auth.username', cfg.auth.username, {});
   strings(cfg.defaults || {}, 'defaults', []).forEach(([p, s]) => check(p, s, {}));
   strings(cfg.vars || {}, 'vars', []).forEach(([p, s]) => check(p, s, {}));

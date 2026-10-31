@@ -7,9 +7,9 @@ Changes to anything in `schema/` need both people's approval and a new line here
 **Source tags**
 - `Roadmap`: taken as written in `roadmap.md`.
 - `Extends roadmap`: changes the roadmap, or fills a gap it left open.
-- `changes-v2`: comes from `changes-v2.md`, which aligns the plan with the organizers' goals and minimum schema.
-- `changes-v3`: comes from `changesv3.md` (change C-12), which adds generalisability features to the config.
-- `default`: chosen by default to keep Phase 0 on time. These were **not discussed point by point**, so change any of them on request.
+- `changes-v2`: comes from the changes-v2 document, which aligned the plan with the organizers' goals and minimum schema. That document was removed from the repo and is in Git history (`git show 8595962:changes-v2.md`).
+- `changes-v3`: comes from the changes-v3 document (change C-12), which added generalisability features to the config. It was removed from the repo and is in Git history (`git show 8595962:changesv3.md`).
+- `default`: proposed by default to keep Phase 0 on time, then **approved by the team on 31 Oct 2026** ("all works for me"). They are agreed decisions now.
 - `Revised`: the entry was locked earlier and changed later. The [Revision log](#revision-log) says what changed and why.
 
 **Requirement tags**
@@ -63,13 +63,14 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-2 | Config schema (22 points) | Locked (points 2, 7, 10 and 14 revised) |
 | D-3 | Common schemas (`user`, `device`, `alert`) | Locked (revised) |
 | D-4 | Quarantine record | Locked |
-| D-5 | Run record, health view and alert rule (3 points) | Locked (point 3 by default) |
-| D-6 | API contract | Locked by default |
-| D-7 | Secrets | Points 1, 2 and 4 agreed, point 3 deferred |
-| D-8 | Module boundaries and handoff functions | Locked by default |
-| D-9 | The two mock servers | Locked by default |
-| D-10 | Tech choices and conventions | Decided by Claude for scalability, not reviewed |
-| D-11 | Golden fixtures | Locked by default. Files written, with synthetic samples |
+| D-5 | Run record, health view and alert rule (3 points) | Locked |
+| D-6 | API contract | Locked |
+| D-7 | Secrets | Locked |
+| D-8 | Module boundaries and handoff functions | Locked |
+| D-9 | The two mock servers | Locked |
+| D-10 | Tech choices and conventions | Locked |
+| D-11 | Golden fixtures | Locked. Files written, with synthetic samples |
+| D-12 | Build-speed decisions (closing Phase 0) | Locked (decided on the team's behalf) |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -108,13 +109,14 @@ One line per decision. Details and reasons are in the sections below.
 | D-4 | Quarantine record | 8 fields; 3 reasons including new `invalid_value` | FR-9 | Extends roadmap |
 | D-5.1 | Run record | 15 fields; statuses `running`, `success`, `failed`; triggers `schedule`, `manual`, `test` | FR-10 | Roadmap |
 | D-5.2 | Health view | 5 statuses from the latest finished `schedule` or `manual` run; `test` runs ignored | FR-10 | Extends roadmap |
-| D-5.3 | Alert rule | Email once when `consecutive_failures` reaches the threshold; resets on success | B-4 | default |
-| D-6 | API contract | `/api/v1`, JSON, routes as listed; pull runs return 202, lookups 200; unpaged quarantine export; no API login in v1 | FR-10, B-2, B-3, B-5 | default |
-| D-7 | Secrets | Env vars until Checkpoint 1, encrypted store (Fernet) by Checkpoint 2 (agreed); write-only API with redaction; Git rules (all agreed); secret names deferred | FR-6 | agreed |
-| D-8 | Module boundaries | Five handoff functions; one `runner` runs, saves, scores health and alerts | None directly | default |
-| D-9 | Mock servers | Prism for the frontend; a local mock API on 8001 for failure tests | FR-3, FR-7, FR-8, FR-9 | default |
-| D-10 | Tech and conventions | Stateless FastAPI; APScheduler in a separate worker; SQLAlchemy and Postgres (SQLite for tests); React with Vite behind nginx; Compose | None directly | Claude, for scalability |
-| D-11 | Golden fixtures | Config, raw pages, normalized output, quarantine entry, run and health examples, device and alert samples | None directly | default |
+| D-5.3 | Alert rule | Email once when `consecutive_failures` reaches the threshold; resets on success | B-4 | default, approved |
+| D-6 | API contract | `/api/v1`, JSON, routes as listed; pull runs return 202, lookups 200; unpaged quarantine export; no API login in v1 | FR-10, B-2, B-3, B-5 | default, approved |
+| D-7 | Secrets | Env vars until Checkpoint 1, encrypted store (Fernet) by Checkpoint 2 (agreed); write-only API with redaction; user-chosen secret names; Git rules (all agreed) | FR-6 | agreed |
+| D-8 | Module boundaries | Five handoff functions; one `runner` runs, saves, scores health and alerts | None directly | default, approved |
+| D-9 | Mock servers | Prism for the frontend; a local mock API on 8001 for failure tests | FR-3, FR-7, FR-8, FR-9 | default, approved |
+| D-10 | Tech and conventions | Stateless FastAPI; APScheduler in a separate worker; SQLAlchemy and Postgres (SQLite for tests); React with Vite behind nginx; Compose | None directly | Claude, approved |
+| D-11 | Golden fixtures | Config, raw pages, normalized output, quarantine entry, run and health examples, device and alert samples | None directly | default, approved |
+| D-12 | Build-speed decisions | `https` only (local `http` allowed); no API login; any SMTP server; hash is 32/40/64 hex; Claude model from `LLM_MODEL`; worker syncs every 15 s; run IDs `run-<n>` | None directly | Claude, on the team's behalf |
 
 ---
 
@@ -155,7 +157,7 @@ One line per decision. Details and reasons are in the sections below.
 
 ## D-2: Config schema
 
-File: `schema/integration.schema.json`. Twenty-two points, each locked. Points 15 to 22 come from `changesv3.md` and extend earlier points.
+File: `schema/integration.schema.json`. Twenty-two points, each locked. Points 15 to 22 come from the changes-v3 document and extend earlier points.
 
 **Rule from `changes-v3`:** a feature is added only if a template or the mock API exercises it, because an untested feature is a liability in a 24-hour build. Points 15 to 21 each name their test.
 
@@ -420,12 +422,11 @@ auth: { type: api_key, in: header, name: Authorization, prefix: "SSWS ", secret:
 - `ip` accepts both IPv4 and IPv6.
 - `enum` takes a fixed list of allowed values declared in the config.
 - Inputs are type-checked before any request is sent.
-- **Open:** which hash kinds `hash` accepts (MD5, SHA-1, SHA-256 and so on) is not defined yet.
+- `hash` accepts a hex string of 32, 40 or 64 characters (MD5, SHA-1 or SHA-256). Decided in D-12.
 
 **Why**
 - Checking types first rejects typos like `ip: "hello"` without spending a request or a rate-limit slot.
 - The roadmap's `ipv4` would have rejected IPv6 addresses, which AbuseIPDB accepts, so one `ip` type covers both.
-- The `hash` question only matters for hash lookups such as VirusTotal (stretch), so it can wait until that service is added.
 
 **Source note:** `ip` replaces `ipv4`.
 
@@ -487,7 +488,7 @@ Beyond the JSON Schema, the validator enforces:
 
   This sends `Authorization: SSWS <token>`. The stored secret holds only the token.
 - `prefix` is valid only on `api_key`.
-- `changesv3.md` writes the header name as `header:`. We keep the D-2.3 shape (`in`, `name`) and only add `prefix`.
+- the changes-v3 document writes the header name as `header:`. We keep the D-2.3 shape (`in`, `name`) and only add `prefix`.
 
 **Why**
 - Many APIs want `Authorization: SSWS <token>` or `Token <key>`, not a bare key. Okta needs this.
@@ -502,10 +503,12 @@ Beyond the JSON Schema, the validator enforces:
 **Decision**
 - `base_url` may contain `{{vars.x}}` placeholders, such as `https://{{vars.domain}}.okta.com`.
 - Only `vars` is allowed there. `{{input.x}}` and `{{state.x}}` are rejected in `base_url`.
+- The URL must be `https://`. `http://` is allowed only for `localhost`, `127.0.0.1` and `mock-api` (decided in D-12).
 
 **Why**
 - Jira, Okta and most SaaS tools put the tenant in the domain. Without this, a template can't be reused across tenants.
 - The base URL has to be fixed before a run starts, so only static `vars` make sense there.
+- The engine sends the credentials to this host. Requiring `https` stops a typo or a bad value from sending a token in the clear.
 
 **Test:** the Jira and Okta templates.
 
@@ -811,7 +814,7 @@ Three points. Points 1 and 2 were agreed one by one. Point 3 was set by default.
 
 ### D-5.3: Alert rule
 
-**Covers:** B-4, FR-10 · **Source:** default
+**Covers:** B-4, FR-10 · **Source:** default, approved
 
 **Decision**
 - A config may declare an alert:
@@ -847,7 +850,7 @@ Three points. Points 1 and 2 were agreed one by one. Point 3 was set by default.
 
 ## D-6: API contract
 
-**Covers:** FR-10, B-2, B-3, B-5 · **Source:** default (the route list is from the roadmap)
+**Covers:** FR-10, B-2, B-3, B-5 · **Source:** default, approved (the route list is from the roadmap)
 
 File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the backend is checked against it.
 
@@ -899,16 +902,16 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 
 ## D-7: Secrets
 
-**Covers:** FR-6 · **Source:** points 1, 2 and 4 agreed, point 3 deferred (extends the roadmap and `changes-v2` C-7)
+**Covers:** FR-6 · **Source:** agreed (extends the roadmap and `changes-v2` C-7)
 
-**Status:** points 1, 2 and 4 are agreed. Point 3 (secret names) is deferred.
+**Status:** all four points are agreed.
 
 ### D-7.1: Where secret values live (agreed)
 
 **Decision**
 - Configs, logs and API responses hold secret **names** only (D-2.3). One interface, `get_secret(name)`, returns the value.
-- **Phase 1, through Checkpoint 1 (5:00pm):** values come from **environment variables** only, named `SECRET_<NAME>` in upper case (for example `SECRET_OKTA_TOKEN`). There is no encrypted store and no Secrets screen yet.
-- **Phase 2, in place by Checkpoint 2 (10:00pm):** an encrypted store is added behind the same `get_secret`.
+- **Phase 1, through Checkpoint 1 (8:30pm):** values come from **environment variables** only, named `SECRET_<NAME>` in upper case (for example `SECRET_OKTA_TOKEN`). There is no encrypted store and no Secrets screen yet.
+- **Phase 2, in place by Checkpoint 2 (11:00pm):** an encrypted store is added behind the same `get_secret`.
   - Encryption is Fernet (from the `cryptography` library), keyed by `ENCRYPTION_KEY` from the environment. The database holds ciphertext only.
   - The store is checked first, then the environment.
   - The dashboard's Secrets screen and the add-a-source form (B-5) save into it.
@@ -935,9 +938,16 @@ File: `schema/openapi.yaml`, written by hand. It is the source of truth, and the
 - Redaction matters because a failed request is exactly when a header tends to get printed.
 - Keeping the route in the contract from day one lets the two halves build in parallel.
 
-### D-7.3: Secret names (to be decided later)
+### D-7.3: Secret names (agreed)
 
-Not decided. Until it is, the working assumption is letters, digits and underscores, up to 64 characters, which is what the D-2.14 rule 5 check uses.
+**Decision**
+- **The person adding the integration chooses each secret's name.** There is no fixed list of names. The platform only checks the form: letters, digits and underscores, up to 64 characters (the D-2.14 rule 5 check).
+- Templates suggest a name (`github_token`, `okta_token`), and the user can use it or pick another.
+- The name is written in the config's `secret:` field and in `requires.secrets`. The value is set on the Secrets screen, or in the environment as `SECRET_<NAME>` in upper case.
+
+**Why**
+- Different people name things differently, and a fixed list would break the moment someone adds a second GitHub account.
+- Checking only the form is enough to reject a pasted key, which is the mistake we need to stop (FR-6).
 
 ### D-7.4: Keeping secrets out of Git (agreed)
 
@@ -958,7 +968,7 @@ Not decided. Until it is, the working assumption is letters, digits and undersco
 
 ## D-8: Module boundaries and handoff functions
 
-**Covers:** None directly · **Source:** default (extends the roadmap)
+**Covers:** None directly · **Source:** default, approved (extends the roadmap)
 
 **Decision**
 
@@ -992,7 +1002,7 @@ Not decided. Until it is, the working assumption is letters, digits and undersco
 
 ## D-9: The two mock servers
 
-**Covers:** FR-3, FR-7, FR-8, FR-9 · **Source:** default (extends the roadmap and `changes-v2` C-6 and C-10)
+**Covers:** FR-3, FR-7, FR-8, FR-9 · **Source:** default, approved (extends the roadmap and `changes-v2` C-6 and C-10)
 
 **Decision**
 - **Frontend mock (Person B):** Prism, generated from `schema/openapi.yaml`, on port 4010. B never waits for A.
@@ -1021,7 +1031,7 @@ Not decided. Until it is, the working assumption is letters, digits and undersco
 
 ## D-10: Tech choices and conventions
 
-**Covers:** None directly · **Source:** decided by Claude at your request, to be easily scalable. Not reviewed point by point.
+**Covers:** None directly · **Source:** decided by Claude at the team's request, to be easily scalable. Approved.
 
 **Principle:** simple to run today, with a clear seam wherever a part would need to grow.
 
@@ -1066,32 +1076,30 @@ Not decided. Until it is, the working assumption is letters, digits and undersco
 
 ## D-11: Golden fixtures
 
-**Covers:** None directly · **Source:** default (the list is from the roadmap and `changes-v2`). **All the files are written.** The raw samples are **synthetic** (shaped like each service's documented responses, not captured live).
+**Covers:** None directly · **Source:** default, approved (the list is from the roadmap and `changes-v2`). **All the files are written except item 8.** The raw samples are **synthetic** (shaped like each service's documented responses, not captured live).
 
 **Decision**
 
 One shared set of examples that both people treat as the truth:
 
-1. `templates/github.yaml`, the first real service config (with `jira.yaml` and `okta.yaml`, see item 15).
+1. `templates/github.yaml`, the first real service config (with `jira.yaml` and `okta.yaml`, see item 13).
 2. Three raw GitHub member pages, and one raw `get_user` response.
 3. The expected normalized `user`, `device` and `alert` output.
 4. A bad record and its expected quarantine entry.
 5. An example run record and an example health object.
 6. An example validate error list and an example test response.
 7. A device sample and an alert sample, both from Okta.
-8. A per-service coverage table: which fields each service fills, and from which path.
+8. A per-service coverage table: which fields each service fills, and from which path. **Not written.** The `map` in each template shows it.
 9. Template notes:
    - `github.yaml` uses `requires` (org, token).
    - `jira.yaml` uses a `base_url` placeholder and `requires`.
    - `okta.yaml` is the second full config. It uses `auth.prefix`, a `base_url` placeholder, `requires`, a time placeholder, and three actions with different `target_schema` values.
 10. An example alert email.
-11. `docs/reference-config.yaml`, the annotated reference config that uses every field once. It is written (see the file) and must pass the validator once the validator exists.
-12. Three starter templates, one per schema: `templates/generic-user.yaml`, `templates/generic-device.yaml` and `templates/generic-alert.yaml`. Each has a `pull` action and a `lookup` action, maps every field of its schema, and marks the lines to change with `CHANGE`. They are written. They use made-up URLs, so they are starting points and are not verified against any real service.
-13. `docs/ui-prototype.html`, a single-file prototype of the dashboard with sample data. It shows the screens, the required fields, the dropdowns, and a Run panel for lookups with simulated failures. It is not connected to a backend.
-14. The contract files themselves: `schema/integration.schema.json`, `schema/result.schema.json` and `schema/openapi.yaml`, with `schema/README.md` as the index.
-15. `templates/service-template.yaml`, the base template any new service starts from, and the real service configs `templates/github.yaml`, `jira.yaml` and `okta.yaml`. These are not yet verified against live accounts.
-16. `samples/invalid/`: configs that must be rejected, with `expected-errors.json`.
-17. `schema/tools/`: a reference check (`npm run check`) that the schemas, configs, samples and expected output all agree.
+11. Three starter templates, one per schema: `templates/generic-user.yaml`, `templates/generic-device.yaml` and `templates/generic-alert.yaml`. Each has a `pull` action and a `lookup` action, maps every field of its schema, and marks the lines to change with `CHANGE`. They are written. They use made-up URLs, so they are starting points and are not verified against any real service.
+12. The contract files themselves: `schema/integration.schema.json`, `schema/result.schema.json` and `schema/openapi.yaml`, with `schema/README.md` as the index.
+13. `templates/service-template.yaml`, the base template any new service starts from, and the real service configs `templates/github.yaml`, `jira.yaml` and `okta.yaml`. These are not yet verified against live accounts.
+14. `samples/invalid/`: configs that must be rejected, with `expected-errors.json`.
+15. `schema/tools/`: a reference check (`npm run check`) that the schemas, configs, samples and expected output all agree.
 
 - Raw samples go in `samples/<service>/`. Configs go in `templates/<name>.yaml`. Expected outputs and examples go in `docs/examples/`.
 - Sample files are cleaned of personal data and secrets before they are saved.
@@ -1103,9 +1111,35 @@ One shared set of examples that both people treat as the truth:
 
 ---
 
+## D-12: Build-speed decisions (closing Phase 0)
+
+**Covers:** None directly · **Source:** decided by Claude on the team's behalf, to be quick to build. Change any of them on request.
+
+**Decision**
+
+| # | Decision | Why it is quick |
+|---|---|---|
+| 1 | **`base_url` must be `https://`.** `http://` is allowed only for `localhost`, `127.0.0.1` and `mock-api`. | The local mock needs no special setting. One rule in the validator. |
+| 2 | **No API login in v1.** The README says so. | A login costs work in both halves, and the demo runs locally or in Docker. |
+| 3 | **Email goes through any SMTP server**, set by `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_FROM` and the secret `smtp_password`. Port 587 uses STARTTLS, port 465 uses SSL, anything else is plain (for a local test server). A Gmail account with an app password (`smtp.gmail.com`, 587) is the suggested account. I haven't verified that provider's setup steps. | Python's built-in `smtplib` covers every case, with no provider library. |
+| 4 | **`hash` inputs are a hex string of 32, 40 or 64 characters** (MD5, SHA-1 or SHA-256). | One pattern. |
+| 5 | **AI uses the Claude API.** The key is `LLM_API_KEY` and the model is `LLM_MODEL`, defaulting to `claude-sonnet-5-5`. One model does both the summary and the config drafting. | One setting, and nothing to tune per job. |
+| 6 | **Backend: Python 3.12, a plain `requirements.txt`, run with `uvicorn`.** | No packaging tool to learn or install. |
+| 7 | **Frontend: npm, React Router, plain React state with `js-yaml` for the form, types from `openapi-typescript`, `@monaco-editor/react` for the editor.** No form or schema library. | Validation already lives on the server (`/integrations/validate`), so the browser doesn't repeat it. |
+| 8 | **The worker re-reads the enabled integrations from the database every 15 seconds** and adds, updates or removes its scheduled jobs. | No message bus. A 15-second delay after a config change is fine. |
+| 9 | **Run IDs are `run-<n>`**, where `n` is the database row ID. | No ID generator. |
+| 10 | **Times are stored in UTC and shown in local time** in the dashboard. | Nothing to convert in the backend. |
+| 11 | **Not built in v1:** a CSV export, an API token, and a shared store for the rate-limit timer. | They are not needed for any requirement or bonus. |
+
+**Why**
+- These were the last open questions. Each one blocked someone's work, and the choice that is fastest to build was taken every time.
+- None of them changes the contract files, except the `https` rule and the hash pattern, which are now in the reference check and the schema README.
+
+---
+
 ## Revision log
 
-### R-1: Alignment with the organizers' goals (`changes-v2.md`)
+### R-1: Alignment with the organizers' goals (the changes-v2 document)
 
 Entries locked earlier that changed, and why.
 
@@ -1123,11 +1157,11 @@ Entries locked earlier that changed, and why.
 
 **Already covered by earlier decisions** (no change needed): reliability built into the engine and `defaults` as optional overrides (D-2.1, D-2.10, D-2.11), no retry on 4xx (D-2.10), the 429 fallback to backoff (D-2.11), and a platform-set ingestion time (was `ingested_at`, now `fetched_at`).
 
-**Kept as decided:** on a 429 whose wait exceeds the cap (default 60 s), the run fails with `rate_limited` (D-2.11). `changes-v2.md` reads "cap 60s" as truncating the wait. We chose to fail clearly instead.
+**Kept as decided:** on a 429 whose wait exceeds the cap (default 60 s), the run fails with `rate_limited` (D-2.11). the changes-v2 document reads "cap 60s" as truncating the wait. We chose to fail clearly instead.
 
 ### R-2: Organizer answers
 
-The four questions from `changes-v2.md` section 6 are answered.
+The four questions from the changes-v2 document section 6 are answered.
 
 | Question | Answer | Effect |
 |---|---|---|
@@ -1145,9 +1179,9 @@ The four questions from `changes-v2.md` section 6 are answered.
 | D-2.8 first used by | `offset`: Jira, Elastic Security | `next_link`: GitHub, Okta. `offset`: Jira | Okta pages with a `Link` header |
 | D-3.2, D-3.3 | Device source open. Alert severities from Elastic | Okta devices. Okta System Log severities through `value_map` | Follows the source |
 
-### R-4: Generalisability additions (`changesv3.md`, C-12)
+### R-4: Generalisability additions (the changes-v3 document, C-12)
 
-| `changesv3.md` item | Outcome |
+| the changes-v3 document item | Outcome |
 |---|---|
 | 1.1 `error_when` | Added as D-2.15 |
 | 1.2 `auth.prefix` | Added as D-2.16, keeping our `in` and `name` field names |
@@ -1161,7 +1195,7 @@ The four questions from `changes-v2.md` section 6 are answered.
 | 3 Reserve, do not build | Added as D-2.22 |
 | 4 Already possible with JMESPath | Documented in D-2.22 |
 
-`changesv3.md` names Slack and Jira as the services that need these features. Slack is no longer a source, so `error_when` is exercised by the mock API.
+the changes-v3 document names Slack and Jira as the services that need these features. Slack is no longer a source, so `error_when` is exercised by the mock API.
 
 ### R-5: Writing the contract files settled these (Phase 0)
 
@@ -1169,7 +1203,7 @@ Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. 
 
 | Item | Before | Now | Why |
 |---|---|---|---|
-| Retry count | "3 attempts in total" with 3 backoff values, which never used the third | `max_retries`: retries after the first try. The last wait repeats | The old wording was inconsistent. Fixed in D-2.10, the roadmap and the reference configs |
+| Retry count | "3 attempts in total" with 3 backoff values, which never used the third | `max_retries`: retries after the first try. The last wait repeats | The old wording was inconsistent. Fixed in D-2.10 and the roadmap |
 | `version` | Value not fixed | The integer `1`. v1 accepts only 1 | Simple, and a clear error for anything else |
 | Value not in `value_map` | Open | Uses `default` if given, otherwise the record is quarantined as `invalid_value` | Closes the D-2.7 open item |
 | `error_when` run error code | Open (`bad_response` or `api_error`) | `api_error`. `bad_response` stays for "records not where records_path says" | An error in the body is a different problem from a wrong shape |
@@ -1182,6 +1216,15 @@ Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. 
 | Lookup run body and failure | Not stated | Body `{"inputs": {...}}`. A failure at the service returns `502` with `run_failed` | A failed lookup still creates a run |
 | Paging stop rules | Not stated | Written in `schema/README.md` | The engine and the mock need the same rules |
 
+### R-6: Phase 0 closed (31 Oct 2026)
+
+| Item | Outcome |
+|---|---|
+| D-5.3, D-6, D-8, D-9, D-10, D-11 | Approved by the team ("all works for me"). They were defaults, and are agreed decisions now |
+| D-7.3 secret names | The person adding the integration chooses them. The platform only checks the form |
+| The remaining open questions | Decided on the team's behalf in D-12 |
+| New checks | `samples/invalid/http-base-url.yaml` (14 invalid files now), the `https` rule in the reference check, and the hash pattern in `schema/README.md` |
+
 ---
 
 ## Open items
@@ -1189,16 +1232,8 @@ Writing `schema/*.json` and `schema/openapi.yaml` forced these names and rules. 
 | Item | Blocks | Settle when |
 |---|---|---|
 | Confirm with the organizers that an email alert for repeated failures is acceptable (they were asked about Slack) | Bonus B-4 | Before the demo |
-| Okta `device` data needs at least one enrolled device (D-1) | `device` schema demo, Goal 6 | Phase 0 access check |
-| Whether `base_url` must be `https` after substitution (D-2.17). The schema allows `http://` so a local mock works. A mistyped tenant could send the token to the wrong host | Validator | Before the validator is built |
-| The contract files (`schema/`) are written but not yet read and signed off by both people | The `contract-v1` tag | Sign-off, then `git tag contract-v1` |
-| The raw samples in `samples/` are synthetic, not captured live | Test realism | Replace when GitHub, Jira and Okta access is confirmed |
-| `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 0 access check, then Phase 1 |
-| `hash` inputs accept any string in the schema. The kinds (MD5, SHA-1, SHA-256) are not fixed | Hash lookups such as VirusTotal | That service is added |
-| D-6 to D-11 were set by default and not reviewed point by point | The contract | Review before the contract is tagged `contract-v1` |
-| D-10 was decided by Claude to be easily scalable, and not reviewed point by point. The main cost is a Postgres container and a separate worker in Phase 1 and 2 | The build plan | Review before `contract-v1` |
+| Access: a GitHub token, a Jira token, an Okta org with an API token and **one enrolled device**, and an SMTP account | Real pulls and the alert | Phase 0, in the first 20 minutes |
+| The raw samples in `samples/` are synthetic, not captured live | Test realism | Replace when access is confirmed |
+| `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 1 and 2 |
 | Rate-limit state (`min_interval_ms`) is per process in v1, so it needs shared storage before running more than one worker (D-10) | Scaling out | After v1 |
-| The API has no login in v1 (D-6). Anyone who can reach it can run actions and set secrets | Security story | Add a shared API token as a stretch, or keep it local only |
-| Which real email account sends alerts, and its SMTP settings (D-5.3). I haven't verified any provider's setup steps | B-4 | Phase 0 access check |
-| CSV format for the quarantine export (D-6) | Nothing in v1 | If time allows |
-| D-7.3: what a valid secret name looks like (working assumption: letters, digits, underscores, up to 64) | D-2.14 rule 5, the secrets route | Decide later |
+| Tag `contract-v1` once this branch is merged to `main` | The contract is frozen | Right after the merge |

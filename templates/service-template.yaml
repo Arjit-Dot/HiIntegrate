@@ -1,6 +1,6 @@
 # The base template for any service. Copy it, change the lines marked CHANGE,
-# and delete what you don't need. Every field is explained in
-# docs/reference-config.yaml. The rules are in schema/integration.schema.json.
+# and delete what you don't need. Every field is described in
+# schema/integration.schema.json, and github.yaml, jira.yaml and okta.yaml are worked examples.
 
 version: 1
 name: new-service                          # CHANGE: a unique slug. It becomes `source` on every record

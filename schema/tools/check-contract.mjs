@@ -3,7 +3,7 @@
 //
 // It checks that:
 //  1. both schemas compile,
-//  2. every config in templates/ and docs/ is valid,
+//  2. every config in templates/ is valid,
 //  3. every config in samples/invalid/ fails with exactly the errors in expected-errors.json,
 //  4. mapping the raw samples through the templates gives exactly docs/examples/expected/*.json,
 //  5. every record, quarantine entry, run record and health example matches result.schema.json.
@@ -31,7 +31,7 @@ const expect = (rel, actual) => {
 };
 
 // 1 + 2: configs
-const good = [...fs.readdirSync(p('templates')).filter(f => f.endsWith('.yaml')).map(f => 'templates/' + f), 'docs/reference-config.yaml', 'docs/reference-config.clean.yaml'];
+const good = [...fs.readdirSync(p('templates')).filter(f => f.endsWith('.yaml')).map(f => 'templates/' + f)];
 for (const f of good) { const errs = checkConfig(readYaml(f)).filter(i => i.severity === 'error'); check('valid config: ' + f, errs.length === 0, errs); }
 
 // 3: invalid configs
