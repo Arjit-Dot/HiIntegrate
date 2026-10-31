@@ -140,12 +140,11 @@ def test_the_client_reports_errors_without_the_key():
 
 
 def test_no_key_means_no_client(monkeypatch):
-    monkeypatch.setenv("LLM_API_KEY", "")
-    get_settings.cache_clear()
-    try:
-        assert LLMClient.from_settings() is None
-    finally:
-        get_settings.cache_clear()
+    from app.ai import client as client_module
+    from app.core.settings import Settings
+
+    monkeypatch.setattr(client_module, "get_settings", lambda: Settings(_env_file=None, llm_api_key=None))  # whatever .env holds
+    assert LLMClient.from_settings() is None
 
 
 def test_the_default_model_is_gemini():

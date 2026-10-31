@@ -15,7 +15,7 @@ def test_blank_values_count_as_not_set(monkeypatch):
     assert s.llm_api_key is None
     assert s.encryption_key is None
     assert s.database_url == "sqlite:///./dev.db"   # the default, not an empty URL
-    assert s.llm_model == "claude-sonnet-5-5"
+    assert s.llm_model == "gemini-3.5-flash"
 
 
 def test_a_real_value_is_still_used(monkeypatch):
