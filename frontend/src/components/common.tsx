@@ -1,6 +1,10 @@
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
 
-export const Pill = ({ kind, children }: { kind: string; children: ReactNode }) => <span className={`pill ${kind}`}>{children}</span>
+export const Pill = ({ kind, children }: { kind: string; children: ReactNode }) => (
+  <Badge variant={kind as never}>{children}</Badge>
+)
 
 const ToastCtx = createContext<(msg: string) => void>(() => {})
 export const useToast = () => useContext(ToastCtx)
@@ -24,12 +28,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="modal-bg open" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-head"><h2>{title}</h2><button className="btn secondary small" onClick={onClose}>Close</button></div>
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-h-[88vh] max-w-[720px] overflow-auto sm:max-w-[720px]" aria-describedby={undefined}>
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         {children}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

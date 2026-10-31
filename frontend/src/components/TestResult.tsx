@@ -1,5 +1,5 @@
 import type { TestResponse } from '../api/client'
-import { Pill } from './ui'
+import { Pill } from './common'
 
 // B-3: raw reply beside the mapped record, with the paths that were not found highlighted.
 export function TestResult({ r }: { r: TestResponse }) {

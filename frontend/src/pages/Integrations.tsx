@@ -1,7 +1,9 @@
+import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, ApiError, type IntegrationSummary, type TestResponse } from '../api/client'
-import { ErrorBox, Modal, Pill, useToast } from '../components/ui'
+import { ErrorBox, Modal, Pill, useToast } from '../components/common'
 import { TestResult } from '../components/TestResult'
 
 const CATEGORIES = ['identity', 'threat_intel', 'ticketing', 'alerting', 'other']
@@ -36,7 +38,7 @@ export default function Integrations() {
           <h1>Integrations</h1>
           <p>One row per connected tool. Health comes from the latest finished scheduled or manual run.</p>
         </div>
-        <button className="btn" onClick={() => nav('/add')}>+ Add integration</button>
+        <Button onClick={() => nav('/add')}>+ Add integration</Button>
       </div>
       <div className="toolbar" style={{ marginBottom: 14 }}>
         <input type="text" placeholder="Search by name" value={q} onChange={e => setQ(e.target.value)} />
@@ -78,10 +80,10 @@ export default function Integrations() {
                     <Pill kind={status}>{status}</Pill>
                     {h.last_error && <div className="muted small" style={{ maxWidth: 240, marginTop: 4 }}>{h.last_error.message}</div>}
                   </td>
-                  <td><label className="switch"><input type="checkbox" checked={i.enabled} onChange={e => toggle(i, e.target.checked)} /><span className="slider" /></label></td>
+                  <td><Switch checked={i.enabled} onCheckedChange={v => toggle(i, v)} aria-label={`Enable ${i.name}`} /></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn secondary small" onClick={() => setTesting(i)}>Test</button>{' '}
-                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit`}><button className="btn secondary small">Edit</button></Link>
+                    <Button variant="secondary" size="sm" onClick={() => setTesting(i)}>Test</Button>{' '}
+                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>
                   </td>
                 </tr>
               )
@@ -114,7 +116,7 @@ function TestModal({ integ, onClose }: { integ: IntegrationSummary; onClose: () 
         <div><label>Action</label><select value={action} onChange={e => setAction(e.target.value)}>{integ.actions.map(a => <option key={a.name} value={a.name}>{a.name} ({a.mode})</option>)}</select></div>
         {isLookup && <div className="full"><label>Inputs (JSON)</label><textarea className="mono" value={inputs} onChange={e => setInputs(e.target.value)} /></div>}
       </div>
-      <div className="actions-bar" style={{ marginTop: 14 }}><button className="btn" disabled={busy || !action} onClick={run}>{busy ? 'Testing…' : 'Run test (first page only)'}</button></div>
+      <div className="actions-bar" style={{ marginTop: 14 }}><Button disabled={busy || !action} onClick={run}>{busy ? 'Testing…' : 'Run test (first page only)'}</Button></div>
       {error && <ErrorBox message={error} />}
       {result && <TestResult r={result} />}
     </Modal>

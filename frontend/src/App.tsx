@@ -1,5 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { ToastProvider } from './components/ui'
+import { ToastProvider } from './components/common'
 import Integrations from './pages/Integrations'
 import AddEdit from './pages/AddEdit'
 import Placeholder from './pages/Placeholder'

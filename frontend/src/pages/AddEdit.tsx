@@ -1,10 +1,13 @@
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Editor from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
 import { api, ApiError, type Config, type SecretInfo, type TestResponse } from '../api/client'
 import { applyPreset, buildConfig, configToState, defaultState, hostOf, SCHEMAS, TRANSFORMS, type FormState, type SchemaName } from '../lib/config'
-import { ErrorBox, Pill, useToast } from '../components/ui'
+import { ErrorBox, Pill, useToast } from '../components/common'
 import { TestResult } from '../components/TestResult'
 
 type Issue = { path: string; message: string; severity: 'error' | 'warning' }
@@ -153,7 +156,7 @@ export default function AddEdit() {
               <div><label>Category</label>
                 <select {...bind('category')}>{['identity', 'threat_intel', 'ticketing', 'alerting', 'other'].map(c => <option key={c}>{c}</option>)}</select></div>
               <div className="inline" style={{ paddingTop: 22 }}>
-                <label className="switch" style={{ margin: 0 }}><input type="checkbox" checked={s.enabled} onChange={e => set('enabled', e.target.checked)} /><span className="slider" /></label>
+                <Switch checked={s.enabled} onCheckedChange={v => set('enabled', v)} aria-label="Enabled" />
                 <span>Enabled (scheduled runs happen)</span></div>
               <div className="full"><label>Description</label><textarea {...bind('description')} /></div>
             </div>
@@ -203,7 +206,7 @@ export default function AddEdit() {
                   {editedAction === undefined && <option value="">(new action)</option>}
                   {actionNames.map(n => <option key={n}>{n}</option>)}
                 </select>
-                <button type="button" className="btn secondary small" onClick={() => { setRaw(null); setEditedAction(undefined); setS(p => ({ ...applyPreset(p, 'user', 'pull'), actionName: 'new_action' })) }}>+ Add action</button>
+                <Button variant="secondary" size="sm" type="button"  onClick={() => { setRaw(null); setEditedAction(undefined); setS(p => ({ ...applyPreset(p, 'user', 'pull'), actionName: 'new_action' })) }}>+ Add action</Button>
               </div>
             )}
             <div className="grid">
@@ -257,11 +260,11 @@ export default function AddEdit() {
                       <select value={inp.type} onChange={e => upd({ type: e.target.value })}>{['string', 'int', 'ip', 'domain', 'hash', 'enum'].map(t => <option key={t}>{t}</option>)}</select>
                       <input type="text" placeholder="enum values, comma separated" value={inp.values} onChange={e => upd({ values: e.target.value })} />
                       <label className="inline" style={{ margin: 0 }}><input type="checkbox" checked={inp.required} onChange={e => upd({ required: e.target.checked })} /> req.</label>
-                      <button type="button" className="btn secondary small" title="Remove" onClick={() => set('inputs', s.inputs.filter((_, j) => j !== n))}>×</button>
+                      <Button variant="secondary" size="sm" type="button"  title="Remove" onClick={() => set('inputs', s.inputs.filter((_, j) => j !== n))}>×</Button>
                     </div>
                   )
                 })}
-                <button type="button" className="btn secondary small" onClick={() => set('inputs', [...s.inputs, { name: '', type: 'string', values: '', required: true }])}>+ Add input</button>
+                <Button variant="secondary" size="sm" type="button"  onClick={() => set('inputs', [...s.inputs, { name: '', type: 'string', values: '', required: true }])}>+ Add input</Button>
               </div>
             )}
           </div>
@@ -292,7 +295,7 @@ export default function AddEdit() {
               <div><label>When a record is invalid</label>
                 <select {...bind('onInvalid')}><option value="quarantine">quarantine (save it with the reason)</option><option value="skip">skip (drop it, count it)</option></select></div>
               <div className="inline" style={{ paddingTop: 22 }}>
-                <label className="switch" style={{ margin: 0 }}><input type="checkbox" checked={s.store} onChange={e => set('store', e.target.checked)} /><span className="slider" /></label><span>Store results</span></div>
+                <Switch checked={s.store} onCheckedChange={v => set('store', v)} aria-label="Store results" /><span>Store results</span></div>
               <div className="full"><label>Treat a 200 reply as an error when… <span className="muted">(optional)</span></label>
                 <div className="grid three">
                   <input type="text" placeholder="path, e.g. ok" {...bind('errPath')} />
@@ -306,11 +309,13 @@ export default function AddEdit() {
         </form>
 
         <aside className="card sticky">
-          <div className="tabs">
-            <button type="button" className={pane === 'config' ? 'active' : ''} onClick={() => setPane('config')}>Config</button>
-            <button type="button" className={pane === 'validate' ? 'active' : ''} onClick={() => setPane('validate')}>Validation {errors.length > 0 && <Pill kind="failed">{errors.length}</Pill>}</button>
-            <button type="button" className={pane === 'test' ? 'active' : ''} onClick={() => setPane('test')}>Test connection</button>
-          </div>
+          <Tabs value={pane} onValueChange={v => setPane(v as Pane)}>
+            <TabsList className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent px-3 pt-2.5">
+              <TabsTrigger value="config" className="flex-none rounded-none border-0 border-b-2 border-transparent px-3 py-2 font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none">Config</TabsTrigger>
+              <TabsTrigger value="validate" className="flex-none rounded-none border-0 border-b-2 border-transparent px-3 py-2 font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none">Validation {errors.length > 0 && <Pill kind="failed">{errors.length}</Pill>}</TabsTrigger>
+              <TabsTrigger value="test" className="flex-none rounded-none border-0 border-b-2 border-transparent px-3 py-2 font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none">Test connection</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           {pane === 'config' && (
             <div className="pane active">
@@ -323,8 +328,8 @@ export default function AddEdit() {
                     }}>{f.toUpperCase()}</button>
                   ))}
                 </div>
-                <button type="button" className="btn secondary small" onClick={() => { navigator.clipboard.writeText(text); toast('Copied') }}>Copy</button>
-                {raw !== null && <button type="button" className="btn secondary small" onClick={() => setRaw(null)} title="Throw away the typed text and rebuild from the form">Reset to form</button>}
+                <Button variant="secondary" size="sm" type="button"  onClick={() => { navigator.clipboard.writeText(text); toast('Copied') }}>Copy</Button>
+                {raw !== null && <Button variant="secondary" size="sm" type="button"  onClick={() => setRaw(null)} title="Throw away the typed text and rebuild from the form">Reset to form</Button>}
               </div>
               {raw !== null && <div className="hint" style={{ marginBottom: 8 }}>You are editing the config directly. Changing the form resets it.</div>}
               <Editor height="520px" language={fmt} value={text} onChange={v => v !== undefined && v !== text && setRaw(v)}
@@ -335,8 +340,8 @@ export default function AddEdit() {
           {pane === 'validate' && (
             <div className="pane active">
               <div className="actions-bar">
-                <button type="button" className="btn" onClick={runValidate} disabled={validating}>{validating ? 'Validating…' : 'Validate'}</button>
-                <button type="button" className="btn secondary" onClick={save} disabled={busy}>{busy ? 'Saving…' : id ? 'Save changes' : 'Save integration'}</button>
+                <Button type="button"  onClick={runValidate} disabled={validating}>{validating ? 'Validating…' : 'Validate'}</Button>
+                <Button variant="secondary" type="button"  onClick={save} disabled={busy}>{busy ? 'Saving…' : id ? 'Save changes' : 'Save integration'}</Button>
               </div>
               {errors.length === 0 && <div className="issue ok"><div><b>Valid.</b> No errors{issues.length ? `, ${issues.length} warning${issues.length > 1 ? 's' : ''}` : ''}.</div></div>}
               {issues.map((i, n) => (
@@ -350,7 +355,7 @@ export default function AddEdit() {
           {pane === 'test' && (
             <div className="pane active">
               {!pull && <div style={{ marginBottom: 10 }}><label>Inputs (JSON)</label><textarea className="mono" value={testInputs} onChange={e => setTestInputs(e.target.value)} /></div>}
-              <div className="actions-bar"><button type="button" className="btn" onClick={runTest} disabled={busy}>{busy ? 'Working…' : 'Run test (first page only)'}</button></div>
+              <div className="actions-bar"><Button type="button"  onClick={runTest} disabled={busy}>{busy ? 'Working…' : 'Run test (first page only)'}</Button></div>
               <div className="hint" style={{ marginBottom: 10 }}>The test calls the saved integration, so this saves it first if it is valid.</div>
               {testErr && <ErrorBox message={testErr} />}
               {test ? <TestResult r={test} /> : !testErr && <div className="muted">Calls the service once, then shows the raw reply beside the mapped record and flags paths that were not found.</div>}
