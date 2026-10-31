@@ -1,0 +1,121 @@
+version: 1
+name: example-platform
+display_name: "Example Platform"
+category: identity
+description: "Fictional platform used to show every field in the config schema."
+enabled: true
+
+vars:
+  domain: "acme"
+  page_size: 200
+
+requires:
+  vars:
+    domain: { label: "Tenant domain", example: "acme" }
+  secrets: [example_token]
+
+base_url: "https://{{vars.domain}}.example-platform.com"
+
+auth:
+  type: api_key
+  in: header
+  name: Authorization
+  prefix: "Token "
+  secret: example_token
+
+defaults:
+  timeout_seconds: 30
+  headers: { Accept: "application/json" }
+  retry:
+    max_attempts: 3
+    backoff_seconds: [1, 2, 4]
+    retry_on: [timeout, connection_error, "5xx"]
+  rate_limit:
+    max_wait_seconds: 60
+    min_interval_ms: 100
+
+alerts:
+  after_failures: 3
+  to: ["secops@example.com"]
+
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    schedule: every 5m
+    request:
+      method: GET
+      path: /api/v1/users
+      query: { limit: "{{vars.page_size}}" }
+      headers: {}
+    pagination:
+      type: next_link
+      source: header
+      header: Link
+      max_pages: 100
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      name: "profile.displayName || profile.login"
+      email: { path: profile.email, transform: lowercase }
+      status:
+        path: state
+        value_map: { ACTIVE: active, SUSPENDED: suspended, DEPROVISIONED: inactive }
+        default: unknown
+      last_login: { path: lastLoginAt, transform: datetime }
+    required: [id, email]
+    on_invalid: quarantine
+    store: true
+
+  list_alerts:
+    mode: pull
+    target_schema: alert
+    schedule: every 1m
+    request:
+      method: GET
+      path: /api/v1/events
+      query: { since: "{{now - 24h}}", until: "{{now}}" }
+    pagination:
+      type: offset
+      offset_param: offset
+      limit_param: limit
+      limit: 100
+      total_path: meta.total
+      max_pages: 20
+    records_path: events
+    error_when: { path: ok, equals: false, message_path: error }
+    map:
+      id: id
+      type: eventType
+      severity:
+        path: level
+        value_map: { info: low, warning: medium, error: high, critical: critical }
+        default: unknown
+      timestamp: { path: time, transform: datetime }
+      description: message
+    required: [id, timestamp]
+    on_invalid: skip
+    retry: { max_attempts: 5 }
+    rate_limit: { min_interval_ms: 500 }
+
+  get_device:
+    mode: lookup
+    target_schema: device
+    inputs:
+      hostname: { type: string, required: true }
+      detail: { type: enum, values: [basic, full], required: true }
+    request:
+      method: GET
+      path: "/api/v1/devices/{{input.hostname}}"
+      query: { detail: "{{input.detail}}" }
+    records_path: "@"
+    map:
+      id: id
+      hostname: hostname
+      ip: "networkInterfaces[0].address"
+      os: "os.name"
+      owner: "owner.name || 'unassigned'"
+      last_seen: { path: lastSeen, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
+    store: false
