@@ -24,5 +24,5 @@ The synthetic files stay. A small live account cannot give the three pages, the 
 | Okta `GET /api/v1/devices` | **Not verified.** The org has no devices (empty list `[]`), so the field names are still from the documentation. |
 | GitHub `GET /user` | **Reached.** A real account can have `name`, `email` and `company` set to `null`, unlike our synthetic `get_user.json`. A mapping that makes one of them required would quarantine that user. |
 | GitHub `GET /orgs/{org}/members` | **Not verified.** The test account belongs to no organization. |
-| Jira `GET /rest/api/3/users/search` | **Not verified.** The site answered `404 Site temporarily unavailable`, so the site name or the site itself needs checking. |
+| Jira `GET /rest/api/3/users/search`, `/myself` | **Matches.** Every field our map reads (`accountId`, `displayName`, `emailAddress`, `active`) exists, and the real reply only adds fields. Only 1 of 11 users had `emailAddress`, because Atlassian hides it by privacy setting, so a real user list has many empty emails. This is fine because the template requires only `id`. The list also includes `app` (bot) accounts next to `atlassian` ones. Needs an **unscoped** API token: a scoped token gets `401` on the site address. |
 
