@@ -82,7 +82,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
 | D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
-| D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions (see "Approval" in D-18). Merges to `main` and is tagged `contract-v4` only after both are met** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-7 of D-17 |
+| D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions (see "Approval" in D-18). Merges to `main` and is tagged `contract-v4` only after both are met** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -1394,6 +1394,10 @@ Person B reviewed the branch (`a/multi-user` at `4af82b7`) before approving:
 1. **Fix the reference to D-17.** The header row says this supersedes "S-7 of D-17". S-7 is the audit log. The API login is **S-8**. Say S-8, and note that the login rate limit also covers part of S-9.
 2. **Fail clearly on an old database.** An existing database or Compose volume has no `account` columns, and today the API fails on its first query. At startup it must stop with a message that says what is wrong and that `docker compose down -v` recreates the database (which deletes stored data), and add a test for it.
 
+**Both conditions done by Person A (1 Nov), waiting for Person B to check them before the merge and the `contract-v4` tag:**
+1. The header row now says **S-8** (the API login) and notes that the login rate limit also covers part of S-9.
+2. An old database now stops the API at startup (and the worker) with: which table lacks which column, that `docker compose down -v` recreates the database and **deletes the stored data** (or delete the SQLite file for a local run), and that old data cannot be moved into accounts. The check is `check_schema` in `app/storage/db.py`, run by `init_db` when the engine is first opened. Three tests in `tests/test_storage.py` cover it: an old database is refused with the advice, a current or empty one passes (and passes again on restart), and the API's startup fails on an old one.
+
 **Noted, not conditions** (named so they are not lost): registration is open by default and `/auth/register` has no rate limit; scrypt `n=2^14` is below today's usual advice (`2^17`); the API docs and `openapi.json` are readable without signing in; the session token is kept in `localStorage`; the login throttle is per username and per process.
 
 ---
@@ -1581,6 +1585,11 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 |---|---|---|---|
 | `POST /ai/suggest-mapping` | None | Paste a sample response: the platform finds the records, the model suggests a JMESPath per field of the target schema (with transform, `value_map`, confidence), and the platform checks every suggestion against the real sample records (`found` of `of`, an example value, a preview of the first record as the mapper would save it). With `mapping` it only checks the person's own entries, with no model call, so that part works with AI switched off. Nothing is saved; records sent to the model are masked (D-14) | The roadmap's replacement for a visual mapping builder: the person accepts or edits each suggestion and sees the mapped record. The model proposes, the platform proves. New route, additive |
 
+### R-19: B-1 incremental sync is used by the Okta template (1 Nov)
+
+| Item | Before | Now | Why |
+|---|---|---|---|
+| `templates/okta.yaml`, `list_alerts` | A fixed `since: now - 24h` on every run | Also `incremental: { param: since, value: "{{state.last_success_at}}" }`. The first run keeps the 24 hour window. Later runs ask only for events since the previous successful run | The roadmap verifies B-1 with "the second run sends `last_success_at`", and no shipped config used it. Run on the real Okta org: the first run fetched 238 events over 4 pages, the second sent `since` = the first run's start and fetched nothing new. The description of `incremental` in `integration.schema.json` no longer says that no service uses it (text only) |
 
 ---
 

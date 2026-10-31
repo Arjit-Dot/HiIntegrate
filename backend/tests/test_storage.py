@@ -136,3 +136,45 @@ def test_engine_state(s):
     assert repo.get_state(s, ACCT, "github", "list_members") == {}
     repo.set_last_success(s, ACCT, "github", "list_members", "2026-01-01T09:00:00Z")
     assert repo.get_state(s, ACCT, "github", "list_members") == {"last_success_at": "2026-01-01T09:00:00Z"}
+
+
+# ---------------------------------------------------------------- an old database stops with a clear message (D-18)
+
+def _old_database(tmp_path):
+    """A database as the version before accounts made it: `integrations` has no `account` column."""
+    from sqlalchemy import text
+
+    engine = make_engine(f"sqlite:///{tmp_path}/old.db")
+    with engine.begin() as c:
+        c.execute(text("CREATE TABLE integrations (name VARCHAR(64) PRIMARY KEY, config JSON, revision INTEGER, enabled BOOLEAN, "
+                       "created_at VARCHAR(32), updated_at VARCHAR(32))"))
+    return engine
+
+
+def test_an_old_database_is_refused_with_what_to_do(tmp_path):
+    from app.storage import SchemaOutOfDate, init_db
+
+    with pytest.raises(SchemaOutOfDate) as err:
+        init_db(_old_database(tmp_path))
+    message = str(err.value)
+    assert "integrations has no column account" in message and "docker compose down -v" in message and "DELETES" in message
+
+
+def test_a_current_database_passes_and_an_empty_one_is_created(tmp_path):
+    from app.storage import init_db
+
+    engine = make_engine(f"sqlite:///{tmp_path}/new.db")
+    init_db(engine)
+    init_db(engine)  # starting again on the database it made is fine
+
+
+def test_the_api_stops_at_startup_on_an_old_database(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app import main
+    from app.storage import SchemaOutOfDate, init_db
+
+    engine = _old_database(tmp_path)
+    monkeypatch.setattr(main, "get_engine", lambda: init_db(engine))
+    with pytest.raises(SchemaOutOfDate, match="docker compose down -v"), TestClient(main.create_app()):
+        pass

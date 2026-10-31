@@ -5,6 +5,7 @@ Run:  cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
 
 import logging
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,14 +15,23 @@ from app.api.deps import account_dep
 from app.core.errors import install_error_handlers
 from app.core.logging import request_id_var, setup_logging
 from app.core.settings import get_settings
+from app.storage import get_engine
 
 log = logging.getLogger("app")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Open the database when the server starts, so an old or mismatched one stops it with a clear message (D-18)
+    instead of failing on the first request."""
+    get_engine()
+    yield
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings.log_level)
-    app = FastAPI(title="Integration Platform API", version="1.0.0", docs_url=f"{settings.api_prefix}/docs", openapi_url=f"{settings.api_prefix}/openapi.json")
+    app = FastAPI(lifespan=lifespan, title="Integration Platform API", version="1.0.0", docs_url=f"{settings.api_prefix}/docs", openapi_url=f"{settings.api_prefix}/openapi.json")
 
     app.add_middleware(
         CORSMiddleware,
