@@ -269,7 +269,7 @@ export default function AddEdit() {
   if (loadError) return <ErrorBox message={loadError} />
 
   return (
-    <section>
+    <section className="formpage">
       <div className="page-head">
         <div>
           <h1>{id ? `Edit ${id}` : 'Add integration'}</h1>
@@ -527,10 +527,10 @@ export default function AddEdit() {
 
         <aside className="card sticky">
           <Tabs value={pane} onValueChange={v => setPane(v as Pane)}>
-            <TabsList className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent px-3 pt-2.5">
-              <TabsTrigger value="config" className="flex-none rounded-none border-0 border-b-2 border-transparent px-3 py-2 font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none">Config</TabsTrigger>
-              <TabsTrigger value="validate" className="flex-none rounded-none border-0 border-b-2 border-transparent px-3 py-2 font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none">Validation {errors.length > 0 && <Pill kind="failed">{errors.length}</Pill>}</TabsTrigger>
-              <TabsTrigger value="test" className="flex-none rounded-none border-0 border-b-2 border-transparent px-3 py-2 font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none">Test connection</TabsTrigger>
+            <TabsList className="pane-tabs">
+              <TabsTrigger value="config" className="pane-tab">Config</TabsTrigger>
+              <TabsTrigger value="validate" className="pane-tab">Validation {errors.length > 0 && <Pill kind="failed">{errors.length}</Pill>}</TabsTrigger>
+              <TabsTrigger value="test" className="pane-tab">Test connection</TabsTrigger>
             </TabsList>
           </Tabs>
 

@@ -366,3 +366,16 @@ td a:not(.row-actions a){color:var(--accent);font-weight:600} td a:not(.row-acti
 .mdl a{color:var(--accent);font-weight:600;text-decoration:none}.mdl a:hover{color:var(--accent-ink);text-decoration:underline}
 .mdl-body>*{flex-shrink:0}
 .mdl-body{overflow-x:hidden}
+
+/* ---- Add / Edit page: bigger tabs and buttons that are easy to hit ---------------------------------------------------- */
+.pane-tabs{display:flex!important;width:100%;height:auto!important;justify-content:flex-start;gap:6px!important;background:var(--head-bg)!important;border-bottom:1px solid var(--line);border-radius:16px 16px 0 0!important;padding:10px 12px 0!important}
+.pane-tab{flex:none;display:inline-flex;align-items:center;gap:8px;min-height:50px;padding:12px 22px!important;font-size:15.5px!important;font-weight:700!important;color:var(--muted)!important;
+  background:transparent!important;border:0!important;border-bottom:3px solid transparent!important;border-radius:12px 12px 0 0!important;box-shadow:none!important;cursor:pointer;transition:background .12s,color .12s}
+.pane-tab:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)!important;color:var(--ink)!important}
+.pane-tab[data-state=active]{color:var(--accent-ink)!important;background:var(--surface)!important;border-bottom-color:var(--accent)!important}
+.pane-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.formpage [data-slot=button][data-size=sm]{min-height:46px;padding:10px 22px;font-size:14.5px;border-radius:10px}
+.formpage .seg button{padding:12px 24px;font-size:14.5px;min-height:46px}
+.formpage .actions-bar{gap:12px;align-items:center}
+.formpage .inline{gap:12px}
+@media(max-width:620px){.pane-tab{padding:12px 14px!important;font-size:14.5px!important}}
