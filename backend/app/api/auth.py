@@ -25,6 +25,9 @@ def _signed_in(s: Session, username: str) -> dict:
     token, hashed = auth.new_token()
     expires = auth.expiry()
     repo.add_auth_session(s, hashed, username, expires)
+    # Save it now. The session dependency commits only AFTER the response is sent (FastAPI 0.118 and later), so without
+    # this the dashboard's very next request can arrive before the session exists and get a 401, which signs it out.
+    s.commit()
     return {"username": username, "token": token, "expires_at": expires}
 
 
