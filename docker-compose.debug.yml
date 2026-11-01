@@ -1,0 +1,10 @@
+# Development only: also publish the API and the mock, on this machine only (127.0.0.1).
+#   docker compose -f docker-compose.yml -f docker-compose.debug.yml up
+# The normal file publishes only the dashboard (D-17 S-1).
+services:
+  backend:
+    ports:
+      - "127.0.0.1:8000:8000"
+  mock-api:
+    ports:
+      - "127.0.0.1:8001:8001"

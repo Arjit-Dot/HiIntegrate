@@ -1,6 +1,20 @@
 # HiIntegrate: the whole stack.   docker compose up --build
 # Needs a .env in this folder (names are in README.md). It is never committed and never copied into an image.
 # At least: POSTGRES_PASSWORD, ENCRYPTION_KEY, and one SECRET_<NAME> (plus SECRET_<NAME>_HOST) per service you call.
+#
+# Security (D-17): only the dashboard is published, and only on 127.0.0.1 (S-1). The API, the worker, the mock and the
+# database are reachable only from inside Compose; the dashboard forwards /api to the API. Set DASHBOARD_PASSWORD in
+# .env to put a password in front of the dashboard and the API (S-3). To reach the API or the mock directly from this
+# machine while developing, add the debug file:  docker compose -f docker-compose.yml -f docker-compose.debug.yml up
+
+x-hardened: &hardened          # S-4: no extra privileges, no Linux capabilities, a read-only filesystem
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp
 
 x-backend: &backend
   build:
@@ -21,7 +35,17 @@ x-backend: &backend
 
 services:
   postgres:
+    <<: *hardened
     image: postgres:16
+    cap_add:                   # what the image needs to drop from root to the postgres user and own its data directory
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: hiintegrate
@@ -35,10 +59,8 @@ services:
     restart: unless-stopped
 
   backend:
-    <<: *backend
+    <<: [*backend, *hardened]
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    ports:
-      - "8000:8000"
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
@@ -49,29 +71,42 @@ services:
 
   # Scheduled pulls and alert emails. Same image and settings; waits for the API, which creates the tables.
   worker:
-    <<: *backend
+    <<: [*backend, *hardened]
     command: ["python", "-m", "app.worker"]
     depends_on:
       backend: { condition: service_healthy }
 
   frontend:
+    <<: *hardened
     build: ./frontend
     image: hiintegrate-frontend
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"    # the only published port, and only on this machine
+    cap_add:                   # nginx starts as root, then drops to its own user and binds port 80
+      - CHOWN
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    tmpfs:                     # nginx writes its rendered config, its password file, its cache and its pid here
+      - /tmp
+      - /etc/nginx/conf.d
+      - /var/cache/nginx
+      - /var/run
+    environment:
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}   # empty = no password (v1 default, D-6)
     depends_on:
       backend: { condition: service_healthy }
     restart: unless-stopped
 
   # The local test target for the failure tests. Not a data source. It gets no .env, so no real token reaches it.
   mock-api:
+    <<: *hardened
     build:
       context: .
       dockerfile: backend/Dockerfile
     image: hiintegrate-backend
     command: ["uvicorn", "tests.mock_api.app:app", "--host", "0.0.0.0", "--port", "8001"]
-    ports:
-      - "8001:8001"
     restart: unless-stopped
 
 volumes:
