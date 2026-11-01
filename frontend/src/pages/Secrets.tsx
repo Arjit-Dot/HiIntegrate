@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { api, ApiError, type SecretInfo } from '../api/client'
 import { ErrorBox, Pill, useToast } from '../components/common'
+import { Banner } from '../components/modal-parts'
 
 // Same rule as the API: lowercase, no scheme, no path, no port.
 const HOST_RE = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/
@@ -17,15 +18,20 @@ export default function Secrets() {
   return (
     <section>
       <div className="page-head">
-        <div><h1>Secrets</h1><p>Keys and passwords are kept by name. A value can be set or replaced, and never shown again. Each one is pinned to the host it may be sent to.</p></div>
+        <div><h1>Secrets</h1><p>The keys and passwords your integrations use to sign in to other services.</p></div>
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <Banner tone="info" title="Write-only, encrypted, and pinned to one host">
+          You can set or replace a value here, but it is never shown again, not even to you. Each secret can only be sent to the host shown next to it: if a config calls any other host, the request is blocked and nothing is sent.
+        </Banner>
       </div>
       {error && <ErrorBox message={error} />}
       <div className="card tablewrap">
         <table>
-          <thead><tr><th>Name</th><th>Status</th><th>Pinned host</th><th>Updated</th><th style={{ width: '44%' }}>Set or replace value</th></tr></thead>
+          <thead><tr><th>Name</th><th>Status</th><th>Pinned host</th><th>Updated</th><th style={{ width: '44%' }}>Set or replace the value</th></tr></thead>
           <tbody>
             {items === null && !error && <tr><td colSpan={5} className="muted">Loading…</td></tr>}
-            {items !== null && items.length === 0 && <tr><td colSpan={5} className="muted">No secrets yet. Add an integration to create one, or set one from its form.</td></tr>}
+            {items !== null && items.length === 0 && <tr><td colSpan={5} className="muted">No secrets yet. Add an integration and set its key in the form, or use Add a secret below.</td></tr>}
             {(items ?? []).map(s => <SecretRow key={s.name} secret={s} onSaved={load} />)}
           </tbody>
         </table>
@@ -44,17 +50,17 @@ function SecretRow({ secret, onSaved }: { secret: SecretInfo; onSaved: () => voi
 
   async function save() {
     const h = host.trim().toLowerCase()
-    if (!value) { toast('Enter the value first.'); return }
-    if (!HOST_RE.test(h)) { toast('Enter the host only, such as api.github.com (no https://, path or port).'); return }
+    if (!value) { toast(`Type the new value for ${secret.name} first.`); return }
+    if (!HOST_RE.test(h)) { toast('Enter the host only, such as api.github.com: no https://, no path and no port.'); return }
     setBusy(true)
     try {
       await api.setSecret(secret.name, value, h)
       setValue('')   // never keep the value in the page
-      toast(`${secret.name} ${secret.set ? 'replaced' : 'set'} and pinned to ${h}`)
+      toast(`${secret.name} ${secret.set ? 'replaced' : 'saved'}. It can now only be sent to ${h}.`)
       onSaved()
     } catch (e) {
       if (e instanceof ApiError && e.status === 501) toast(`Secret store not available yet. Set SECRET_${secret.name.toUpperCase()} in .env.`)
-      else toast(e instanceof Error ? e.message : 'Could not save the secret')
+      else toast(e instanceof Error ? `Could not save ${secret.name}: ${e.message}` : `Could not save ${secret.name}.`)
     } finally { setBusy(false) }
   }
 
@@ -68,7 +74,7 @@ function SecretRow({ secret, onSaved }: { secret: SecretInfo; onSaved: () => voi
         <div className="inline">
           <input type="password" autoComplete="new-password" placeholder={secret.set ? 'New value' : 'Value'} value={value} onChange={e => setValue(e.target.value)} />
           <input type="text" className="mono" style={{ maxWidth: 190 }} placeholder="host, e.g. api.github.com" value={host} onChange={e => setHost(e.target.value)} />
-          <Button size="sm" disabled={busy} onClick={save}>{secret.set ? 'Replace' : 'Set'}</Button>
+          <Button size="sm" disabled={busy} onClick={save} title={`Encrypts the value and pins ${secret.name} to the host in the box`}>{busy ? 'Saving…' : secret.set ? 'Replace value' : 'Set value'}</Button>
         </div>
       </td>
     </tr>
@@ -88,17 +94,17 @@ function NewSecret({ onSaved }: { onSaved: () => void }) {
   async function save() {
     const n = name.trim()
     const h = host.trim().toLowerCase()
-    if (!NAME_RE.test(n)) { toast('A name is letters, digits and underscores only, such as smtp_password.'); return }
-    if (!value) { toast('Enter the value first.'); return }
-    if (!HOST_RE.test(h)) { toast('Enter the host only, such as smtp.gmail.com (no https://, path or port).'); return }
+    if (!NAME_RE.test(n)) { toast('A secret name uses letters, digits and underscores only, for example smtp_password.'); return }
+    if (!value) { toast('Type the secret value first.'); return }
+    if (!HOST_RE.test(h)) { toast('Enter the host only, such as smtp.gmail.com: no https://, no path and no port.'); return }
     setBusy(true)
     try {
       await api.setSecret(n, value, h)
       setValue(''); setName(''); setHost('')   // never keep the value in the page
-      toast(`${n} saved and pinned to ${h}`)
+      toast(`${n} saved. It can now only be sent to ${h}.`)
       onSaved()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not save the secret')
+      toast(e instanceof Error ? `Could not save ${n}: ${e.message}` : `Could not save ${n}.`)
     } finally { setBusy(false) }
   }
 
@@ -111,9 +117,9 @@ function NewSecret({ onSaved }: { onSaved: () => void }) {
       </p>
       <div className="inline">
         <input type="text" className="mono" style={{ maxWidth: 190 }} placeholder="name, e.g. smtp_password" value={name} onChange={e => setName(e.target.value)} />
-        <input type="password" autoComplete="new-password" placeholder="Value" value={value} onChange={e => setValue(e.target.value)} />
+        <input type="password" autoComplete="new-password" placeholder="Value (never shown again)" value={value} onChange={e => setValue(e.target.value)} />
         <input type="text" className="mono" style={{ maxWidth: 190 }} placeholder="host, e.g. smtp.gmail.com" value={host} onChange={e => setHost(e.target.value)} />
-        <Button size="sm" disabled={busy} onClick={save}>Save</Button>
+        <Button size="sm" disabled={busy} onClick={save} title="Encrypts the value and pins the name to the host">{busy ? 'Saving…' : 'Save secret'}</Button>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api, type QuarantineRecord } from '../api/client'
 import { ErrorBox, Pill, useToast } from '../components/common'
+import { QuarantineDetail } from '../components/RecordDetails'
 import { PAGE_SIZE, Pager } from '../components/Pager'
 import { FixWithAi } from '../components/FixWithAi'
 
@@ -15,6 +16,7 @@ export default function Quarantine() {
   const [offset, setOffset] = useState(0)
   const [data, setData] = useState<{ items: QuarantineRecord[]; total: number } | null>(null)
   const [error, setError] = useState('')
+  const [detail, setDetail] = useState<QuarantineRecord | null>(null)
   const [busy, setBusy] = useState(false)
   const [fixing, setFixing] = useState<{ integration: string; action: string } | null>(null)
   const [reload, setReload] = useState(0)
@@ -59,21 +61,22 @@ export default function Quarantine() {
       </div>
       {error && <ErrorBox message={error} />}
       <div className="card tablewrap">
-        <table>
-          <thead><tr><th>Source</th><th>Action</th><th>Schema</th><th>Run</th><th>Reason</th><th>Field</th><th>Quarantined at</th><th>Original record</th></tr></thead>
+        <table className="dense">
+          <thead><tr><th>Source</th><th>Action</th><th>Schema</th><th>Run</th><th>Reason</th><th>Field</th><th>Quarantined at</th><th>Original record</th><th><span className="sr-only">Details</span></th></tr></thead>
           <tbody>
-            {data === null && !error && <tr><td colSpan={8} className="muted">Loading…</td></tr>}
-            {data !== null && rows.length === 0 && <tr><td colSpan={8} className="muted">Nothing quarantined.</td></tr>}
+            {data === null && !error && <tr><td colSpan={9} className="muted">Loading…</td></tr>}
+            {data !== null && rows.length === 0 && <tr><td colSpan={9} className="muted">Nothing quarantined.</td></tr>}
             {rows.map((q, i) => (
               <tr key={`${q.run_id}:${i}`}>
                 <td>{q.source}</td>
                 <td className="mono small">{q.action}</td>
                 <td><Pill kind="schema">{q.target_schema}</Pill></td>
-                <td className="mono small">{q.run_id}</td>
+                <td className="mono small nowrap">{q.run_id}</td>
                 <td><Pill kind="failed">{q.reason}</Pill></td>
                 <td className="mono small">{q.field ?? ''}</td>
                 <td className="small">{new Date(q.created_at).toLocaleString()}</td>
-                <td className="mono small">{JSON.stringify(q.raw)}</td>
+                <td className="mono small"><div className="cell-wrap" title={JSON.stringify(q.raw)}>{JSON.stringify(q.raw)}</div></td>
+                <td><Button variant="secondary" size="sm" type="button" onClick={() => setDetail(q)}>Details</Button></td>
               </tr>
             ))}
           </tbody>
@@ -95,6 +98,7 @@ export default function Quarantine() {
       {data && <Pager offset={offset} total={data.total} onChange={setOffset} />}
       {fixing && <FixWithAi {...fixing} onClose={() => setFixing(null)} onApplied={() => setReload(n => n + 1)} />}
       <p className="note">Export returns every quarantined record that matches the filters, in one file, not one page at a time.</p>
+      {detail && <QuarantineDetail q={detail} onClose={() => setDetail(null)} />}
     </section>
   )
 }

@@ -143,3 +143,247 @@ pre{margin:0;background:var(--pre-bg);color:var(--pre-ink);border-radius:10px;pa
 .dark .modal-bg{background:rgba(0,0,0,.65)}
 .theme-toggle{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;width:34px;height:34px;display:grid;place-items:center;cursor:pointer;font-size:16px;line-height:1}
 .theme-toggle:hover{background:var(--hover)}
+
+/* ---- Roomier layout (UI pass): larger type and controls, more space between fields, sections and rows ---------------- */
+body{font-size:15px;line-height:1.65}
+h1{font-size:28px;letter-spacing:-.01em} h2{font-size:18px} h3{font-size:15px}
+.topbar{height:68px;padding:0 32px;gap:24px}
+.brand{font-size:17px;gap:12px} .logo{width:34px;height:34px;border-radius:10px;font-size:17px}
+.nav{gap:4px;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav a .navlink{padding:10px 14px;font-size:15px;border-radius:10px}
+.proto{background:none;color:var(--muted);border:1px solid var(--line);font-weight:500;padding:5px 12px}
+@media(max-width:1800px){.proto{display:none}}
+main{max-width:1360px;padding:40px 32px 72px}
+.page-head{margin-bottom:28px}
+.page-head p{margin-top:8px;font-size:15.5px;max-width:78ch}
+.toolbar{gap:14px;margin-bottom:24px!important}
+.toolbar input,.toolbar select{min-width:200px}
+.btn{padding:11px 20px;border-radius:10px}
+.btn.small{padding:7px 14px;font-size:13.5px}
+input[type=text],input[type=number],input[type=password],select,textarea{padding:11px 14px;border-radius:10px;font-size:15px}
+select{padding-right:36px;background-position:right 14px center}
+textarea{min-height:92px;line-height:1.55}
+label{font-size:14px;margin-bottom:8px}
+.hint{font-size:13px;margin-top:7px;line-height:1.55}
+th{font-size:12px;padding:14px 20px}
+td{padding:18px 20px;line-height:1.6}
+.pill{padding:4px 12px;font-size:13px}
+.card-pad{padding:28px}
+.section{padding:30px}
+.section h2{margin-bottom:20px}
+.step{width:26px;height:26px;font-size:13px}
+.grid{gap:22px 26px}
+.layout{gap:32px}
+.sticky{top:92px}
+.callout{padding:20px 24px;margin-bottom:26px;line-height:1.7}
+.callout ul{margin-top:10px;padding-left:22px}
+.callout li{margin-bottom:4px}
+.maprow,.maphead{grid-template-columns:150px minmax(0,1fr) 150px 72px;gap:12px}
+.maprow{padding:14px 0}
+.inrow{gap:12px;margin-bottom:12px}
+.tabs{padding:14px 18px 0;gap:6px}
+.tabs button{padding:10px 16px}
+.pane{padding:22px}
+pre{padding:18px;font-size:13.5px;line-height:1.65}
+.issue{padding:14px 16px;margin-bottom:12px;gap:12px}
+.actions-bar{gap:12px;margin-bottom:20px}
+.cards{grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:24px}
+.tcard{padding:26px;gap:14px}
+.seg button{padding:9px 16px}
+.modal{max-width:800px;padding:32px;border-radius:16px}
+.modal-head{margin-bottom:22px}
+.toast{padding:14px 20px;font-size:15px;max-width:420px}
+.note{margin-top:26px;font-size:13.5px}
+.theme-toggle{width:40px;height:40px;border-radius:10px}
+/* Integrations table: a summary of the actions instead of every name, and row buttons that wrap into a tidy group */
+.tablewrap td:first-child,.card table td:first-child{min-width:210px}
+.actions-cell{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-bottom:10px;max-width:300px}
+.actions-cell:last-child{margin-bottom:0}
+.actions-cell code{background:var(--hover);padding:3px 9px;border-radius:7px;font-size:12.5px}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;width:190px;margin-left:auto}
+.row-actions a{text-decoration:none}
+.nowrap{white-space:nowrap}
+.cell-wrap{max-width:320px;word-break:break-all;display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+table.dense th,table.dense td{padding-left:13px;padding-right:13px}
+.tcard > :last-child{margin-top:auto}
+/* smaller laptop screens: keep the roomy feel but let the top bar and the tables fit */
+@media(max-width:1240px){
+  .topbar{padding:0 20px;gap:14px}
+  .nav a .navlink{padding:9px 10px;font-size:14px}
+  .topbar .small.muted{display:none}
+  main{padding:32px 20px 56px}
+  td{padding:16px 14px} th{padding:12px 14px}
+  .actions-cell{max-width:200px}
+  .row-actions{width:170px}
+  th{white-space:normal;line-height:1.3}
+  .facts dt{min-width:54px}
+  .pill-row{gap:8px}
+}
+@media(max-width:760px){
+  main{padding:24px 14px 48px}
+  .page-head{align-items:flex-start}
+  h1{font-size:24px}
+}
+
+
+/* Integrations table: labelled details and room between the chips */
+.pill-row{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.facts{margin:10px 0 0;display:grid;gap:3px}
+.facts div{display:flex;gap:8px;font-size:13px;line-height:1.5}
+.facts dt{color:var(--muted);min-width:62px}
+.facts dd{margin:0}
+.actions-cell{gap:8px 10px}
+
+/* ---- Polish: depth, colour and a little life (light and dark) ---------------------------------------------------------- */
+:root{
+  --grad:linear-gradient(135deg,#6366f1,#8b5cf6);
+  --glow1:rgba(99,102,241,.16); --glow2:rgba(168,85,247,.11);
+  --bg:#f1f3fb; --line:#e1e6f3; --head-bg:#f4f6fd;
+  --shadow:0 1px 2px rgba(30,41,90,.05),0 10px 26px -14px rgba(30,41,90,.22);
+}
+.dark{
+  --bg:#0d1224; --card:#151b30; --surface:#151b30; --line:#262f4a; --head-bg:#1a2139; --hover:#1e2745; --hover-2:#1b2340;
+  --ink:#eaf0fb; --muted:#9aa8c4; --glow1:rgba(99,102,241,.24); --glow2:rgba(139,92,246,.15);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 32px -16px rgba(0,0,0,.75);
+}
+body{background:radial-gradient(1100px 520px at 88% -8%,var(--glow1),transparent 62%),radial-gradient(900px 460px at -8% 4%,var(--glow2),transparent 58%),var(--bg);background-attachment:fixed}
+.topbar{background:color-mix(in srgb,var(--surface) 82%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.topbar::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--grad)}
+.logo{background:var(--grad);box-shadow:0 6px 16px -6px rgba(99,102,241,.8)}
+.card{border-radius:16px;box-shadow:var(--shadow)}
+.page-head h1::after{content:"";display:block;width:46px;height:4px;border-radius:4px;background:var(--grad);margin-top:10px}
+/* buttons */
+.btn,[data-slot=button][data-variant=default]{background-image:var(--grad);border-color:transparent;color:#fff;box-shadow:0 8px 18px -9px rgba(99,102,241,.75);transition:transform .12s,filter .12s,box-shadow .12s}
+.btn:hover,[data-slot=button][data-variant=default]:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 12px 22px -10px rgba(99,102,241,.85)}
+.btn.secondary,.btn.danger{background-image:none;box-shadow:none;transform:none;filter:none}
+[data-slot=button][data-variant=secondary]:hover,.btn.secondary:hover{border-color:var(--accent);color:var(--accent-ink)}
+[data-slot=switch][data-state=checked]{background-image:var(--grad)}
+/* tables */
+th{background:var(--head-bg)}
+tbody tr{transition:background .12s}
+tbody tr:hover td{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+/* status chips get a dot (the chips are the Badge component, which sets data-variant) */
+[data-slot=badge]:is([data-variant=healthy],[data-variant=success],[data-variant=degraded],[data-variant=running],[data-variant=failing],[data-variant=failed],
+  [data-variant=disabled],[data-variant=never_run],[data-variant=set],[data-variant=notset])::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:7px;flex:none}
+/* summary tiles on Integrations */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:26px}
+.stat{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 24px 20px 28px;box-shadow:var(--shadow);overflow:hidden}
+.stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--tone)}
+.stat.accent{--tone:var(--grad)} .stat.ok{--tone:#22c55e} .stat.warn{--tone:#f59e0b} .stat.off{--tone:#94a3b8}
+.stat-n{font-size:36px;font-weight:800;line-height:1.1;letter-spacing:-.02em}
+.stat.accent .stat-n{color:var(--accent-ink)} .stat.ok .stat-n{color:var(--ok)} .stat.warn .stat-n{color:var(--warn)} .stat.off .stat-n{color:var(--muted)}
+.stat-label{font-weight:700;margin-top:6px}
+.stat-hint{color:var(--muted);font-size:13px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* cards, steps, segmented buttons */
+.tcard{transition:transform .15s,box-shadow .15s,border-color .15s}
+.tcard:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 18px 36px -18px rgba(79,70,229,.5)}
+.step{background:var(--grad);color:#fff}
+.seg button.active{background:var(--grad);color:#fff}
+.callout{background:linear-gradient(135deg,var(--accent-soft),color-mix(in srgb,var(--accent-soft) 55%,var(--surface)))}
+/* sign-in */
+.login-brand{display:flex;align-items:center;justify-content:center;gap:14px;font-size:28px;font-weight:800;letter-spacing:-.01em}
+.login-brand .logo{width:48px;height:48px;border-radius:14px;font-size:25px}
+.login-tag{text-align:center;color:var(--muted);margin:8px 0 30px;font-size:16px}
+.login .page-head{justify-content:center;text-align:center}
+.login .page-head h1::after{margin-left:auto;margin-right:auto}
+.login .card{box-shadow:0 24px 54px -26px rgba(79,70,229,.55)}
+.note a,.login a{color:var(--accent);font-weight:600;text-decoration:none}
+.note a:hover,.login a:hover{color:var(--accent-ink);text-decoration:underline}
+table.runs th:first-child,table.runs td:first-child{width:88px}
+table.runs th,table.runs td{padding-left:10px;padding-right:10px}
+td a:not(.row-actions a){color:var(--accent);font-weight:600} td a:not(.row-actions a):hover{color:var(--accent-ink)}
+
+/* ---- Windows: one structure for every dialog (header, scrolling body, sticky footer) ---------------------------------- */
+.mdl{background:var(--surface);border:1px solid var(--line);border-radius:18px!important;box-shadow:0 30px 70px -20px rgba(15,23,42,.45)}
+.mdl-head{padding:24px 64px 16px 28px;border-bottom:1px solid var(--line);flex:none}
+.mdl-title{font-size:20px!important;line-height:1.3!important;font-weight:800!important;letter-spacing:-.01em}
+.mdl-sub{margin-top:6px;color:var(--muted);font-size:14.5px;line-height:1.55}
+.mdl-body{padding:22px 28px;overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:20px}
+.mdl-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:12px;padding:16px 28px;border-top:1px solid var(--line);background:var(--head-bg);flex:none}
+.mdl-foot-note{margin-right:auto;color:var(--muted);font-size:13.5px;max-width:46ch}
+@media(max-width:560px){.mdl-head,.mdl-body,.mdl-foot{padding-left:18px;padding-right:18px}.mdl-head{padding-right:52px}.mdl-foot .btn,.mdl-foot [data-slot=button]{flex:1}}
+.mdl-section-title{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
+.mdl-section-hint{margin:-4px 0 10px;color:var(--muted);font-size:13.5px}
+.mdl-section>:last-child{margin-bottom:0}
+/* status banner */
+.banner{display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-radius:14px;border:1px solid transparent}
+.banner-icon{flex:none;margin-top:1px}
+.banner-title{font-weight:800;font-size:16.5px;line-height:1.35}
+.banner-text{margin-top:4px;line-height:1.6}
+.banner-next{margin-top:8px;line-height:1.55}
+.banner.success{background:var(--ok-bg);color:var(--issue-ok-ink);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
+.banner.success .banner-icon{color:var(--ok)}
+.banner.failed{background:var(--bad-bg);color:var(--issue-ink);border-color:var(--bad-line)}
+.banner.failed .banner-icon{color:var(--bad)}
+.banner.warning{background:var(--warn-bg);color:var(--warn-ink);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+.banner.warning .banner-icon{color:var(--warn)}
+.banner.info{background:var(--info-bg);color:var(--ink);border-color:color-mix(in srgb,var(--info) 30%,transparent)}
+.banner.info .banner-icon{color:var(--info)}
+/* key / value rows */
+.kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 28px;margin:0}
+.kv>div{min-width:0}
+.kv dt{font-size:12.5px;color:var(--muted);margin-bottom:2px}
+.kv dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+@media(max-width:560px){.kv{grid-template-columns:1fr}}
+/* loading */
+.loading{display:flex;gap:14px;align-items:center;padding:18px;border:1px dashed var(--line);border-radius:14px;background:var(--head-bg)}
+.loading-title{font-weight:700}
+.spinner{width:22px;height:22px;border-radius:50%;border:3px solid color-mix(in srgb,var(--accent) 25%,transparent);border-top-color:var(--accent);animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spinner{animation-duration:2.4s}}
+/* technical details */
+.tech{border:1px solid var(--line);border-radius:12px;background:var(--head-bg)}
+.tech>summary{cursor:pointer;padding:12px 16px;font-weight:700;font-size:14px;color:var(--muted);list-style-position:inside}
+.tech[open]>summary{border-bottom:1px solid var(--line)}
+.tech-body{padding:12px 16px 16px}
+.tech-bar{display:flex;justify-content:flex-end;margin-bottom:8px}
+.tech pre{max-height:260px}
+/* a record as a table */
+.rectable{width:100%;border:1px solid var(--line);border-radius:12px;border-collapse:separate;border-spacing:0;overflow:hidden;font-size:14px}
+.rectable caption{caption-side:top;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:0 0 8px}
+.rectable th{width:34%;text-align:left;text-transform:none;letter-spacing:0;font-size:13px;font-weight:700;padding:9px 14px;background:var(--head-bg);white-space:normal;vertical-align:top}
+.rectable td{padding:9px 14px;overflow-wrap:anywhere}
+.rectable tr+tr th,.rectable tr+tr td{border-top:1px solid var(--line)}
+/* before / after of a change */
+.diff{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.diff>div{border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.diff .was{background:var(--bad-soft);border-color:var(--bad-line)}
+.diff .will{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
+.diff h4{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.diff pre{background:transparent;color:var(--ink);padding:0;max-height:180px;font-size:13px}
+@media(max-width:560px){.diff{grid-template-columns:1fr}}
+.meter{height:10px;border-radius:6px;background:var(--line);overflow:hidden;margin:10px 0}
+.meter>div{height:100%;background:linear-gradient(90deg,#22c55e,#16a34a);border-radius:6px}
+.bullets{margin:6px 0 0;padding-left:20px;line-height:1.7}
+.field-note{font-size:13px;color:var(--muted);margin-top:6px}
+.mdl-stack{display:flex;flex-direction:column;gap:20px}
+/* the window's close button */
+.mdl [data-slot=dialog-close]{top:20px!important;right:22px!important;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;opacity:1!important;color:var(--muted);border:1px solid var(--line)}
+.mdl [data-slot=dialog-close]:hover{background:var(--hover);color:var(--ink)}
+.mdl a{color:var(--accent);font-weight:600;text-decoration:none}.mdl a:hover{color:var(--accent-ink);text-decoration:underline}
+.mdl-body>*{flex-shrink:0}
+.mdl-body{overflow-x:hidden}
+
+/* ---- Add / Edit page: bigger tabs and buttons that are easy to hit ---------------------------------------------------- */
+.pane-tabs{display:flex!important;width:100%;height:auto!important;justify-content:flex-start;gap:6px!important;background:var(--head-bg)!important;border-bottom:1px solid var(--line);border-radius:16px 16px 0 0!important;padding:10px 12px 0!important}
+.pane-tab{flex:none;display:inline-flex;align-items:center;gap:8px;min-height:50px;padding:12px 22px!important;font-size:15.5px!important;font-weight:700!important;color:var(--muted)!important;
+  background:transparent!important;border:0!important;border-bottom:3px solid transparent!important;border-radius:12px 12px 0 0!important;box-shadow:none!important;cursor:pointer;transition:background .12s,color .12s}
+.pane-tab:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)!important;color:var(--ink)!important}
+.pane-tab[data-state=active]{color:var(--accent-ink)!important;background:var(--surface)!important;border-bottom-color:var(--accent)!important}
+.pane-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.formpage [data-slot=button][data-size=sm]{min-height:46px;padding:10px 22px;font-size:14.5px;border-radius:10px}
+.formpage .seg button{padding:12px 24px;font-size:14.5px;min-height:46px}
+.formpage .actions-bar{gap:12px;align-items:center}
+.formpage .inline{gap:12px}
+@media(max-width:620px){.pane-tab{padding:12px 14px!important;font-size:14.5px!important}}
+
+/* ---- Integrations table: only the controls get bigger (buttons and the on/off switch). Text and spacing stay as they were. ---- */
+.intable [data-slot=button][data-size=sm]{min-height:38px;padding:8px 16px;font-size:14px;border-radius:10px}
+.intable .row-actions{width:230px}
+.intable [data-slot=switch]{transform:scale(1.2);transform-origin:left center}
+@media(max-width:1400px){.intable td,.intable th{padding-left:16px;padding-right:16px}.intable .row-actions{width:196px}.intable [data-slot=button][data-size=sm]{padding:8px 13px;font-size:13.5px}}
+@media(max-width:1240px){.intable td,.intable th{padding-left:14px;padding-right:14px}}
+@media(max-width:1240px){.intable .row-actions{width:172px}.intable [data-slot=button][data-size=sm]{min-height:36px;padding:7px 12px}}
