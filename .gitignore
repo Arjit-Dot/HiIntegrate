@@ -30,3 +30,17 @@ CLAUDE.md
 certs/
 *.pem
 *.key
+
+# Team working notes, not part of the product (kept on disk, not published)
+catchup.md
+Finaltester.md
+presentation.txt
+
+# Test, coverage and tool leftovers
+.coverage
+htmlcov/
+coverage/
+*.log
+*.swp
+*.tmp
+.claude/
