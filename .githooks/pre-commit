@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# D-17 S-5: scan what is about to be committed for secrets (tokens, keys, passwords) and stop the commit if any is found.
+# One-time setup in each clone:   git config core.hooksPath .githooks
+# Uses a local `gitleaks` if there is one, otherwise the gitleaks Docker image. Output is redacted: it never prints a secret.
+# A real false alarm can be skipped for one commit with:   SKIP_GITLEAKS=1 git commit ...
+if [ "${SKIP_GITLEAKS:-}" = "1" ]; then
+  echo "gitleaks: skipped (SKIP_GITLEAKS=1)"
+  exit 0
+fi
+
+root="$(git rev-parse --show-toplevel)"
+
+if command -v gitleaks >/dev/null 2>&1; then
+  if gitleaks git --help >/dev/null 2>&1; then
+    gitleaks git --pre-commit --staged --redact --no-banner "$root"          # gitleaks 8.19 and newer
+  else
+    gitleaks protect --staged --redact --no-banner --source "$root"          # older versions
+  fi
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  docker run --rm -v "$root":/repo:ro zricethezav/gitleaks:latest git --pre-commit --staged --redact --no-banner /repo
+else
+  echo "gitleaks: cannot scan. Install gitleaks or start Docker, or commit with SKIP_GITLEAKS=1 (not recommended)." >&2
+  exit 1
+fi
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo >&2
+  echo "Commit blocked: gitleaks found something that looks like a secret in the staged files (shown above, redacted)." >&2
+  echo "Remove it, and if it was a real secret, revoke and replace it. Never commit .env." >&2
+fi
+exit "$status"
