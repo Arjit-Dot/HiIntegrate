@@ -96,6 +96,17 @@ def test_a_new_action_runs_at_once_and_a_known_one_waits_an_interval(engine, moc
     assert getattr(sched.get_job("tester:fresh:users_cursor"), "next_run_time", None) is None  # has run: the interval decides, not a restart
 
 
+def test_a_test_connection_run_does_not_cancel_the_first_scheduled_run(engine, mock):
+    """Test connection saves the integration and records a `test` run. The first real run must still happen at once."""
+    sched = BackgroundScheduler(timezone="UTC")
+    add(engine, service("tested", ("users_cursor",), schedule="every 1h"))
+    with session_scope(engine) as s:
+        run = repo.start_run(s, ACCT, "tested", "users_cursor", "pull", "test")
+        run.status = "success"
+    timer.sync(sched, engine, client=mock)
+    assert sched.get_job("tester:tested:users_cursor").next_run_time is not None
+
+
 def test_a_scheduled_job_runs_the_action_and_saves_records(engine, mock):
     add(engine, service("job", ("users_cursor",)))
     timer.run_job(engine, ACCT, "job", "users_cursor", client=mock)
@@ -505,3 +516,23 @@ def test_the_okta_system_log_asks_only_for_what_is_new_after_the_first_run(monke
     assert first.request.url.params["since"] == "2026-01-01T09:00:00Z"  # no success yet: the template's 24 hour window
     later = build_request(cfg, "list_alerts", state={"last_success_at": "2026-01-02T08:55:00Z"}, now=datetime(2026, 1, 2, 9, 0, 0, tzinfo=UTC))
     assert later.request.url.params["since"] == "2026-01-02T08:55:00Z" and later.request.url.params["limit"] == "100"
+
+
+def test_a_later_full_pull_clears_the_older_quarantine_of_the_same_action_only(engine, mock):
+    """After a config fix, the next full run re-judges every record, so the older quarantine rows of that action leave."""
+    add(engine, service("fixme", ("users_cursor", "devices")))
+    row = {"source": "fixme", "target_schema": "user", "raw": {"id": "x"}, "reason": "missing_required_field", "field": "email", "created_at": "2026-01-01T00:00:00Z"}
+    with session_scope(engine) as s:
+        repo.add_quarantine(s, ACCT, [{**row, "action": "users_cursor", "run_id": "run-0"}, {**row, "action": "devices", "run_id": "run-0"}])
+    timer.run_job(engine, ACCT, "fixme", "users_cursor", client=mock)
+    with session_scope(engine) as s:
+        left = {(q["action"], q["run_id"]) for q in repo.export_quarantine(s, ACCT)}
+    assert ("users_cursor", "run-0") not in left and ("devices", "run-0") in left
+
+
+def test_a_secret_pasted_with_stray_whitespace_is_stored_and_read_trimmed(engine, monkeypatch):
+    from app.secrets.store import get_secret, set_secret
+    monkeypatch.setenv("ENCRYPTION_KEY", "kCsbBoGp1MnL9F5ZkYb0P6tq1Q7r3m3WZcX2H8wq9yE=")
+    with session_scope(engine) as s:
+        set_secret(s, ACCT, "spaced", "  key-123 \n", "api.example.com")
+        assert get_secret("spaced", s, ACCT).value == "key-123"

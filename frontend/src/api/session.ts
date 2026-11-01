@@ -10,7 +10,7 @@ export const setToken = (token: string) => {
   try { localStorage.setItem(KEY, token) } catch { /* storage unavailable: the sign-in lasts until reload */ }
 }
 export const clearToken = () => {
-  try { localStorage.removeItem(KEY) } catch { /* nothing to clear */ }
+  try { localStorage.removeItem(KEY); localStorage.removeItem('lastAlert') } catch { /* nothing to clear */ }
 }
 /** Called when the server answers 401 to a signed-in request: forget the token and tell the app to show the sign-in page. */
 export const expireSession = () => {

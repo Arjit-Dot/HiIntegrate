@@ -38,16 +38,17 @@ quarantine by reason, incremental sync state, alert emails, the last 8 runs, and
 
 ## The email
 
-Nothing about email is typed in the terminal. In the browser: **Secrets**, card **Add a secret**, name `smtp_password`, the SMTP password,
-and your mail host (for example `smtp.gmail.com`); then paste `present/configs/demo-alert.yaml` in **Add integration**, **Config** tab,
-and put your address on the `to:` line. The mail server settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_FROM`) are read from `.env`.
+Nothing about email is typed in the terminal. In the browser, **Add integration**, **Config** tab: paste `present/configs/demo-alert.yaml` and put your
+address on the `to:` line. A **Mail password for the alert email** box appears in section 6 of the form: type the SMTP password and your mail host
+(for example `smtp.gmail.com`), press **Save mail password**, then **Save** the integration. The password is stored encrypted and pinned to the mail host.
+The mail server settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_FROM`) are read from `.env`.
 
 ## What is in this folder
 
 | File | What it is |
 |---|---|
 | `flow.md` | the demo, step by step, in the browser, with what each step shows |
-| `mock.md` | every value to type or paste (the only blanks are the email ones) |
+| `demo.md` | every value to type or paste (the only blanks are the email ones) |
 | `demo.sh` | the start command (it also defines `snap`) |
 | `db.sh`, `snap` | the database picture; `snap` works from any terminal |
 | `docker-compose.demo.yml`, `mock_api/` | the demo mock service (`Dockerfile`, `demo_app.py`) |

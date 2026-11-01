@@ -207,6 +207,19 @@ def add_quarantine(s: Session, account: str, entries: list[dict]) -> int:
     return len(entries)
 
 
+def supersede_quarantine(s: Session, account: str, source: str, action: str, run_id: str) -> int:
+    """A full pull that just succeeded looked at every record again, and put back in quarantine whatever still fails. So the
+    quarantined rows of the SAME action from earlier runs are out of date: the ones a config fix rescued leave the list."""
+    current = int(run_id.removeprefix("run-"))
+    old = [rid for rid in s.scalars(select(Quarantine.run_id).where(
+        Quarantine.account == account, Quarantine.source == source, Quarantine.action == action).distinct())
+        if rid.removeprefix("run-").isdigit() and int(rid.removeprefix("run-")) < current]
+    if not old:
+        return 0
+    return s.execute(delete(Quarantine).where(Quarantine.account == account, Quarantine.source == source,
+                                              Quarantine.action == action, Quarantine.run_id.in_(old))).rowcount or 0
+
+
 def _quarantine_query(account, source=None, action=None, run_id=None, target_schema=None, reason=None):
     q = select(Quarantine).where(Quarantine.account == account)
     for column, value in ((Quarantine.source, source), (Quarantine.action, action), (Quarantine.run_id, run_id),
@@ -323,7 +336,10 @@ def health(s: Session, integration: Integration) -> dict:
 
 
 def has_run(s: Session, account: str, integration: str, action: str) -> bool:
-    return s.scalar(select(Run.pk).where(Run.account == account, Run.integration == integration, Run.action == action).limit(1)) is not None
+    """A real (schedule or manual) run exists. A Test connection run does not count, so testing a new integration before
+    saving it does not cancel its first scheduled run (it would otherwise wait a whole interval)."""
+    return s.scalar(select(Run.pk).where(Run.account == account, Run.integration == integration, Run.action == action,
+                                         Run.trigger.in_(COUNTED_TRIGGERS)).limit(1)) is not None
 
 
 def failure_streak(s: Session, account: str, integration: str, action: str) -> int:

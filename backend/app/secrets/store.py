@@ -105,6 +105,7 @@ def set_secret(session, account: str, name: str, value: str, host: str) -> None:
     from app.storage.models import Secret as SecretRow
 
     _check_name(name)
+    value = value.strip()  # a pasted key often carries a trailing space or newline, which is an illegal header value
     if not value:
         raise SecretError("a secret needs a value")
     host = _check_host_value(host)
@@ -123,7 +124,7 @@ def _stored(session, account: str, name: str) -> Secret | None:
     if row is None:
         return None
     try:
-        value = _fernet().decrypt(row.ciphertext.encode()).decode()
+        value = _fernet().decrypt(row.ciphertext.encode()).decode().strip()  # also fixes a value saved with stray whitespace
     except InvalidToken:
         raise SecretError(f"secret {name} cannot be decrypted: ENCRYPTION_KEY is not the key it was stored with (none of its keys opens it). Enter the value again") from None
     return Secret(name=name, value=value, host=row.host)

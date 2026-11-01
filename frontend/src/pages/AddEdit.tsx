@@ -13,12 +13,28 @@ import { TestResult } from '../components/TestResult'
 import { AiDraft } from '../components/AiDraft'
 import { AddActions } from '../components/AddActions'
 import { AlertNote } from '../components/AlertNote'
+import { MailPassword } from '../components/MailPassword'
 import { SuggestMapping } from '../components/SuggestMapping'
 import { lineOf, locate, missingVar } from '../lib/validation'
 
 type Issue = { path: string; message: string; severity: 'error' | 'warning'; line?: number }
 type Pane = 'config' | 'validate' | 'test'
 type Draft = { from: string; problems: number; tried: number; vars: [string, string][]; secret?: string; test?: GenerateConfigResponse['test']; existing?: string; actions?: Config }
+
+const ALERT_KEY = 'lastAlert'
+// The alert recipients (and threshold) used last time, so a new integration does not ask for the same email again.
+function withLastAlert(st: FormState): FormState {
+  if (st.recipients.trim()) return st
+  try {
+    const last = JSON.parse(localStorage.getItem(ALERT_KEY) ?? 'null') as { recipients?: string; afterFailures?: string } | null
+    if (last?.recipients) return { ...st, recipients: last.recipients, afterFailures: last.afterFailures || st.afterFailures }
+  } catch { /* storage unavailable or unreadable: start empty */ }
+  return st
+}
+function rememberAlert(st: FormState) {
+  if (!st.recipients.trim()) return
+  try { localStorage.setItem(ALERT_KEY, JSON.stringify({ recipients: st.recipients, afterFailures: st.afterFailures })) } catch { /* private mode */ }
+}
 
 export default function AddEdit() {
   const [theme] = useTheme()
@@ -32,7 +48,7 @@ export default function AddEdit() {
   const [requires, setRequires] = useState<Config | undefined>()   // from the template, to tell the person what to fill in
   const nav = useNavigate()
   const toast = useToast()
-  const [s, setS] = useState<FormState>(defaultState)
+  const [s, setS] = useState<FormState>(() => id ? defaultState() : withLastAlert(defaultState()))
   const [base, setBase] = useState<Config | undefined>()      // the saved config when editing (D-15: update in place)
   const [editedAction, setEditedAction] = useState<string | undefined>()
   const [exists, setExists] = useState(!!id)
@@ -82,7 +98,7 @@ export default function AddEdit() {
       // The template's own name may already be an integration. Suggest a free one (github, github-2, github-3, ...).
       let name = st.name, n = 2
       while (names.includes(name)) name = `${st.name}-${n++}`
-      setS({ ...st, name }); setEditedAction(st.actionName)
+      setS({ ...withLastAlert(st), name }); setEditedAction(st.actionName)
     }).catch(e => setLoadError(e.message))
   }, [id, templateId])
 
@@ -101,7 +117,7 @@ export default function AddEdit() {
       let name = st.name, n = 2
       while (taken.includes(name)) name = `${st.name}-${n++}`
       setBase(c); setRequires(c.requires); setRaw(null)
-      setS({ ...st, name }); setEditedAction(st.actionName)
+      setS({ ...withLastAlert(st), name }); setEditedAction(st.actionName)
     } catch {
       setRaw(r.yaml); setFmt('yaml'); setPane('config')   // the draft could not fill the form: edit the text instead
     }
@@ -116,6 +132,9 @@ export default function AddEdit() {
       return { config: c as Config }
     } catch (e) { return { error: (e as Error).message } }
   }, [s, base, editedAction, raw])
+
+  // Alert recipients typed in the form, or present in the config text (pasted in the editor): ask for the mail password.
+  const hasAlerts = Boolean((parsed.config as { alerts?: { to?: string[] } } | undefined)?.alerts?.to?.length)
 
   const text = raw ?? (fmt === 'yaml'
     ? yaml.dump(parsed.config, { lineWidth: -1, noRefs: true })
@@ -234,6 +253,7 @@ export default function AddEdit() {
     try {
       if (exists) await api.replace(id ?? name, cfg); else await api.create(cfg)
       setExists(true)
+      rememberAlert(s)
       return name
     } catch (e) {
       if (e instanceof ApiError && e.status === 400) setPane('validate')
@@ -520,6 +540,7 @@ export default function AddEdit() {
                 One email is sent when failed runs in a row reach that number, and again only after a successful run and a new streak. Leave the recipients empty for no alerts.
                 The mail server is set once for the whole platform (<code>SMTP_*</code> in <code>.env</code>), not here. A failed send is logged and never fails a run.
               </div>
+              {(s.recipients.trim() || hasAlerts) && <MailPassword />}
               {saved && id && <div className="full"><AlertNote name={id} alert={saved.alert} health={saved.health} /></div>}
             </div>
           </div>
