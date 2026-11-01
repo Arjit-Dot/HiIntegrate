@@ -1,0 +1,14 @@
+# gitleaks settings (D-17 S-5). Everything gitleaks normally checks stays on.
+[extend]
+useDefault = true
+
+# Two test files check that the AI layer's redactor scrubs secrets, so they contain deliberately fake values
+# (jira-secret-456, abcdefghijklmnop12345, k-123456, admin:hunter2). Only these three rules, only these two files.
+# A real-looking token (ghp_..., AKIA..., a private key) in these files is still caught.
+[[allowlists]]
+description = "fake values in the redactor tests"
+targetRules = ["generic-api-key", "curl-auth-header", "curl-auth-user"]
+paths = [
+  '''backend/tests/test_ai\.py''',
+  '''backend/tests/test_ai_docs\.py''',
+]
