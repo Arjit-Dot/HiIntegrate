@@ -5,8 +5,10 @@
 
 What it creates (safe to run again: it signs in if an account exists and replaces the integration):
   demo-alice   the demo account with data: the Mock service integration, its test secret (pinned to the mock's host),
-          and the results of five runs: users (25), devices, alerts, a pull with bad records (they land in Quarantine)
-          and a pull with a wrong key (a failed run, so Run history and health show a failure).
+          and the results of six runs: users (25), devices, alerts, two pulls with bad records (they land in Quarantine; the
+          second one can be repaired with Fix with AI) and a pull with a wrong key (a failed run, so Run history and health show a failure).
+          A second integration, mock-wrong-host, that uses the same secret but calls a host the secret is NOT pinned to,
+          so pressing Test on it shows the host pin refusing to send the key (secret_host_mismatch).
   demo-bob     an account with nothing, to show that accounts do not see each other's data.
 
 The mock is a local test service (D-9), and its token is a public test value. No real service or real key is used.
@@ -14,6 +16,7 @@ Settings: API_BASE (default http://localhost:5173/api/v1), MOCK_BASE_URL (the mo
 default http://mock-api:8001), DEMO_PASSWORD (default Demo-pass-123).
 """
 
+import copy
 import json
 import os
 import sys
@@ -31,7 +34,9 @@ PASSWORD = os.environ.get("DEMO_PASSWORD", "Demo-pass-123")
 NAME = "mock-service"
 CONFIG = Path(__file__).resolve().parents[1] / "tests" / "mock_api" / "mock-service.yaml"
 RUNS = [("users_page_number", "users, 3 pages"), ("devices", "devices"), ("alerts", "alerts"),
-        ("dirty_users", "users with bad records (quarantine)"), ("wrong_key", "a wrong key (a failed run)")]
+        ("dirty_users", "users with bad records (quarantine)"),
+        ("dirty_users_strict", "a status the mapping does not know: Fix with AI can repair this"),
+        ("wrong_key", "a wrong key (a failed run)")]
 
 
 def call(method: str, path: str, body=None, token: str = ""):
@@ -77,6 +82,12 @@ def main() -> None:
     sign_in("demo-bob")
     cfg = yaml.safe_load(CONFIG.read_text())
     cfg["base_url"] = MOCK_BASE_URL
+    # A copy of dirty_users whose status mapping has no fallback, so the record with status "banned" is quarantined as
+    # invalid_value. That one is fixable (map banned to a status), which is what the Fix with AI demo needs. The records with
+    # no id or a bad date are not fixable, and the AI says so.
+    strict = copy.deepcopy(cfg["actions"]["dirty_users"])
+    strict["map"]["status"] = {"path": "status", "value_map": {"active": "active", "disabled": "inactive"}}
+    cfg["actions"]["dirty_users_strict"] = strict
     status, reply = call("PUT", "/secrets/mock_token", {"value": "mock-secret-123", "host": urlsplit(MOCK_BASE_URL).hostname}, alice)
     if status != 204:
         sys.exit(f"Could not save the test secret: HTTP {status} {reply}")
@@ -84,7 +95,15 @@ def main() -> None:
     status, reply = call("PUT", f"/integrations/{NAME}", cfg, alice) if exists == 200 else call("POST", "/integrations", cfg, alice)
     if status not in (200, 201):
         sys.exit(f"Could not save the integration: HTTP {status} {reply}")
-    print(f"demo-alice: secret mock_token (pinned to {urlsplit(MOCK_BASE_URL).hostname}) and integration {NAME} are set\n")
+    wrong = dict(cfg, name="mock-wrong-host", display_name="Mock service (wrong host, demo)",
+                 description="Demo: calls localhost, but the secret is pinned to mock-api, so every request is refused.",
+                 base_url="http://localhost:8001")
+    exists, _ = call("GET", "/integrations/mock-wrong-host", token=alice)
+    status, reply = call("PUT", "/integrations/mock-wrong-host", wrong, alice) if exists == 200 else call("POST", "/integrations", wrong, alice)
+    if status not in (200, 201):
+        sys.exit(f"Could not save mock-wrong-host: HTTP {status} {reply}")
+    print(f"demo-alice: secret mock_token (pinned to {urlsplit(MOCK_BASE_URL).hostname}) and integrations {NAME} and mock-wrong-host are set\n")
+    call("DELETE", "/quarantine?older_than_days=0", token=alice)  # start the demo from a clean quarantine (older backends: ignored)
     for action, what in RUNS:
         r = run(alice, action)
         note = f"  error: {r['error']['code']}" if r.get("error") else ""
