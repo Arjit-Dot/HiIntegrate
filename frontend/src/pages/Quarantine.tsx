@@ -58,19 +58,6 @@ export default function Quarantine() {
         </div>
       </div>
       {error && <ErrorBox message={error} />}
-      {fixable.length > 0 && (
-        <div className="callout">
-          <strong><Sparkles size={14} style={{ verticalAlign: -2 }} /> Fix with AI</strong>
-          <div className="hint" style={{ margin: '2px 0 8px' }}>The AI reads the rejected originals and proposes a change to the config. You see the change and how many records it would rescue before anything is applied.</div>
-          <div className="inline" style={{ flexWrap: 'wrap' }}>
-            {fixable.map(f => (
-              <Button key={`${f.integration}.${f.action}`} variant="secondary" size="sm" type="button" onClick={() => setFixing({ integration: f.integration, action: f.action })}>
-                {f.integration}.{f.action} <span className="muted" style={{ marginLeft: 6 }}>({f.n} on this page)</span>
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
       <div className="card tablewrap">
         <table>
           <thead><tr><th>Source</th><th>Action</th><th>Schema</th><th>Run</th><th>Reason</th><th>Field</th><th>Quarantined at</th><th>Original record</th></tr></thead>
@@ -92,6 +79,19 @@ export default function Quarantine() {
           </tbody>
         </table>
       </div>
+      {fixable.length > 0 && (
+        <div className="callout" style={{ marginTop: 16 }}>
+          <strong><Sparkles size={14} style={{ verticalAlign: -2 }} /> Fix with AI</strong>
+          <div className="hint" style={{ margin: '2px 0 8px' }}>The AI reads the rejected originals and proposes a change to the config. You see the change and how many records it would rescue before anything is applied.</div>
+          <div className="inline" style={{ flexWrap: 'wrap' }}>
+            {fixable.map(f => (
+              <Button key={`${f.integration}.${f.action}`} size="sm" type="button" onClick={() => setFixing({ integration: f.integration, action: f.action })}>
+                <Sparkles size={14} style={{ marginRight: 6 }} />Fix with AI: {f.integration}.{f.action} <span style={{ marginLeft: 6, opacity: 0.8 }}>({f.n} on this page)</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
       {data && <Pager offset={offset} total={data.total} onChange={setOffset} />}
       {fixing && <FixWithAi {...fixing} onClose={() => setFixing(null)} onApplied={() => setReload(n => n + 1)} />}
       <p className="note">Export returns every quarantined record that matches the filters, in one file, not one page at a time.</p>

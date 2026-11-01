@@ -1,5 +1,5 @@
 # HiIntegrate demo.   THE ONLY START COMMAND:    source present/demo.sh      (zsh or bash)
-# It starts everything, creates the demo account and saves the secrets (about 1 to 2 minutes, a bit more on the first build). The demo
+# It starts everything, creates the demo account, with NO secrets saved (about 1 to 2 minutes, a bit more on the first build). The demo
 # starts with ZERO integrations. After that the whole demo is done in the browser, and the only terminal
 # command left is   snap   (the database, and what changed since the last snap).
 #   DEMO_KEEP=1 source present/demo.sh     keep the existing demo data instead of starting from a clean database
@@ -184,15 +184,14 @@ demo_start() {
   echo "-- account $DEMO_USER"
   register > /dev/null; [ -z "${TOKEN:-}" ] && login > /dev/null
   [ -z "${TOKEN:-}" ] && { echo "could not sign in as $DEMO_USER"; return 1; }
-  echo "-- secrets (saved encrypted, each pinned to its host)"
-  demo_secrets; demo_real
+  # No secrets are preloaded: every token is pasted by hand in the browser (Secrets page or the integration's Authentication box).
   "$DEMO_DIR/db.sh" --reset > /dev/null; "$DEMO_DIR/db.sh" -q > /dev/null     # the baseline for the first `snap` on stage
   cat <<MSG
 
 == READY
    Browser   http://localhost:5173        sign in:  $DEMO_USER  /  $DEMO_PASS
    Terminal  snap                          the database, and what changed since the last snap   (snap -q = only the changes)
-   Values to type are in present/mock.md; the steps are in present/flow.md. Nothing else is run in the terminal.
+   Values to type are in present/demo.md; the steps are in present/flow.md. Nothing else is run in the terminal.
 MSG
 }
 

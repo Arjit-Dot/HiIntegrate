@@ -96,6 +96,9 @@ def execute(engine: Engine, started: Started, inputs: dict | None = None, *, cli
             if result.status == "success" and started.mode == "pull":
                 repo.set_last_success(s, started.account, started.integration, action_name, result.started_at)
                 repo.add_to_baseline(s, started.account, started.integration, action_name, result.seen_paths)
+            if (result.status == "success" and started.mode == "pull" and started.trigger in repo.COUNTED_TRIGGERS
+                    and keep_quarantine and not spec.get("incremental")):  # an incremental pull does not re-read old records
+                repo.supersede_quarantine(s, started.account, started.integration, action_name, started.run_id)
             if result.status == "success" and started.trigger in repo.COUNTED_TRIGGERS:
                 repo.clear_alert_attempt(s, started.account, started.integration, action_name)  # the failure streak ended, so the alert resets
     maybe_alert(engine, started.account, cfg, action_name, started.trigger, result)
