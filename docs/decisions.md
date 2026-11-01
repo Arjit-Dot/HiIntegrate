@@ -80,7 +80,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-14 | `POST /ai/propose-fix` | Locked (approved by both, 31 Oct 7:40pm) |
 | D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
-| D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
+| D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -1331,6 +1331,8 @@ One shared set of examples that both people treat as the truth:
 | S-13 | TLS in nginx for any use beyond localhost, and CI with `pip-audit`, `npm audit` and an image scan | A and B | No |
 | S-14 | AI hardening: treat documentation, uploaded files and records as untrusted text that may try to steer the model; pin the resolved address in the documentation fetcher (its stated limit); remember that masked records leave the machine for Google's service | owner of the AI code | No |
 
+**Built (1 Nov): S-1 to S-5**, on `feat/security-quickwins`, with the results in `roadmap.md` (Phase 4, Security hardening). Two facts from building them: the dashboard password is basic auth over plain http, so it is for localhost until S-13 (TLS); and gitleaks flagged four fake values in Person A's redactor tests, which `.gitleaks.toml` now allows, for those two files and three rules only. S-6 to S-14 are not built.
+
 **Order.** S-1 to S-5 only touch deployment files and add no code risk, so they are the first thing to do and fit the Phase 4 slot. S-6 is the strongest protection the engine can give itself. S-7 to S-9 are next. S-10 to S-14 are described so they can be named in the demo as next steps. None of these may displace a must-have: they are done only when Checkpoint 3's list is already green.
 
 **Why**
@@ -1522,7 +1524,7 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 
 | Item | Before | Now | Why |
 |---|---|---|---|
-| Security plan | The audit (Phase 4) showed no secret in logs, API replies, the database, files or Git history, but listed no further hardening | D-17 lists 14 items (S-1 to S-14) with owners and contract impact. **Nothing is built yet** | A review of the running stack found the API open to anyone on the network, ports published on every interface, no guard on the engine's outgoing requests, and no audit log or retention |
+| Security plan | The audit (Phase 4) showed no secret in logs, API replies, the database, files or Git history, but listed no further hardening | D-17 lists 14 items (S-1 to S-14) with owners and contract impact. **S-1 to S-5 were built on 1 Nov** (see D-17); S-6 to S-14 are not built | A review of the running stack found the API open to anyone on the network, ports published on every interface, no guard on the engine's outgoing requests, and no audit log or retention |
 | Contract files | Unchanged | Unchanged. S-7 to S-10 would add routes, a security scheme or response codes to `openapi.yaml`, and S-6 one error code to `result.schema.json` | Each needs both people's approval and a new tag before it is built |
 
 ---
