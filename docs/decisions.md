@@ -82,7 +82,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
 | D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
-| D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions (see "Approval" in D-18). Merges to `main` and is tagged `contract-v4` only after both are met** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
+| D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions, **both checked and confirmed by Person B (1 Nov)**. On `main` at `f345556`; `contract-v4` is tagged after this confirmation** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-8 of D-17 (the API login). Its login rate limit also covers part of S-9 |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -1361,7 +1361,7 @@ One shared set of examples that both people treat as the truth:
 
 ## D-18: Accounts and per-person data
 
-**Covers:** FR-6 · **Source:** the team's review of the demo: one set of keys for the whole site is not acceptable. **Status:** built by Person A on branch `a/multi-user`. **Approved by Person B on 1 Nov, on two conditions** (see "Approval" below). It changes `schema/openapi.yaml`, so it merges to `main` and is tagged `contract-v4` only after both conditions are met.
+**Covers:** FR-6 · **Source:** the team's review of the demo: one set of keys for the whole site is not acceptable. **Status:** built by Person A on branch `a/multi-user`. **Approved by Person B on 1 Nov, on two conditions, both confirmed by Person B on 1 Nov** (see "Approval" below). It changes `schema/openapi.yaml`, so it is tagged `contract-v4`, which happens after the confirmation.
 
 **Decision**
 - **Accounts.** `POST /auth/register` and `POST /auth/login` take a username and a password and return a session token. `POST /auth/logout` ends it, `GET /auth/me` says who it belongs to. Usernames are lowercase (3 to 32 characters). Passwords are 8 to 128 characters, stored only as a salted scrypt hash. Only the SHA-256 of a token is stored, so a copy of the database cannot be used to sign in. A token lasts 7 days.
@@ -1394,9 +1394,19 @@ Person B reviewed the branch (`a/multi-user` at `4af82b7`) before approving:
 1. **Fix the reference to D-17.** The header row says this supersedes "S-7 of D-17". S-7 is the audit log. The API login is **S-8**. Say S-8, and note that the login rate limit also covers part of S-9.
 2. **Fail clearly on an old database.** An existing database or Compose volume has no `account` columns, and today the API fails on its first query. At startup it must stop with a message that says what is wrong and that `docker compose down -v` recreates the database (which deletes stored data), and add a test for it.
 
-**Both conditions done by Person A (1 Nov), waiting for Person B to check them before the merge and the `contract-v4` tag:**
+**Both conditions done by Person A (1 Nov) and confirmed by Person B (1 Nov):**
 1. The header row now says **S-8** (the API login) and notes that the login rate limit also covers part of S-9.
 2. An old database now stops the API at startup (and the worker) with: which table lacks which column, that `docker compose down -v` recreates the database and **deletes the stored data** (or delete the SQLite file for a local run), and that old data cannot be moved into accounts. The check is `check_schema` in `app/storage/db.py`, run by `init_db` when the engine is first opened. Three tests in `tests/test_storage.py` cover it: an old database is refused with the advice, a current or empty one passes (and passes again on restart), and the API's startup fails on an old one.
+
+
+**Confirmed by Person B (1 Nov), on `main` at `f345556`.** Both conditions were checked, not assumed:
+1. **S-8 wording.** The header row now says S-8 (the API login) and that the login rate limit also covers part of S-9. No wrong S-7 reference to the login is left.
+2. **Old database.** A database made by the code from before D-18 (`f15b0c9`) was refused by both the API (exit code 3) and the worker (exit code 1), on **SQLite and on Postgres**, with the table and column named, the `docker compose down -v` advice, the warning that it deletes the stored data, and the note that old data cannot move into accounts. Neither process served or scheduled anything. A new database, and a restart on a database the new code made, start normally, so the check does not block a healthy database.
+3. **Nothing else changed after the review.** 365 tests pass and ruff is clean. The 43 isolation checks from the review pass again (a second account still cannot reach another's integrations, records, runs or secrets, and the server's `.env` tokens still belong to one named account). `openapi.yaml` has no change since the reviewed commit `4af82b7`. The only other contract-file change is the 2-line description in `integration.schema.json` from R-19, which is text.
+
+**One thing out of order:** D-18 reached `main` before this check, while the condition said it would merge after. Both conditions turned out to be met, so nothing needs undoing, and `contract-v4` is tagged after this confirmation.
+
+**Seen while checking, not conditions:** in Compose the API has `restart: unless-stopped`, so on an old database it restarts in a loop and the message is in `docker compose logs backend`, not on the `docker compose up` screen; and the check compares column names only, so it would not notice a changed column type.
 
 **Noted, not conditions** (named so they are not lost): registration is open by default and `/auth/register` has no rate limit; scrypt `n=2^14` is below today's usual advice (`2^17`); the API docs and `openapi.json` are readable without signing in; the session token is kept in `localStorage`; the login throttle is per username and per process.
 
