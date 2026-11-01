@@ -67,15 +67,27 @@ docker compose up --build        # needs a .env in this folder; POSTGRES_PASSWOR
 
 | Service | Address | Notes |
 |---|---|---|
-| Dashboard | http://localhost:5173 | nginx serves the app and forwards `/api` to the backend, so there is no CORS to set up |
-| API | http://localhost:8000/api/v1 | docs at `/api/v1/docs` |
-| Mock service | http://localhost:8001 | a test target, not a data source. It never sees your `.env` |
-| Postgres | internal only | data lives in the `hiintegrate-db` volume, so it survives `docker compose down` (use `down -v` to wipe it) |
+| Dashboard | http://localhost:5173 | The **only** published port, and only on this machine (`127.0.0.1`). nginx serves the app and forwards `/api` to the backend, so there is no CORS to set up |
+| API | inside Compose only | reached through the dashboard at `/api/v1` (docs at `/api/v1/docs`) |
+| Mock service | inside Compose only | a test target, not a data source. It never sees your `.env` |
+| Postgres | inside Compose only | data lives in the `hiintegrate-db` volume, so it survives `docker compose down` (use `down -v` to wipe it) |
 
 - Inside Compose the database is always the `postgres` service. `DATABASE_URL` in `.env` is only for running the backend outside Docker.
 - A blank line in `.env` (`SMTP_PORT=`) counts as not set.
 - `.env` is never copied into an image (`.dockerignore`) and never committed.
-- **Failure rehearsal** (needs the stack running): `backend/.venv/bin/python backend/scripts/rehearse.py` runs the four organizer tests (wrong key, network off, 429, missing field) against the mock service and prints PASS or FAIL for each. If your own dev servers already use ports 8000 or 5173, point the script at another address with `API_BASE` and `MOCK_ADMIN`; the first lines of the script explain how.
+- To reach the API or the mock directly from this machine while developing (still only on `127.0.0.1`): `docker compose -f docker-compose.yml -f docker-compose.debug.yml up`
+- **Failure rehearsal** (needs the stack running): `docker compose exec backend python scripts/rehearse.py` runs the four organizer tests (wrong key, network off, 429, missing field) against the mock service and prints PASS or FAIL for each. It runs inside the Compose network because the mock is not published.
+
+## Security
+
+v1 has **no API login by design** (D-6), so the protection is around it (D-17):
+
+- **Network (S-1):** only the dashboard is published, bound to `127.0.0.1`. Nothing else is reachable from the network.
+- **Password (S-3, optional):** set `DASHBOARD_PASSWORD` (and, if you like, `DASHBOARD_USER`, default `admin`) in `.env` and the dashboard and the API ask for it (basic auth). Without it there is no password. Use a password and HTTPS before exposing it beyond your own machine.
+- **Headers (S-2):** nginx sends a Content-Security-Policy, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy`, and hides its version. The policy allows only this site and the editor's CDN (`cdn.jsdelivr.net`). If you change where scripts or fonts come from, change `frontend/nginx.conf` too.
+- **Containers (S-4):** every service runs with a read-only filesystem, no Linux capabilities (only the few nginx and Postgres need to start), and `no-new-privileges`.
+- **Commits (S-5):** turn on the secret scan once per clone with `git config core.hooksPath .githooks`. Each commit is then scanned with gitleaks (a local install, or its Docker image) and stopped if a secret is found. To scan the whole history: `docker run --rm -v "$PWD":/repo:ro zricethezav/gitleaks:latest git --redact --no-banner /repo`.
+- Secrets are encrypted, pinned to a host, and kept out of logs. What is not done yet is listed in `docs/decisions.md` D-17 (S-6 to S-14).
 
 ## Tests and checks
 ```bash
@@ -114,5 +126,6 @@ Put these in `.env` (never committed). The list shows **names only**. Real value
 | `LLM_API_KEY`, `LLM_MODEL` | The AI extras, which use Google Gemini (a key from Google AI Studio). The model defaults to `gemini-3.5-flash`. Without a key the `/ai/*` routes answer 501 and everything else works |
 | `SECRET_<NAME>` | A token or password for a service, such as `SECRET_GITHUB_TOKEN`, `SECRET_JIRA_TOKEN`, `SECRET_OKTA_TOKEN`, `SECRET_SMTP_PASSWORD` |
 | `SECRET_<NAME>_HOST` | Optional. The host that secret is pinned to, such as `SECRET_GITHUB_TOKEN_HOST=api.github.com` |
+| `DASHBOARD_USER`, `DASHBOARD_PASSWORD` | Optional. A password in front of the dashboard and the API when you run Docker Compose (user defaults to `admin`). Leave the password out for no password |
 
 Service settings that are not secret (a Jira site, an email address, an Okta domain) are not environment variables. They are typed into the Add integration form.

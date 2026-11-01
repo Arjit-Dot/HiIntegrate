@@ -5,10 +5,13 @@
   3. 429              the service says "slow down": the run waits for Retry-After and then succeeds
   4. missing field    some records lack `id`: the run succeeds, those records go to Quarantine
 
-Needs the stack running (docker compose up) and nothing else. Exit code 0 only if all four pass.
+Needs the stack running (docker compose up). Exit code 0 only if all four pass.
 
-  python backend/scripts/rehearse.py                       # API and mock on their usual local ports
-  API_BASE=http://localhost:15173/api/v1 MOCK_ADMIN=http://localhost:18001 python backend/scripts/rehearse.py
+  docker compose exec backend python scripts/rehearse.py     # the normal way: inside Compose, where the mock is reachable
+  MOCK_ADMIN=http://localhost:8001 python backend/scripts/rehearse.py   # from the host; needs the debug file below
+  docker compose -f docker-compose.yml -f docker-compose.debug.yml up  # publishes the API and the mock on 127.0.0.1 only
+
+The mock is not published by the normal Compose file (D-17 S-1), so the first form is the one to use.
 
 Settings (environment): API_BASE (default http://localhost:8000/api/v1), MOCK_BASE_URL (the mock as the
 BACKEND reaches it, default http://mock-api:8001), MOCK_ADMIN (the mock as THIS script reaches it, default
