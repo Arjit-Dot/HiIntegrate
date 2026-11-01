@@ -1,0 +1,48 @@
+version: 1
+name: nvd
+display_name: "NVD vulnerabilities (CVE)"
+category: threat_intel
+description: "Pulls published CVEs from the US National Vulnerability Database as alerts. Works without an NVD key (slower); see the auth note below."
+enabled: true
+
+requires:
+  secrets: [nvd_api_key]
+
+base_url: "https://services.nvd.nist.gov"
+
+# The platform needs a secret name for every integration, but NVD itself needs NO key: without one it allows 5 requests
+# per 30 seconds, which is plenty for one page an hour.
+#   Without a key: keep the header name below and save any placeholder value (for example `none`) as the secret
+#                  `nvd_api_key`, pinned to services.nvd.nist.gov. NVD ignores this header.
+#   With a free key (https://nvd.nist.gov/developers/request-an-api-key): change the header name to `apiKey` and save the
+#                  real key. NVD then allows 50 requests per 30 seconds. A WRONG value in an `apiKey` header is rejected (404).
+auth: { type: api_key, in: header, name: X-Placeholder-Key, secret: nvd_api_key }
+
+actions:
+  list_cves:
+    mode: pull
+    target_schema: alert
+    schedule: every 1h
+    request:
+      method: GET
+      path: /rest/json/cves/2.0
+      query: { resultsPerPage: 100, startIndex: 0 }
+    pagination:
+      type: offset
+      offset_param: startIndex
+      limit_param: resultsPerPage
+      limit: 100
+      max_pages: 1          # 100 CVEs per run. Raise it carefully: the full database is more than 300,000 CVEs.
+    records_path: vulnerabilities
+    map:
+      id: { path: cve.id, transform: string }
+      type: { default: cve }
+      # The oldest CVEs only have a V2 score, newer ones V3.1 or V4.0: take whichever exists.
+      severity:
+        path: "cve.metrics.cvssMetricV31[0].cvssData.baseSeverity || cve.metrics.cvssMetricV40[0].cvssData.baseSeverity || cve.metrics.cvssMetricV2[0].baseSeverity"
+        transform: lowercase
+      # NVD dates carry no time zone, so they need the datetime transform.
+      timestamp: { path: cve.published, transform: datetime }
+      description: "cve.descriptions[?lang=='en'].value | [0]"
+    required: [id]
+    on_invalid: quarantine

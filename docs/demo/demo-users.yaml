@@ -1,0 +1,43 @@
+# Demo 1 to 3 (B-5, B-2, B-3): cursor paging (3 pages of 10), run by the scheduler every hour, plus a lookup of one user.
+version: 1
+name: demo-users
+display_name: "Demo: users (cursor paging)"
+category: other
+description: "25 users in pages of 10, with the service's own cursor."
+enabled: true
+requires:
+  secrets: [mock_token]
+base_url: "http://mock-api:8001"
+auth: { type: api_key, in: header, name: Authorization, prefix: "SSWS ", secret: mock_token }
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    schedule: every 1h
+    request: { method: GET, path: /pages/cursor, query: { limit: 10 } }
+    pagination: { type: cursor, cursor_param: after, next_cursor_path: meta.next }
+    records_path: items
+    map:
+      id: { path: id, transform: string }
+      name: name
+      email: { path: email, transform: lowercase }
+      status: { path: status, value_map: { active: active, disabled: inactive }, default: unknown }
+      last_login: { path: last_login, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
+  get_user:
+    mode: lookup
+    target_schema: user
+    inputs:
+      id: { type: string, required: true }
+    request: { method: GET, path: "/users/{{input.id}}" }
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      name: name
+      email: { path: email, transform: lowercase }
+      status: { path: status, value_map: { active: active, disabled: inactive }, default: unknown }
+      last_login: { path: last_login, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
+    store: false

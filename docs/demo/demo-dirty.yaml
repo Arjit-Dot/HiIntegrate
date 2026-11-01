@@ -1,0 +1,28 @@
+# Quarantine and Fix with AI: five users, three of them bad on purpose.
+#   one has no id (missing_required_field), one has a date that cannot be read (transform_failed),
+#   one has a status the map does not know (invalid_value), because this config has no `default` for status.
+version: 1
+name: demo-dirty
+display_name: "Demo: bad data"
+category: other
+description: "Five users, three bad on purpose, to show quarantine and the AI fix."
+enabled: true
+requires:
+  secrets: [mock_token]
+base_url: "http://mock-api:8001"
+auth: { type: api_key, in: header, name: Authorization, prefix: "SSWS ", secret: mock_token }
+actions:
+  list_users:
+    mode: pull
+    target_schema: user
+    schedule: every 1h
+    request: { method: GET, path: /dirty/users }
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      name: name
+      email: { path: email, transform: lowercase }
+      status: { path: status, value_map: { active: active, disabled: inactive } }
+      last_login: { path: last_login, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
