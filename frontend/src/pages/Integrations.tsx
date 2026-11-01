@@ -10,6 +10,10 @@ import { AlertNote } from '../components/AlertNote'
 
 const CATEGORIES = ['identity', 'threat_intel', 'ticketing', 'alerting', 'other']
 const STATUSES = ['healthy', 'degraded', 'failing', 'never_run', 'disabled']
+// Plain words for the codes the API sends, so the table says what it means.
+const AUTH_WORDS: Record<string, string> = { api_key: 'API key', bearer: 'Bearer token', basic: 'Username and password', oauth2_client_credentials: 'OAuth2' }
+const RECORD_WORDS: Record<string, string> = { user: 'Users', device: 'Devices', alert: 'Alerts' }
+const MODE_WORDS: Record<string, string> = { pull: 'Scheduled pulls', lookup: 'On-demand lookups' }
 
 export default function Integrations() {
   const [items, setItems] = useState<IntegrationSummary[] | null>(null)
@@ -72,7 +76,15 @@ export default function Integrations() {
       {error && <ErrorBox message={error} />}
       <div className="card tablewrap">
         <table>
-          <thead><tr><th>Integration</th><th>Fills</th><th>Actions</th><th>Last run</th><th>Health</th><th>Enabled</th><th></th></tr></thead>
+          <thead><tr>
+            <th>Integration</th>
+            <th title="The kinds of records this integration stores: users, devices or alerts">Data it collects</th>
+            <th title="Pulls run on a schedule and fetch many records. Lookups run when you ask and return one record.">What it can do</th>
+            <th>Last run</th>
+            <th title="Judged from the latest finished scheduled or manual run">Health</th>
+            <th title="Turn off to stop scheduled runs">Scheduled runs</th>
+            <th><span className="sr-only">Actions</span></th>
+          </tr></thead>
           <tbody>
             {items === null && !error && <tr><td colSpan={7} className="muted">Loading…</td></tr>}
             {items !== null && rows.length === 0 && <tr><td colSpan={7} className="muted">No integrations match.</td></tr>}
@@ -81,8 +93,15 @@ export default function Integrations() {
               const status = i.enabled ? h.status : 'disabled'
               return (
                 <tr key={i.name}>
-                  <td><div className="name">{i.display_name ?? i.name}</div><div className="muted small mono">{i.name}</div><div className="muted small" style={{ marginTop: 6 }}>{i.category} · <span className="mono">{i.auth_type}</span></div></td>
-                  <td>{i.schemas.map(s => <Pill key={s} kind="schema">{s}</Pill>)}</td>
+                  <td>
+                    <div className="name">{i.display_name ?? i.name}</div>
+                    <div className="muted small mono">{i.name}</div>
+                    <dl className="facts">
+                      <div><dt>Category</dt><dd>{i.category}</dd></div>
+                      <div><dt>Sign-in</dt><dd>{AUTH_WORDS[i.auth_type] ?? i.auth_type}</dd></div>
+                    </dl>
+                  </td>
+                  <td><div className="pill-row">{i.schemas.length ? i.schemas.map(s => <Pill key={s} kind="schema">{RECORD_WORDS[s] ?? s}</Pill>) : <span className="muted small">Nothing yet</span>}</div></td>
                   <td>
                     {(['pull', 'lookup'] as const).map(m => {
                       const names = i.actions.filter(a => a.mode === m)
@@ -90,14 +109,14 @@ export default function Integrations() {
                       const shown = names.slice(0, 2), more = names.slice(2)
                       return (
                         <div className="actions-cell" key={m}>
-                          <Pill kind={m}>{m} · {names.length}</Pill>
+                          <Pill kind={m}>{MODE_WORDS[m]} · {names.length}</Pill>
                           {shown.map(a => <code key={a.name}>{a.name}</code>)}
                           {more.length > 0 && <span className="muted small" title={more.map(a => a.name).join(', ')}>+{more.length} more</span>}
                         </div>
                       )
                     })}
                   </td>
-                  <td><div>{h.last_run_at ? new Date(h.last_run_at).toLocaleString() : 'never'}</div><div className="muted small" style={{ marginTop: 4 }}>{(h.records_pulled ?? 0).toLocaleString()} records</div></td>
+                  <td><div>{h.last_run_at ? new Date(h.last_run_at).toLocaleString() : 'Not run yet'}</div><div className="muted small" style={{ marginTop: 4 }}>{(h.records_pulled ?? 0).toLocaleString()} {h.records_pulled === 1 ? 'record' : 'records'} pulled</div></td>
                   <td>
                     <Pill kind={status}>{status}</Pill>
                     {h.last_error && <div className="muted small" style={{ maxWidth: 240, marginTop: 4 }}>{h.last_error.message}</div>}
@@ -118,7 +137,7 @@ export default function Integrations() {
           </tbody>
         </table>
       </div>
-      <p className="note"><Pill kind="pull">pull</Pill> runs on a schedule and fetches many records. <Pill kind="lookup">lookup</Pill> runs on demand and returns one record. One integration can have both.</p>
+      <p className="note"><Pill kind="pull">Scheduled pulls</Pill> run on a schedule and fetch many records. <Pill kind="lookup">On-demand lookups</Pill> run when you ask and return one record. One integration can have both.</p>
       {running && <RunLookup integ={running} onClose={() => setRunning(null)} />}
       {testing && <TestModal integ={testing} onClose={() => setTesting(null)} />}
     </section>
