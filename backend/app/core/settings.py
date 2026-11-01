@@ -18,7 +18,7 @@ load_dotenv(REPO_ROOT / ".env", override=False)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)
 
     database_url: str = "sqlite:///./dev.db"
     encryption_key: str | None = None
