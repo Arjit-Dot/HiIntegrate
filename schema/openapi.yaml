@@ -618,6 +618,47 @@ paths:
         "422": { $ref: "#/components/responses/ValidationError" }
         "501": { $ref: "#/components/responses/Unsupported" }
 
+  /ai/suggest-mapping:
+    post:
+      tags: [AI]
+      summary: Suggest which path of a pasted sample feeds each field of a schema, and check it
+      description: |
+        Paste a sample response. The platform finds the records in it. Without `mapping`, the model suggests a JMESPath for each
+        field of `target_schema` (with a transform, a `value_map` where the field has fixed values, and a confidence), and the
+        platform then checks every suggestion against the real sample records: how many records the path finds a value in, an
+        example value, and a preview of the first record as the mapper would save it (or why it would be quarantined).
+        A confidence is lowered when the path does not hold up. With `mapping` (entries a person wrote or edited) no model is
+        called, so it works with AI switched off. Nothing is saved. Records sent to the model are masked (D-14).
+      operationId: suggestMapping
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [target_schema, sample]
+              properties:
+                target_schema: { enum: [user, device, alert] }
+                sample: { description: "A list of records, an object holding a list of records, or one record. At least one record." }
+                mapping:
+                  type: object
+                  description: "Check these entries instead of asking the model. Keys are field names of the schema."
+                  additionalProperties:
+                    type: object
+                    properties:
+                      path: { type: string }
+                      transform: { type: [string, "null"] }
+                      value_map: { type: [object, "null"], additionalProperties: { type: string } }
+      responses:
+        "200":
+          description: The checked suggestions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MappingSuggestion" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
   /ai/summarize:
     post:
       tags: [AI]
@@ -754,6 +795,41 @@ components:
         line: { type: integer, description: "Optional. The line in the YAML text, for editor markers." }
         message: { type: string }
         severity: { enum: [error, warning] }
+    MappingSuggestion:
+      type: object
+      required: [records_path, records_found, fields, preview]
+      properties:
+        records_path: { type: string, description: "Where the records sit in the sample: a key name, or `@` when the sample is the list or one record." }
+        records_found: { type: integer, minimum: 0 }
+        fields:
+          type: array
+          items:
+            type: object
+            required: [field, path, confidence, found, of, valid]
+            properties:
+              field: { type: string }
+              path: { type: string, description: "A JMESPath on one record." }
+              transform: { type: [string, "null"] }
+              value_map: { type: [object, "null"], additionalProperties: { type: string } }
+              confidence: { enum: [high, medium, low] }
+              reason: { type: string }
+              found: { type: integer, minimum: 0, description: "Sample records in which the path finds a value." }
+              of: { type: integer, minimum: 0, description: "Sample records checked." }
+              example: { description: "The first value found, or null." }
+              valid: { type: boolean, description: "False when the path is not valid JMESPath." }
+        preview:
+          description: "The first sample record as the mapper would save it, or why it would be quarantined."
+          oneOf:
+            - type: object
+              required: [record]
+              properties: { record: { type: object, additionalProperties: true } }
+            - type: object
+              required: [quarantine]
+              properties:
+                quarantine:
+                  type: object
+                  required: [reason, field]
+                  properties: { reason: { type: string }, field: { type: string } }
     ProposeFixResponse:
       type: object
       required: [summary, changes, errors, verification]
@@ -824,12 +900,35 @@ components:
             required: [name, mode]
             properties: { name: { type: string }, mode: { enum: [pull, lookup, webhook] } }
         health: { $ref: "result.schema.json#/$defs/health" }
+        alert: { $ref: "#/components/schemas/AlertState" }
+    AlertState:
+      description: "Null when the config has no `alerts` block. Otherwise the rule, and what came of the alert for the current failure streak."
+      oneOf:
+        - { type: "null" }
+        - type: object
+          required: [after_failures, to, last_attempt]
+          properties:
+            after_failures: { type: integer, minimum: 1 }
+            to: { type: array, items: { type: string } }
+            last_attempt:
+              description: "Null until an alert was due in the current streak. Cleared when the action next succeeds."
+              oneOf:
+                - { type: "null" }
+                - type: object
+                  required: [action, at, outcome, failures]
+                  properties:
+                    action: { type: string }
+                    at: { type: string, description: "ISO 8601 UTC." }
+                    outcome: { enum: [sent, failed, not_configured], description: "`sent`: the email left. `failed`: the mail server refused or was unreachable (see `message`). `not_configured`: the server has no SMTP settings." }
+                    failures: { type: integer, minimum: 1, description: "Failed runs in a row when the alert was due." }
+                    message: { type: [string, "null"], description: "Why it failed. Never contains the password." }
     Integration:
       type: object
       required: [config, health]
       properties:
         config: { $ref: "integration.schema.json" }
         health: { $ref: "result.schema.json#/$defs/health" }
+        alert: { $ref: "#/components/schemas/AlertState" }
         revision: { type: integer, minimum: 1, description: "1 when created, plus 1 on every save (D-15). Editing in place never creates a second integration." }
         created_at: { type: string }
         updated_at: { type: string }

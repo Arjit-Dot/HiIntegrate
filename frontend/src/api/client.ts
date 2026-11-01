@@ -15,6 +15,8 @@ export type RunRecord = S['run_record']
 export type QuarantineRecord = S['quarantine_record']
 export type UnifiedUser = S['unified_user']
 export type Config = Record<string, any>
+export type ProposeFixResponse = S['ProposeFixResponse']
+export type MappingSuggestion = S['MappingSuggestion']
 export type GenerateConfigResponse = {
   yaml: string
   config?: Config
@@ -80,6 +82,12 @@ export const api = {
   generateConfig: (b: { service?: string; url?: string; text?: string }) => call<GenerateConfigResponse>('POST', '/ai/generate-config', b),
   /** AI summary of the stored records (D-14). Nothing is saved; 501 when the server has no LLM_API_KEY. */
   summarize: (b: { target?: 'user' | 'device' | 'alert'; source?: string }) => call<{ summary: string }>('POST', '/ai/summarize', b),
+  /** AI propose-fix (D-14): a dry run. Nothing is saved; a person applies the fix with `replace`. 501 without LLM_API_KEY. */
+  proposeFix: (b: { kind: 'quarantine' | 'run_failure'; integration: string; action: string; run_id?: string }) =>
+    call<ProposeFixResponse>('POST', '/ai/propose-fix', b),
+  /** AI mapping suggestions (D-14): a sample in, a checked path per field out. With `mapping` no model is called. Nothing is saved. */
+  suggestMapping: (b: { target_schema: 'user' | 'device' | 'alert'; sample: unknown; mapping?: Record<string, { path: string; transform?: string | null; value_map?: Record<string, string> | null }> }) =>
+    call<MappingSuggestion>('POST', '/ai/suggest-mapping', b),
   listTemplates: () => call<{ items: TemplateSummary[] }>('GET', '/templates'),
   getTemplate: (id: string) => call<{ id: string; config: Config; yaml: string }>('GET', `/templates/${encodeURIComponent(id)}`),
   listResults: (p: { target: string; source?: string; limit?: number; offset?: number }) =>

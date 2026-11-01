@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import jmespath
 import yaml
 
 from app.ai.client import LLMClient, LLMError
@@ -409,4 +410,108 @@ def propose_fix(llm: LLMClient, config: dict, action: str, *, kind: str, quarant
     out = {"summary": str(data.get("summary", "")).strip() or "No explanation was given.", "changes": applied, "errors": errors}
     if applied:
         out["proposed_config"] = proposed
+    return out
+
+
+# ---------------------------------------------------------------- mapping suggestions
+
+SCHEMA_FIELDS = {
+    "user": ["id", "name", "email", "status", "last_login"],
+    "device": ["id", "hostname", "ip", "os", "owner", "last_seen"],
+    "alert": ["id", "type", "severity", "timestamp", "description"],
+}
+ALLOWED = {"status": ["active", "inactive", "suspended", "unknown"], "severity": ["low", "medium", "high", "critical", "unknown"]}
+TRANSFORMS = {"string", "int", "float", "bool", "lowercase", "uppercase", "datetime"}
+SAMPLE_RECORDS = 3  # how many sample records the model sees (D-14: masked)
+
+
+def find_records(sample) -> tuple[str, list]:
+    """Where the records are in a pasted response. A list is the records. An object with one list of objects in it
+    (`data`, `items`, `users`...) means that list. Any other object is one record."""
+    if isinstance(sample, list):
+        return "@", [r for r in sample if isinstance(r, dict)]
+    if isinstance(sample, dict):
+        for key, value in sample.items():
+            if isinstance(value, list) and value and all(isinstance(r, dict) for r in value):
+                return key, value
+        return "@", ([sample] if sample else [])
+    return "@", []
+
+
+def _entry(field: str, spec: dict, records: list) -> dict:
+    """Check one mapping entry against the sample: how many records the path finds a value in, and an example."""
+    path = spec.get("path") or ""
+    found, example = 0, None
+    for r in records:
+        try:
+            value = jmespath.search(path, r) if path else None
+        except jmespath.exceptions.JMESPathError:
+            return {"field": field, "path": path, "transform": spec.get("transform"), "value_map": spec.get("value_map"), "confidence": "low",
+                    "reason": "this is not a valid path", "found": 0, "of": len(records), "example": None, "valid": False}
+        if value not in (None, ""):
+            found += 1
+            example = example if example is not None else value
+    confidence = spec.get("confidence") if spec.get("confidence") in ("high", "medium", "low") else None
+    reason = str(spec.get("reason") or "")
+    if records and found == 0:
+        confidence, reason = "low", (reason + " " if reason else "") + "Nothing was found at this path in the sample."
+    elif records and found < len(records) and confidence == "high":
+        confidence = "medium"
+    return {"field": field, "path": path, "transform": spec.get("transform") if spec.get("transform") in TRANSFORMS else None,
+            "value_map": spec.get("value_map") if isinstance(spec.get("value_map"), dict) else None,
+            "confidence": confidence or ("high" if records and found == len(records) else "medium" if found else "low"),
+            "reason": reason, "found": found, "of": len(records), "example": example, "valid": True}
+
+
+def preview_mapping(target: str, fields: list[dict], records: list):
+    """The first sample record as it would be saved with this mapping, or why it would be quarantined (the same mapper
+    the platform runs). Returns {"record": ...} or {"quarantine": {"reason", "field"}}."""
+    from app.engine.mapping import map_record
+
+    mapping: dict = {}
+    for f in fields:
+        if not f["path"] or not f["valid"]:
+            continue
+        entry: dict = {"path": f["path"]}
+        if f.get("transform"):
+            entry["transform"] = f["transform"]
+        if f.get("value_map"):
+            entry["value_map"] = {str(k): v for k, v in f["value_map"].items()}
+            entry["default"] = "unknown"
+        mapping[f["field"]] = entry
+    if "id" not in mapping or not records:
+        return {"quarantine": {"reason": "missing_required_field", "field": "id"}}
+    cfg = {"name": "preview", "actions": {"a": {"mode": "pull", "target_schema": target, "map": mapping, "required": ["id"]}}}
+    out = map_record(cfg, "a", records[0], run_id="preview", fetched_at="2026-01-01T00:00:00Z")
+    if "record" in out:
+        return {"record": {k: v for k, v in out["record"].items() if k not in ("source", "fetched_at")}}
+    q = out["quarantine"]
+    return {"quarantine": {"reason": q["reason"], "field": q["field"]}}
+
+
+def check_mapping(target: str, sample, mapping: dict) -> dict:
+    """No model: check a mapping the person wrote or edited against the pasted sample."""
+    records_path, records = find_records(sample)
+    allowed = SCHEMA_FIELDS[target]
+    fields = [_entry(f, spec, records) for f, spec in mapping.items() if f in allowed and isinstance(spec, dict)]
+    return {"records_path": records_path, "records_found": len(records), "fields": fields, "preview": preview_mapping(target, fields, records)}
+
+
+def suggest_mapping(llm: LLMClient, target: str, sample) -> dict:
+    """A pasted sample response in, a JMESPath for each field of the target schema out, each one checked against the sample
+    by the platform itself. The model's confidence is lowered when its path does not hold up on the real records."""
+    _, records = find_records(sample)
+    if not records:
+        raise LLMError("the sample has no records: paste a response that contains at least one object")
+    shown = [mask(r) for r in records[:SAMPLE_RECORDS]]
+    schema = {f: ALLOWED.get(f, "any text or null") for f in SCHEMA_FIELDS[target]}
+    user = scrub(f"Schema: {target}\nFields and allowed values: {json.dumps(schema)}\nSample records (masked):\n{json.dumps(shown, default=str)[:12000]}")
+    data = _parse_json(llm.generate(prompt("suggest_mapping"), user, json_output=True))
+    mapping = {}
+    for item in data.get("fields", []) if isinstance(data.get("fields"), list) else []:
+        if isinstance(item, dict) and item.get("field") in SCHEMA_FIELDS[target] and isinstance(item.get("path"), str):
+            mapping[item["field"]] = item
+    out = check_mapping(target, sample, mapping)
+    order = {f: i for i, f in enumerate(SCHEMA_FIELDS[target])}
+    out["fields"].sort(key=lambda f: order[f["field"]])
     return out

@@ -397,3 +397,98 @@ def test_an_empty_first_page_is_a_success_with_nothing_saved(engine):
     client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"items": [], "meta": {"next": None}})))
     _, result = runner.run(engine, "empty", "users_cursor", "schedule", client=client)
     assert (result.status, result.pages_fetched, result.records_pulled) == ("success", 1, 0)
+
+
+# ---------------------------------------------------------------- alert state for the dashboard
+
+def alert_state(engine, name="alerted"):
+    with session_scope(engine) as s:
+        return repo.alert_state(s, repo.get_integration(s, name))
+
+
+def test_no_alerts_block_means_no_alert_state(engine):
+    add(engine, service("quiet", ("wrong_key",)))
+    assert alert_state(engine, "quiet") is None
+
+
+def test_the_rule_is_shown_before_anything_has_happened(engine):
+    add(engine, failing(after_failures=2))
+    assert alert_state(engine) == {"after_failures": 2, "to": ["secops@example.com"], "last_attempt": None}
+
+
+def test_a_sent_alert_is_remembered_until_the_next_success(engine, mock, monkeypatch):
+    Outbox(monkeypatch)
+    add(engine, failing(after_failures=2))
+    run_failing(engine, mock)
+    assert alert_state(engine)["last_attempt"] is None  # one failure: not due yet
+    run_failing(engine, mock)
+    last = alert_state(engine)["last_attempt"]
+    assert (last["action"], last["outcome"], last["failures"], last["message"]) == ("wrong_key", "sent", 2, None) and last["at"].endswith("Z")
+    run_failing(engine, mock)  # still failing: no second email, and the record of the first stays
+    assert alert_state(engine)["last_attempt"]["outcome"] == "sent"
+
+    ok = copy.deepcopy(failing(after_failures=2))
+    ok["actions"]["wrong_key"]["request"]["path"] = "/pages/cursor"
+    with session_scope(engine) as s:
+        repo.replace_integration(s, "alerted", ok)
+    run_failing(engine, mock)  # succeeds: the streak ends
+    assert alert_state(engine)["last_attempt"] is None
+
+
+def test_a_failed_send_is_remembered_with_the_reason_and_never_the_password(engine, mock, monkeypatch):
+    Outbox(monkeypatch, fail=True)
+    monkeypatch.setenv("SECRET_SMTP_PASSWORD", "smtp-pass-123")
+    monkeypatch.setattr(alerts, "send", lambda settings, msg, password: (_ for _ in ()).throw(OSError(f"login refused for smtp-pass-123 at {settings.smtp_host}")))
+    monkeypatch.setenv("SECRET_SMTP_PASSWORD_HOST", "smtp.example.com")
+    add(engine, failing(after_failures=1))
+    _, result = run_failing(engine, mock)
+    assert result.status == "failed"
+    last = alert_state(engine)["last_attempt"]
+    assert last["outcome"] == "failed" and "login refused" in last["message"] and "smtp-pass-123" not in last["message"] and "[redacted]" in last["message"]
+
+
+def test_missing_smtp_settings_are_remembered_as_not_configured(engine, mock, monkeypatch):
+    for name in ("SMTP_HOST", "SMTP_FROM", "SMTP_PORT"):
+        monkeypatch.delenv(name, raising=False)
+    from app.core.settings import Settings
+
+    monkeypatch.setattr(alerts, "get_settings", lambda: Settings(_env_file=None, smtp_host=None, smtp_from=None))
+    add(engine, failing(after_failures=1))
+    run_failing(engine, mock)
+    last = alert_state(engine)["last_attempt"]
+    assert last["outcome"] == "not_configured" and "SMTP" in last["message"]
+
+
+def test_a_test_run_neither_alerts_nor_clears_the_state(engine, mock, monkeypatch):
+    Outbox(monkeypatch)
+    add(engine, failing(after_failures=1))
+    run_failing(engine, mock, trigger="manual")
+    runner.run(engine, "alerted", "wrong_key", "test", client=mock, sleep=lambda s: None)
+    assert alert_state(engine)["last_attempt"]["outcome"] == "sent"
+
+
+def test_deleting_an_integration_clears_its_alert_record(engine, mock, monkeypatch):
+    Outbox(monkeypatch)
+    add(engine, failing(after_failures=1))
+    run_failing(engine, mock)
+    with session_scope(engine) as s:
+        repo.delete_integration(s, "alerted")
+    add(engine, failing(after_failures=1))
+    assert alert_state(engine)["last_attempt"] is None
+
+
+def test_the_dashboard_routes_carry_the_alert_state(engine, mock, monkeypatch):
+    from app.api.deps import engine_dep
+    from app.main import create_app
+
+    Outbox(monkeypatch)
+    add(engine, failing(after_failures=1))
+    add(engine, service("quiet", ("wrong_key",)))
+    run_failing(engine, mock)
+    app = create_app()
+    app.dependency_overrides[engine_dep] = lambda: engine
+    api = TestClient(app)
+    one = api.get("/api/v1/integrations/alerted").json()
+    assert one["alert"]["after_failures"] == 1 and one["alert"]["last_attempt"]["outcome"] == "sent"
+    listed = {i["name"]: i for i in api.get("/api/v1/integrations").json()["items"]}
+    assert listed["alerted"]["alert"]["last_attempt"]["outcome"] == "sent" and listed["quiet"]["alert"] is None

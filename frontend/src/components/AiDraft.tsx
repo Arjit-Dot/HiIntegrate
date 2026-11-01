@@ -13,6 +13,13 @@ const TEXT_FILE = /\.(txt|md|markdown|json|ya?ml|html?|xml|curl|sh|log|csv)$/i
 const BINARY_FILE = /\.(pdf|docx?|pptx?|xlsx?|png|jpe?g|gif|zip|gz)$/i
 
 type Attached = { name: string; text: string; long: boolean }
+
+// The last good draft per service is kept in this browser, so a demo can go on if the AI is busy or the network is down.
+type SavedDraft = { response: GenerateConfigResponse; at: string }
+const draftKey = (what: string, file: Attached | null) => `hiintegrate.draft.${(file ? `file:${file.name}` : what.trim().toLowerCase()) || 'none'}`
+function loadDraft(key: string): SavedDraft | null {
+  try { return JSON.parse(localStorage.getItem(key) ?? 'null') } catch { return null }
+}
 type Tried = NonNullable<GenerateConfigResponse['tried']>
 
 export function AiDraft({ onDraft }: { onDraft: (r: GenerateConfigResponse) => void }) {
@@ -22,6 +29,7 @@ export function AiDraft({ onDraft }: { onDraft: (r: GenerateConfigResponse) => v
   const [error, setError] = useState('')
   const [tried, setTried] = useState<Tried>([])
   const [off, setOff] = useState(false)
+  const [savedDraft, setSavedDraft] = useState<SavedDraft | null>(null)
   const input = useRef<HTMLInputElement>(null)
 
   async function pick(f: File | undefined) {
@@ -38,7 +46,7 @@ export function AiDraft({ onDraft }: { onDraft: (r: GenerateConfigResponse) => v
   }
 
   async function generate() {
-    setBusy(true); setError(''); setTried([])
+    setBusy(true); setError(''); setTried([]); setSavedDraft(null)
     try {
       const value = what.trim()
       const isLink = /^https?:\/\//i.test(value)
@@ -47,10 +55,12 @@ export function AiDraft({ onDraft }: { onDraft: (r: GenerateConfigResponse) => v
         ...(file ? { text: `Attached document (${file.name}):\n${file.text}` } : {}),
       })
       setTried(r.tried ?? [])
+      try { localStorage.setItem(draftKey(what, file), JSON.stringify({ response: r, at: new Date().toISOString() })) } catch { /* private mode */ }
       onDraft(r)
     } catch (e) {
       if (e instanceof ApiError && e.status === 501) setOff(true)
       else {
+        setSavedDraft(loadDraft(draftKey(what, file)))
         setError((e as Error).message)
         const t = (e instanceof ApiError ? (e.details as { tried?: Tried } | undefined)?.tried : undefined) ?? []
         setTried(t)
@@ -93,6 +103,12 @@ export function AiDraft({ onDraft }: { onDraft: (r: GenerateConfigResponse) => v
       {file && <div className="hint">With an attached document the AI reads it instead of searching the web.</div>}
 
       {error && <div className="hint err" role="alert" style={{ marginTop: 10 }}>{error}</div>}
+      {error && savedDraft && (
+        <div className="hint" style={{ marginTop: 6 }}>
+          A draft for this was saved on {new Date(savedDraft.at).toLocaleString()}.{' '}
+          <Button variant="secondary" size="sm" type="button" onClick={() => onDraft(savedDraft.response)}>Use the saved draft</Button>
+        </div>
+      )}
       {error && tried.length > 0 && (
         <div className="hint" style={{ marginTop: 6 }}>
           Pages the AI tried:

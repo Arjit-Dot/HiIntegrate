@@ -6,11 +6,13 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTheme } from '../lib/theme'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import * as yaml from 'js-yaml'
-import { api, ApiError, type Config, type GenerateConfigResponse, type SecretInfo, type TestResponse } from '../api/client'
+import { api, ApiError, type Config, type GenerateConfigResponse, type Integration, type SecretInfo, type TestResponse } from '../api/client'
 import { applyPreset, buildConfig, configToState, defaultState, hostOf, SCHEMAS, TRANSFORMS, type FormState, type SchemaName } from '../lib/config'
 import { ErrorBox, Pill, useToast } from '../components/common'
 import { TestResult } from '../components/TestResult'
 import { AiDraft } from '../components/AiDraft'
+import { AlertNote } from '../components/AlertNote'
+import { SuggestMapping } from '../components/SuggestMapping'
 import { lineOf, locate, missingVar } from '../lib/validation'
 
 type Issue = { path: string; message: string; severity: 'error' | 'warning'; line?: number }
@@ -40,8 +42,10 @@ export default function AddEdit() {
   const [testErr, setTestErr] = useState('')
   const [testInputs, setTestInputs] = useState('{\n  "id": "1"\n}')
   const [busy, setBusy] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
   const [mode, setMode] = useState<'manual' | 'ai'>('manual')   // AI mode: a documentation link or file in, a draft out
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [saved, setSaved] = useState<Integration | null>(null)   // the stored integration when editing: its health and alert state
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => { setRaw(null); setS(p => ({ ...p, [k]: v })) }
   const bind = (k: keyof FormState) => ({
@@ -55,6 +59,7 @@ export default function AddEdit() {
   useEffect(() => {
     if (!id) return
     api.getIntegration(id).then(r => {
+      setSaved(r)
       setBase(r.config as Config)
       const st = configToState(r.config as Config)
       setS(st); setEditedAction(st.actionName)
@@ -269,6 +274,18 @@ export default function AddEdit() {
         </ul>
       </div>
 
+      {suggesting && (
+        <SuggestMapping schema={s.schema} current={s.map} onClose={() => setSuggesting(false)}
+          onApply={(applied, recordsPath) => {
+            setRaw(null)
+            setS(p => ({
+              ...p,
+              records: recordsPath && recordsPath !== '@' ? recordsPath : (recordsPath === '@' ? '@' : p.records),
+              map: { ...p.map, ...Object.fromEntries(applied.map(a => [a.field, { ...(p.map[a.field] ?? { required: a.field === 'id', defaultValue: '' }), path: a.path, transform: a.transform, valueMap: a.valueMap }])) },
+            }))
+            toast(`Filled ${applied.length} mapping row${applied.length === 1 ? '' : 's'}. Check them, then press Test connection.`)
+          }} />
+      )}
       <div className="layout">
         <form className="card" autoComplete="off" onSubmit={e => e.preventDefault()}>
           <div className="section">
@@ -398,7 +415,8 @@ export default function AddEdit() {
           </div>
 
           <div className="section">
-            <h2><span className="step">5</span>Field mapping <Pill kind="schema">{s.schema}</Pill></h2>
+            <h2><span className="step">5</span>Field mapping <Pill kind="schema">{s.schema}</Pill>
+              <Button variant="secondary" size="sm" type="button" style={{ marginLeft: 12 }} onClick={() => setSuggesting(true)} title="Paste a sample response and let the AI suggest the paths">Suggest with AI</Button></h2>
             <SectionIssues n={5} />
             <div className="hint" style={{ margin: '-6px 0 10px' }}>Left: our field. Right: where to find it in the response (JMESPath). <code>||</code> means "use the first that exists".</div>
             <div className="maphead"><span>Our field</span><span>Path in response</span><span>Transform</span><span>Required</span></div>
@@ -438,8 +456,13 @@ export default function AddEdit() {
                   <input type="text" placeholder="equals, e.g. false" {...bind('errEq')} />
                   <input type="text" placeholder="message path, e.g. error" {...bind('errMsg')} />
                 </div></div>
-              <div><label>Email after this many failed runs in a row</label><input type="number" min={1} {...bind('afterFailures')} /></div>
+              <div><label>Email after this many failed runs in a row</label><input type="number" min={1} {...bind('afterFailures')} disabled={!s.recipients.trim()} /></div>
               <div><label>Alert recipients</label><input type="text" placeholder="secops@example.com, oncall@example.com" {...bind('recipients')} /></div>
+              <div className="full hint" style={{ marginTop: -4 }}>
+                One email is sent when failed runs in a row reach that number, and again only after a successful run and a new streak. Leave the recipients empty for no alerts.
+                The mail server is set once for the whole platform (<code>SMTP_*</code> in <code>.env</code>), not here. A failed send is logged and never fails a run.
+              </div>
+              {saved && id && <div className="full"><AlertNote name={id} alert={saved.alert} health={saved.health} /></div>}
             </div>
           </div>
         </form>

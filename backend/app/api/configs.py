@@ -29,7 +29,7 @@ def require_valid(config: dict | None, issues: list[dict]) -> dict:
 
 
 def integration_out(s: Session, row) -> dict:
-    return {"config": row.config, "health": repo.health(s, row), "revision": row.revision,
+    return {"config": row.config, "health": repo.health(s, row), "alert": repo.alert_state(s, row), "revision": row.revision,
             "created_at": row.created_at, "updated_at": row.updated_at}
 
 
@@ -45,4 +45,5 @@ def summary(s: Session, row) -> dict:
         "schemas": sorted({a["target_schema"] for a in actions.values()}),
         "actions": [{"name": n, "mode": a["mode"]} for n, a in actions.items()],
         "health": repo.health(s, row),
+        "alert": repo.alert_state(s, row),
     }
