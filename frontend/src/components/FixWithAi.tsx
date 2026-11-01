@@ -176,7 +176,10 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
               {v.still_quarantined === 0
                 ? <p className="field-note" style={{ marginTop: 0 }}>None would stay quarantined.</p>
                 : <p className="field-note" style={{ marginTop: 0 }}><b>{v.still_quarantined}</b> would stay quarantined. A config change cannot repair those: a record with no id has nothing to store, and a value that is simply wrong stays wrong. This fix is partial.</p>}
-              {rescuesNone && <Banner tone="warning" title="This change would not help" next="Ask again, or fix the mapping by hand.">The dry run rescues none of the records, so applying it would change the config without improving anything.</Banner>}
+              {rescuesNone && <Banner tone="warning" title="This change would not help" next="Ask the AI again (it can answer differently each time), or fix the mapping by hand.">
+                The dry run rescues none of the records, so applying it would change the config without improving anything.
+                <div style={{ marginTop: 10 }}><Button type="button" variant="secondary" size="sm" onClick={ask} disabled={busy}>Ask again</Button></div>
+              </Banner>}
             </Section>
           )}
 
