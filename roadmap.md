@@ -175,16 +175,18 @@ The frontend keeps the API base URL in **one setting** in `frontend/src/api/`: `
 - [ ] Health on the list and the enable toggle. Loading, empty and error states everywhere. *(25)*
 - [ ] Check the screens against the real samples. *(5)*
 
-### Checkpoint 2 at 11:45pm (integration)
-Switch the frontend from Prism to the real backend. Fix any difference from `openapi.yaml`.
-- [ ] Add GitHub through the form, press Test, see mapped output.
-- [ ] GitHub, Jira and Okta each complete a **real** pull.
-- [ ] Okta fills all three tables: users, devices and alerts.
-- [ ] A pull across several pages fills the table, and the dirty mock dataset fills the Quarantine page.
-- [ ] Validation and Test run against the real API.
-- [ ] A key typed into the Add form, and one set on the Secrets screen, are each used by a real run.
-- [ ] A secret pinned to `api.github.com` is refused for a config that points somewhere else (`secret_host_mismatch`), and nothing is sent.
-- [ ] Add a new action to the existing GitHub integration through **Edit**. The same integration now has it, its `revision` went up by one, its records are unchanged, and no second GitHub integration appears.
+### Checkpoint 2 at 11:45pm (integration): checked 1 Nov on `main` at `68378fc`, one item open
+Switch the frontend from Prism to the real backend. Fix any difference from `openapi.yaml`. *(Run with the frontend on `VITE_API_BASE=http://localhost:8000/api/v1`, the real backend on a throwaway SQLite file, and Person B's own GitHub, Jira and Okta tokens. No mock service was used.)*
+- [x] Add GitHub through the form, press Test, see mapped output. *(Done in the browser with `github-demo`: HTTP 200, mapped `id`, `name`, `status`. The first try returned 404 because the form's placeholder path `/api/users` was left in. Fixed to `/orgs/{{vars.org}}/members`. GitHub's member list has no `email`, `status` or `last_login`, so those show as missing paths unless the mapping uses a default.)*
+- [x] GitHub, Jira and Okta each complete a **real** pull. *(GitHub 200 records over 2 pages, Jira 11 users, Okta 2 users and 238 alerts. A repeat run while one was running returned 409.)*
+- [ ] Okta fills all three tables: users, devices and alerts. *(Users and alerts filled. **Devices are 0**: Person B's Okta org has no enrolled device. Needs a device enrolled, or Person A's org.)*
+- [x] A pull across several pages fills the table, and dirty data fills the Quarantine page. *(Several pages: GitHub 2, Okta alerts 4. Quarantine was filled from real data, not the mock dataset: a copy of the Jira config that requires `email` quarantined 10 of 11 users as `missing_required_field`. The reason filter, the schema filter and Export all agree on 10.)*
+- [x] Validation and Test run against the real API.
+- [x] A key typed into the Add form, and one set on the Secrets screen, are each used by a real run. *(The form stored a secret on Save and the run used it. A stored `github_token` beat the environment: a wrong stored value gave 401, the right value gave 200. `PUT /secrets` rejects a host with `https://`. Not seen: a real run after setting a secret on the Secrets screen itself.)*
+- [x] A secret pinned to `api.github.com` is refused for a config that points somewhere else (`secret_host_mismatch`), and nothing is sent. *(`github_token` aimed at the Jira host was refused before any request.)*
+- [x] Add a new action to the existing GitHub integration through **Edit**. The same integration now has it, its `revision` went up by one, its records are unchanged, and no second GitHub integration appears. *(`revision` 1 to 2, records 200 before and after, one GitHub integration. A PUT with a different name returned 400.)*
+
+**Not covered:** Postgres (the run used SQLite, because no database was running), and a full click-through of every screen in the browser. **Carried into Phase 3:** enroll an Okta device (or use Person A's org) to close the devices item.
 
 ## 7. Phase 3: reliability and AI (11:45pm to 2:30am)
 
