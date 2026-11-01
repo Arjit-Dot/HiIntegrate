@@ -143,3 +143,82 @@ pre{margin:0;background:var(--pre-bg);color:var(--pre-ink);border-radius:10px;pa
 .dark .modal-bg{background:rgba(0,0,0,.65)}
 .theme-toggle{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;width:34px;height:34px;display:grid;place-items:center;cursor:pointer;font-size:16px;line-height:1}
 .theme-toggle:hover{background:var(--hover)}
+
+/* ---- Roomier layout (UI pass): larger type and controls, more space between fields, sections and rows ---------------- */
+body{font-size:15px;line-height:1.65}
+h1{font-size:28px;letter-spacing:-.01em} h2{font-size:18px} h3{font-size:15px}
+.topbar{height:68px;padding:0 32px;gap:24px}
+.brand{font-size:17px;gap:12px} .logo{width:34px;height:34px;border-radius:10px;font-size:17px}
+.nav{gap:4px;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav a .navlink{padding:10px 14px;font-size:15px;border-radius:10px}
+.proto{background:none;color:var(--muted);border:1px solid var(--line);font-weight:500;padding:5px 12px}
+@media(max-width:1800px){.proto{display:none}}
+main{max-width:1360px;padding:40px 32px 72px}
+.page-head{margin-bottom:28px}
+.page-head p{margin-top:8px;font-size:15.5px;max-width:78ch}
+.toolbar{gap:14px;margin-bottom:24px!important}
+.toolbar input,.toolbar select{min-width:200px}
+.btn{padding:11px 20px;border-radius:10px}
+.btn.small{padding:7px 14px;font-size:13.5px}
+input[type=text],input[type=number],input[type=password],select,textarea{padding:11px 14px;border-radius:10px;font-size:15px}
+select{padding-right:36px;background-position:right 14px center}
+textarea{min-height:92px;line-height:1.55}
+label{font-size:14px;margin-bottom:8px}
+.hint{font-size:13px;margin-top:7px;line-height:1.55}
+th{font-size:12px;padding:14px 20px}
+td{padding:18px 20px;line-height:1.6}
+.pill{padding:4px 12px;font-size:13px}
+.card-pad{padding:28px}
+.section{padding:30px}
+.section h2{margin-bottom:20px}
+.step{width:26px;height:26px;font-size:13px}
+.grid{gap:22px 26px}
+.layout{gap:32px}
+.sticky{top:92px}
+.callout{padding:20px 24px;margin-bottom:26px;line-height:1.7}
+.callout ul{margin-top:10px;padding-left:22px}
+.callout li{margin-bottom:4px}
+.maprow,.maphead{grid-template-columns:150px minmax(0,1fr) 150px 72px;gap:12px}
+.maprow{padding:14px 0}
+.inrow{gap:12px;margin-bottom:12px}
+.tabs{padding:14px 18px 0;gap:6px}
+.tabs button{padding:10px 16px}
+.pane{padding:22px}
+pre{padding:18px;font-size:13.5px;line-height:1.65}
+.issue{padding:14px 16px;margin-bottom:12px;gap:12px}
+.actions-bar{gap:12px;margin-bottom:20px}
+.cards{grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:24px}
+.tcard{padding:26px;gap:14px}
+.seg button{padding:9px 16px}
+.modal{max-width:800px;padding:32px;border-radius:16px}
+.modal-head{margin-bottom:22px}
+.toast{padding:14px 20px;font-size:15px;max-width:420px}
+.note{margin-top:26px;font-size:13.5px}
+.theme-toggle{width:40px;height:40px;border-radius:10px}
+/* Integrations table: a summary of the actions instead of every name, and row buttons that wrap into a tidy group */
+.tablewrap td:first-child,.card table td:first-child{min-width:210px}
+.actions-cell{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-bottom:10px;max-width:300px}
+.actions-cell:last-child{margin-bottom:0}
+.actions-cell code{background:var(--hover);padding:3px 9px;border-radius:7px;font-size:12.5px}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;width:190px;margin-left:auto}
+.row-actions a{text-decoration:none}
+.nowrap{white-space:nowrap}
+.cell-wrap{max-width:320px;word-break:break-all;display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+table.dense th,table.dense td{padding-left:13px;padding-right:13px}
+.tcard > :last-child{margin-top:auto}
+/* smaller laptop screens: keep the roomy feel but let the top bar and the tables fit */
+@media(max-width:1240px){
+  .topbar{padding:0 20px;gap:14px}
+  .nav a .navlink{padding:9px 10px;font-size:14px}
+  .topbar .small.muted{display:none}
+  main{padding:32px 20px 56px}
+  td{padding:16px 14px} th{padding:12px 14px}
+  .actions-cell{max-width:240px}
+  .row-actions{width:150px}
+}
+@media(max-width:760px){
+  main{padding:24px 14px 48px}
+  .page-head{align-items:flex-start}
+  h1{font-size:24px}
+}

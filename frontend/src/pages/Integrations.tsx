@@ -72,39 +72,45 @@ export default function Integrations() {
       {error && <ErrorBox message={error} />}
       <div className="card tablewrap">
         <table>
-          <thead><tr><th>Integration</th><th>Category</th><th>Auth</th><th>Fills</th><th>Actions</th><th>Last run</th><th>Records</th><th>Health</th><th>Enabled</th><th></th></tr></thead>
+          <thead><tr><th>Integration</th><th>Fills</th><th>Actions</th><th>Last run</th><th>Health</th><th>Enabled</th><th></th></tr></thead>
           <tbody>
-            {items === null && !error && <tr><td colSpan={10} className="muted">Loading…</td></tr>}
-            {items !== null && rows.length === 0 && <tr><td colSpan={10} className="muted">No integrations match.</td></tr>}
+            {items === null && !error && <tr><td colSpan={7} className="muted">Loading…</td></tr>}
+            {items !== null && rows.length === 0 && <tr><td colSpan={7} className="muted">No integrations match.</td></tr>}
             {rows.map(i => {
               const h = i.health
               const status = i.enabled ? h.status : 'disabled'
               return (
                 <tr key={i.name}>
-                  <td><div className="name">{i.display_name ?? i.name}</div><div className="muted small mono">{i.name}</div></td>
-                  <td>{i.category}</td>
-                  <td className="mono small">{i.auth_type}</td>
+                  <td><div className="name">{i.display_name ?? i.name}</div><div className="muted small mono">{i.name}</div><div className="muted small" style={{ marginTop: 6 }}>{i.category} · <span className="mono">{i.auth_type}</span></div></td>
                   <td>{i.schemas.map(s => <Pill key={s} kind="schema">{s}</Pill>)}</td>
                   <td>
                     {(['pull', 'lookup'] as const).map(m => {
                       const names = i.actions.filter(a => a.mode === m)
-                      return names.length ? <div className="small" style={{ marginBottom: 4 }} key={m}><Pill kind={m}>{m}</Pill> {names.map(a => <code key={a.name}>{a.name} </code>)}</div> : null
+                      if (!names.length) return null
+                      const shown = names.slice(0, 2), more = names.slice(2)
+                      return (
+                        <div className="actions-cell" key={m}>
+                          <Pill kind={m}>{m} · {names.length}</Pill>
+                          {shown.map(a => <code key={a.name}>{a.name}</code>)}
+                          {more.length > 0 && <span className="muted small" title={more.map(a => a.name).join(', ')}>+{more.length} more</span>}
+                        </div>
+                      )
                     })}
                   </td>
-                  <td className="small">{h.last_run_at ? new Date(h.last_run_at).toLocaleString() : 'never'}</td>
-                  <td>{(h.records_pulled ?? 0).toLocaleString()}</td>
+                  <td><div>{h.last_run_at ? new Date(h.last_run_at).toLocaleString() : 'never'}</div><div className="muted small" style={{ marginTop: 4 }}>{(h.records_pulled ?? 0).toLocaleString()} records</div></td>
                   <td>
                     <Pill kind={status}>{status}</Pill>
                     {h.last_error && <div className="muted small" style={{ maxWidth: 240, marginTop: 4 }}>{h.last_error.message}</div>}
                     <AlertNote name={i.name} alert={i.alert} health={h} enabled={i.enabled} compact />
                   </td>
                   <td><Switch checked={i.enabled} onCheckedChange={v => toggle(i, v)} aria-label={`Enable ${i.name}`} /></td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    {i.actions.some(a => a.mode === 'lookup') && <><Button variant="secondary" size="sm" onClick={() => setRunning(i)}>Run</Button>{' '}</>}
-                    <Button variant="secondary" size="sm" onClick={() => setTesting(i)}>Test</Button>{' '}
-                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>{' '}
-                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit?add=1`}><Button variant="secondary" size="sm" title="Add several actions to this integration at once">+ Actions</Button></Link>{' '}
+                  <td><div className="row-actions">
+                    {i.actions.some(a => a.mode === 'lookup') && <><Button variant="secondary" size="sm" onClick={() => setRunning(i)}>Run</Button></>}
+                    <Button variant="secondary" size="sm" onClick={() => setTesting(i)}>Test</Button>
+                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>
+                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit?add=1`}><Button variant="secondary" size="sm" title="Add several actions to this integration at once">+ Actions</Button></Link>
                     <Button variant="destructive" size="sm" onClick={() => remove(i)} title="Delete this integration's config">Delete</Button>
+                    </div>
                   </td>
                 </tr>
               )

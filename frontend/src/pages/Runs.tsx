@@ -29,21 +29,18 @@ export default function Runs() {
       </div>
       {error && <ErrorBox message={error} />}
       <div className="card tablewrap">
-        <table>
-          <thead><tr><th>Run</th><th>Integration</th><th>Action</th><th>Mode</th><th>Trigger</th><th>Status</th><th>Started</th><th>Duration</th><th>Pages</th><th>Pulled</th><th>Valid</th><th>Invalid</th><th>Retries</th><th>Error</th></tr></thead>
+        <table className="dense">
+          <thead><tr><th>Run</th><th>Integration · action</th><th>Type</th><th>Status</th><th>Started</th><th>Pages</th><th>Pulled</th><th>Valid</th><th>Invalid</th><th>Retries</th><th>Error</th></tr></thead>
           <tbody>
-            {data === null && !error && <tr><td colSpan={14} className="muted">Loading…</td></tr>}
-            {data !== null && rows.length === 0 && <tr><td colSpan={14} className="muted">No runs yet.</td></tr>}
+            {data === null && !error && <tr><td colSpan={11} className="muted">Loading…</td></tr>}
+            {data !== null && rows.length === 0 && <tr><td colSpan={11} className="muted">No runs yet.</td></tr>}
             {rows.map(r => (
               <tr key={r.run_id}>
-                <td className="mono small">{r.run_id}</td>
-                <td>{r.integration}</td>
-                <td className="mono small">{r.action}</td>
-                <td>{r.mode}</td>
-                <td><Pill kind="trigger">{r.trigger}</Pill></td>
+                <td className="mono small nowrap">{r.run_id}</td>
+                <td><div className="name">{r.integration}</div><div className="mono small muted">{r.action}</div></td>
+                <td><div>{r.mode}</div><div style={{ marginTop: 4 }}><Pill kind="trigger">{r.trigger}</Pill></div></td>
                 <td><Pill kind={r.status}>{r.status}</Pill></td>
-                <td className="small">{new Date(r.started_at).toLocaleString()}</td>
-                <td className="small">{duration(r.duration_ms)}</td>
+                <td className="nowrap"><div>{new Date(r.started_at).toLocaleString()}</div><div className="muted small" style={{ marginTop: 2 }}>took {duration(r.duration_ms)}</div></td>
                 <td>{r.pages_fetched}</td>
                 <td>{r.records_pulled.toLocaleString()}</td>
                 <td>{r.records_valid.toLocaleString()}</td>

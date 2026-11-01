@@ -72,7 +72,7 @@ export default function Quarantine() {
         </div>
       )}
       <div className="card tablewrap">
-        <table>
+        <table className="dense">
           <thead><tr><th>Source</th><th>Action</th><th>Schema</th><th>Run</th><th>Reason</th><th>Field</th><th>Quarantined at</th><th>Original record</th></tr></thead>
           <tbody>
             {data === null && !error && <tr><td colSpan={8} className="muted">Loading…</td></tr>}
@@ -82,11 +82,11 @@ export default function Quarantine() {
                 <td>{q.source}</td>
                 <td className="mono small">{q.action}</td>
                 <td><Pill kind="schema">{q.target_schema}</Pill></td>
-                <td className="mono small">{q.run_id}</td>
+                <td className="mono small nowrap">{q.run_id}</td>
                 <td><Pill kind="failed">{q.reason}</Pill></td>
                 <td className="mono small">{q.field ?? ''}</td>
                 <td className="small">{new Date(q.created_at).toLocaleString()}</td>
-                <td className="mono small">{JSON.stringify(q.raw)}</td>
+                <td className="mono small"><div className="cell-wrap" title={JSON.stringify(q.raw)}>{JSON.stringify(q.raw)}</div></td>
               </tr>
             ))}
           </tbody>
