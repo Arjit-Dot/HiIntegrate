@@ -35,6 +35,8 @@ certs/
 catchup.md
 Finaltester.md
 presentation.txt
+roadmap.md
+present/
 
 # Test, coverage and tool leftovers
 .coverage

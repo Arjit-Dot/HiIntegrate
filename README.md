@@ -7,7 +7,6 @@ Add a new security tool by writing a config file, not code. One generic engine r
 |---|---|
 | [`docs/decisions.md`](docs/decisions.md) | Every decision, with its reason |
 | [`schema/README.md`](schema/README.md) | The contract between Person A and Person B |
-| [`roadmap.md`](roadmap.md) | The plan to finish by 2:00am |
 | [`docs/ui-prototype.html`](docs/ui-prototype.html) | The final dashboard visual. Open it in a browser |
 
 ## Layout
