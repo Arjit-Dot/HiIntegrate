@@ -111,7 +111,7 @@ export default function Integrations() {
       </div>
       {error && <ErrorBox message={error} />}
       <div className="card tablewrap">
-        <table>
+        <table className="intable">
           <thead><tr>
             <th>Integration</th>
             <th title="The kinds of records this integration stores: users, devices or alerts">Data it collects</th>
