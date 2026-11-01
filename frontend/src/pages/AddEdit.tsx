@@ -427,7 +427,7 @@ export default function AddEdit() {
                 {[...Object.keys(parsed.config?.actions ?? {}).filter(n => n !== s.actionName), s.actionName].sort().map(n => <option key={n}>{n}</option>)}
               </select>
               <Button variant="secondary" size="sm" type="button" onClick={addBlankAction}>+ Add action</Button>
-              <Button variant="secondary" size="sm" type="button" onClick={() => setAdding(v => !v)} title="Add several actions at once, from the AI or pasted YAML or JSON">+ Add several actions</Button>
+              <Button variant="secondary" size="sm" type="button" onClick={() => setAdding(v => !v)} title="Add several actions at once, from the AI or an uploaded YAML or JSON file">+ Add several actions</Button>
               {Object.keys(parsed.config?.actions ?? {}).length > 1 && <Button variant="secondary" size="sm" type="button" onClick={removeAction}>Remove this action</Button>}
               <span className="muted small">{Object.keys(parsed.config?.actions ?? {}).length} in this integration</span>
             </div>

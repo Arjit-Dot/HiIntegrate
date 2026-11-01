@@ -39,7 +39,7 @@ export function AiDraft({ onDraft, initial = '' }: { onDraft: (r: GenerateConfig
       setError(`${f.name} is not a text file. PDF and Word files are not supported: save the page as HTML or text, or paste the part you need.`)
       return
     }
-    if (f.size > MAX_FILE) { setError(`${f.name} is larger than 1.5 MB. Attach a smaller file, or just the part about the endpoints you need.`); return }
+    if (f.size > MAX_FILE) { setError(`${f.name} is larger than 1.5 MB. Upload a smaller file, or just the part about the endpoints you need.`); return }
     const text = await f.text()
     if (!text.trim()) { setError(`${f.name} is empty.`); return }
     setFile({ name: f.name, text, long: text.length > MAX_CHARS })
@@ -78,19 +78,27 @@ export function AiDraft({ onDraft, initial = '' }: { onDraft: (r: GenerateConfig
       <h2 style={{ marginTop: 0 }}><Sparkles size={16} style={{ verticalAlign: -2 }} /> Draft a config with AI</h2>
       <div className="hint" style={{ margin: '-4px 0 12px' }}>
         Type the name of the service. The AI finds its API documentation (trying several pages if it has to) and writes a draft, which fills in the form for you to check, test and save.
-        If it cannot find the right page, paste a documentation link or attach a document from your computer. Nothing is saved until you press Save.
+        If it cannot find the right page, paste a documentation link or upload a document from your computer. Nothing is saved until you press Save.
       </div>
 
       <label>Service name <span className="muted">(or a link to its API documentation)</span></label>
       <div className="inline">
         <input type="text" placeholder="Jira, Okta, GitHub, CrowdStrike…" value={what} onChange={e => setWhat(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && ready) generate() }} aria-label="Service name or documentation link" />
-        <input ref={input} type="file" hidden accept=".txt,.md,.markdown,.json,.yaml,.yml,.html,.htm,.xml,.curl,.sh,text/*,application/json" aria-label="Attach a document"
+        <input ref={input} type="file" hidden accept=".txt,.md,.markdown,.json,.yaml,.yml,.html,.htm,.xml,.curl,.sh,text/*,application/json" aria-label="Upload a document"
           onChange={e => { pick(e.target.files?.[0]); e.target.value = '' }} />
-        <Button variant="secondary" size="sm" type="button" title="Attach a document from this computer" aria-label="Attach a document from this computer" onClick={() => input.current?.click()}>
-          <Paperclip size={16} />
-        </Button>
       </div>
+      {!file && (
+        <div role="button" tabIndex={0} aria-label="Upload a document from this computer"
+          style={{ marginTop: 10, border: '2px dashed var(--border, #cbd5e1)', borderRadius: 10, padding: '16px', textAlign: 'center', cursor: 'pointer' }}
+          onClick={() => input.current?.click()}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.current?.click() } }}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); pick(e.dataTransfer.files?.[0]) }}>
+          <strong>Upload file</strong>
+          <div className="small muted" style={{ marginTop: 2 }}>Click to choose a document (API docs, a curl example, a sample reply), or drop it here</div>
+        </div>
+      )}
       {file && (
         <div className="inline" style={{ marginTop: 8 }}>
           <span className="pill" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', background: 'var(--accent-soft)', color: 'var(--accent-ink)' }}>
@@ -99,8 +107,8 @@ export function AiDraft({ onDraft, initial = '' }: { onDraft: (r: GenerateConfig
           </span>
         </div>
       )}
-      {file?.long && <div className="hint">Long file: only the first {MAX_CHARS.toLocaleString()} characters are used. Attach just the part about the endpoints you need if the rest is not relevant.</div>}
-      {file && <div className="hint">With an attached document the AI reads it instead of searching the web.</div>}
+      {file?.long && <div className="hint">Long file: only the first {MAX_CHARS.toLocaleString()} characters are used. Upload just the part about the endpoints you need if the rest is not relevant.</div>}
+      {file && <div className="hint">With an uploaded document the AI reads it instead of searching the web.</div>}
 
       {error && <div className="hint err" role="alert" style={{ marginTop: 10 }}>{error}</div>}
       {error && savedDraft && (
