@@ -229,6 +229,24 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 - [ ] Record a screen capture of the full demo as a fallback. *(10)*
 - [ ] Save cached AI outputs (authoring, propose-fix, summary) as a fallback for the demo. *(5)*
 
+### Security hardening (added 1 Nov, D-17: proposed, Person A to confirm)
+
+The Phase 4 audit found no secret in logs, replies, the database, files or Git history. A review of the running stack found the rest of the exposure: **no API login (D-6), ports published on every interface, no check on where the engine sends requests, no audit log and no retention.** `docs/decisions.md` D-17 has the full list (S-1 to S-14) with owners and contract impact. Nothing below is built yet.
+
+**Minimum before the freeze: deployment files only, no contract change, about 30 to 40 minutes together.**
+- [ ] **S-1** Publish only the dashboard, bound to `127.0.0.1`. The API and the mock stay inside Compose and are reached through nginx. Update the README and `backend/scripts/rehearse.py` (it uses `API_BASE`) to match. *(10)*
+- [ ] **S-2** nginx security headers and `server_tokens off`. The CSP must still allow the Monaco editor's CDN. *(10)*
+- [ ] **S-3** Optional basic auth in nginx for the dashboard and API, password from `.env`. A stopgap for "no login". *(10)*
+- [ ] **S-4** Compose hardening: `read_only`, `cap_drop: [ALL]`, `no-new-privileges`, a tmpfs for `/tmp`. Check that all five services still start. *(10)*
+- [ ] **S-5** A pre-commit gitleaks hook, and the gitleaks Docker command in the README. *(5)*
+- [ ] After S-1 to S-4, **run the clean-clone test and the secret audit again** (same method as Phase 4). *(10)*
+
+**Only if Checkpoint 3's list is already green (Person A, with tests):**
+- [ ] **S-6** Outgoing-request guard in the engine: refuse loopback, private, link-local and metadata addresses on the first request, every redirect and every next-page link, except `localhost`, `127.0.0.1` and `mock-api`. Connect to the resolved address. Reuse the check in `backend/app/ai/docs.py`. Adds one error code (`blocked_address`) to `result.schema.json`, so it needs both people's approval and a new tag. *(45)*
+- [ ] **S-7 to S-9** Audit log, API login, rate limits and a response size cap. Each adds a route, a security scheme or a response code to `openapi.yaml`, so each needs approval and a tag first. *(60 or more)*
+
+**Named as next steps, not built:** S-10 retention and delete routes, S-11 key rotation, S-12 file-based secrets, S-13 TLS and CI scanning, S-14 AI hardening (including pinning the address in the documentation fetcher).
+
 ### Checkpoint 3 at 3:30am: feature freeze
 From a clean clone, `docker compose up`, then tick every item:
 
@@ -255,6 +273,7 @@ Also tick:
 - [ ] The AI summary, the AI draft (with its repair loop) and AI propose-fix all work. Propose-fix shows a real "rescued N of M" count on the dirty dataset, and Apply saves the change through `PUT /integrations/{id}`.
 - [ ] The product demos fully with all AI switched off (`LLM_API_KEY` unset gives `501`, and nothing else breaks).
 - [ ] `cd schema/tools && npm run check` still passes.
+- [ ] **If D-17 is confirmed:** S-1 to S-5 are applied, and the clean-clone test and the secret audit pass again on the hardened stack. If D-17 is not confirmed, say at the checkpoint that v1 has no login by design (D-6).
 
 ## 9. Phase 5: rehearse (3:30 to 4:30am)
 
@@ -275,7 +294,8 @@ Also tick:
 8. Generate a config with AI from a pasted sample and show the repair loop fixing its own errors.
 9. On the Quarantine page, click **Fix with AI**: show the proposed change and "rescues N of M", then Apply, and run again to show the quarantined count drop.
 10. Click Summarize for the AI overview.
-11. Mention what comes next: OAuth2, more templates, a shared config library.
+11. Say plainly what v1 protects and what it leaves out: secrets are encrypted, pinned to a host and absent from logs (the audit proved it), and v1 has no API login by design (D-6). Name the next steps from D-17 (login, a guard on outgoing requests, an audit log, retention).
+12. Mention what comes next: OAuth2 (Okta needs a private-key JWT for service apps), more templates, a shared config library.
 
 ## 11. Bonus tracker
 
@@ -294,6 +314,7 @@ Also tick:
 - **Contract changes:** edit `schema/` and `docs/decisions.md` together, tell the other person at once, and run `npm run check`.
 - **Merge to `main` every hour and at each checkpoint.** A broken `main` is the first thing to fix.
 - **Never commit a secret.** `.env` is ignored. Run gitleaks before each push from Phase 4.
+- **A change that adds a route, a security scheme, a response code or an error code is a contract change** (D-17 S-6 to S-10): approval from both and a new tag first, even when the reason is security.
 
 ## 13. Risks, and what to do if you are behind
 
@@ -304,6 +325,8 @@ Also tick:
 | The email account will not send | Try a different provider. The alert logic can be demonstrated against any SMTP server. |
 | `docker compose up` fails on a clean machine | Start the Docker work earlier than 2:30am if the images are ready. Test from a clean clone once before the checkpoint, not at it. |
 | The real API differs from the synthetic samples | Capture real samples early (B, Phase 1) and fix the templates in Phase 2. |
+| The dashboard or API is reachable by others on the same network (no login, ports published on every interface) | D-17 S-1 (bind to `127.0.0.1`) and S-3 (basic auth in nginx) before demoing on shared Wi-Fi. |
+| A config makes the server call an internal address | D-17 S-6. Until then, the engine trusts `base_url`. Do not expose the API beyond localhost. |
 
 **If you are more than 30 minutes behind at a checkpoint,** use this order:
 1. Dark mode.
@@ -311,7 +334,7 @@ Also tick:
 3. Incremental sync (B-1).
 4. The AI summary. Keep the authoring loop and propose-fix, which are the AI features that stand out.
 
-Everything else stays. If you are still behind after those, say so at that checkpoint. Do not quietly cut a must-have.
+Everything else stays. D-17 items S-6 to S-14 are stretch and are cut before any of the above. S-1 to S-5 are small and stay. If you are still behind after those, say so at that checkpoint. Do not quietly cut a must-have.
 
 ## 14. Done means
 

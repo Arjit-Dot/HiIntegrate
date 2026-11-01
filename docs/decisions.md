@@ -56,8 +56,9 @@ The **Covers** line at the top of each entry names the requirements it supports.
 15. [D-14: AI propose-fix](#d-14-ai-propose-fix)
 16. [D-15: Configs live in the database](#d-15-configs-live-in-the-database-and-changes-update-them-in-place)
 17. [D-16: Unified users across services](#d-16-unified-users-across-services)
-18. [Revision log](#revision-log)
-19. [Open items](#open-items)
+18. [D-17: Security hardening](#d-17-security-hardening)
+19. [Revision log](#revision-log)
+20. [Open items](#open-items)
 
 ## Status
 
@@ -79,6 +80,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-14 | `POST /ai/propose-fix` | Locked (approved by both, 31 Oct 7:40pm) |
 | D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
+| D-17 | Security hardening | Proposed by Person B (1 Nov). Person A to confirm. No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -129,6 +131,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | agreed |
 | D-15 | Configs in the database | One row per integration with a `revision`; adding to an existing service edits that row with `PUT`; templates are starting points only | FR-2, B-5 | approved by both |
 | D-16 | Unified users | `GET /users/unified` merges users across services by lowercased email into one entry listing each service. Stored records are unchanged | FR-11 | approved by both |
+| D-17 | Security hardening | Shrink what a stranger on the network, a hostile config or a leaked file can reach: ports and headers first (S-1 to S-5), then a guard on the engine's outgoing requests, an audit log, an API login and rate limits (S-6 to S-9), then retention and key handling (S-10 to S-14) | FR-6 | Person B, A to confirm |
 
 ---
 
@@ -1284,6 +1287,67 @@ One shared set of examples that both people treat as the truth:
 
 ---
 
+## D-17: Security hardening
+
+**Covers:** FR-6 · **Source:** Person B's security review of the running stack (1 Nov, after the Phase 4 audit). **Person A to confirm.** Nothing here is built yet. Items S-1 to S-5 and S-11 to S-13 change no file under `schema/`. S-6 adds one error code to `result.schema.json`. S-7 to S-10 add a route, a response code or a security scheme to `openapi.yaml`. Each of those needs both people's approval and a new tag before it is built.
+
+**What already protects the product (checked, not assumed)**
+- Secrets are write-only, stored encrypted (Fernet) and **pinned to a host**, checked on every request including redirects and next-page links (D-7).
+- Logs redact secret values. The Phase 4 audit searched the logs of all five containers, every readable API reply, a Postgres dump, the tracked files and the full Git history for every real secret on the machine and found none. gitleaks found none in 50 commits.
+- Containers run as a normal user, no `.env` is copied into an image, Postgres is not published, and the mock service never receives `.env`.
+- The AI layer masks personal data and removes secrets before anything reaches the model, shows a proposal for a person to approve, and validates it first (D-14).
+- The AI documentation fetcher (`backend/app/ai/docs.py`) already refuses anything but public https addresses, on every redirect hop, with a size cap and a timeout. Its own comment states one limit: the address is checked and then the client connects by name, so a DNS answer that changes in between could slip through.
+
+**What it does not protect against (found in the code on 1 Nov)**
+
+| Gap | What it allows |
+|---|---|
+| No login on the API (D-6: "no API login in v1") | Anyone who can reach the port can read every record, run pulls, edit configs and overwrite secrets |
+| `docker-compose.yml` publishes 8000, 5173 and 8001 on every network interface | On a shared network, other people can reach the dashboard, the API and the mock |
+| The engine does not check where `base_url` points | A config can send the server to an internal address or a cloud metadata address. Host pinning protects the secret, not the request (the AI fetcher above does have this check; the engine does not) |
+| No audit log | Nothing records who changed a config or replaced a secret |
+| No retention or delete route | Records and quarantined originals (emails, names) are kept forever |
+| No rate limit on the API, no response size cap in the engine | The API can be flooded, and a service could answer with a huge body |
+| nginx sends no security headers and shows its version | No CSP, no frame protection |
+| No pre-commit hook and no CI | A future leak is not caught before it is committed |
+| Plain http, secrets in container environment variables | Fine on localhost. `docker inspect` shows them to anyone with Docker access |
+
+**Decision (proposed): the items, with owner and contract impact**
+
+| ID | Item | Owner | Changes a contract file? |
+|---|---|---|---|
+| S-1 | Publish only the dashboard, bound to `127.0.0.1`. The API and the mock stay inside Compose and are reached through nginx (`/api`) | B | No |
+| S-2 | nginx security headers (CSP that still allows the Monaco editor's CDN, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`) and `server_tokens off` | B | No |
+| S-3 | Optional basic auth in nginx for the dashboard and the API, with the password from `.env`. A stopgap until S-8 | B | No |
+| S-4 | Compose hardening: `read_only`, `cap_drop: [ALL]`, `no-new-privileges`, a tmpfs for `/tmp` | B | No |
+| S-5 | A pre-commit gitleaks hook, and the gitleaks Docker command in the README | B | No |
+| S-6 | **Outgoing-request guard in the engine:** resolve each target and refuse loopback, private, link-local and metadata addresses, on the first request, every redirect and every next-page link. Allow `localhost`, `127.0.0.1` and `mock-api` (D-12). Connect to the resolved address so a DNS change cannot slip through, and use the same check in the AI fetcher | A | Adds one error code (`blocked_address`) to `result.schema.json`, additive, like R-14 |
+| S-7 | **Audit log:** an `audit` table (time, what changed, which integration or secret name, the `revision`, the request id), never a value, and a read route | A | Yes: a new route in `openapi.yaml` |
+| S-8 | **API login:** one admin token from the environment, checked on every route except `/health`, and a login box in the dashboard | A and B | Yes: a security scheme and `401` replies in `openapi.yaml` |
+| S-9 | Rate limits on the write, run and AI routes, and a response size cap in the engine | A | Yes if the API starts answering `429` (additive in `openapi.yaml`) |
+| S-10 | Retention: purge old runs and quarantined records on a schedule, and a delete route | A | Yes: a new route |
+| S-11 | Key rotation: accept more than one Fernet key, so `ENCRYPTION_KEY` can change without losing secrets | A | No |
+| S-12 | File-based secrets (`*_FILE`) instead of environment variables, so `docker inspect` shows nothing | A | No |
+| S-13 | TLS in nginx for any use beyond localhost, and CI with `pip-audit`, `npm audit` and an image scan | A and B | No |
+| S-14 | AI hardening: treat documentation, uploaded files and records as untrusted text that may try to steer the model; pin the resolved address in the documentation fetcher (its stated limit); remember that masked records leave the machine for Google's service | owner of the AI code | No |
+
+**Order.** S-1 to S-5 only touch deployment files and add no code risk, so they are the first thing to do and fit the Phase 4 slot. S-6 is the strongest protection the engine can give itself. S-7 to S-9 are next. S-10 to S-14 are described so they can be named in the demo as next steps. None of these may displace a must-have: they are done only when Checkpoint 3's list is already green.
+
+**Why**
+- The weakest point is not a leaked secret, which the audit did not find. It is that anyone who can reach the API can do everything, and that the engine will call any address a config names.
+- S-1 to S-5 cost the least and remove the most exposure for a demo laptop on shared Wi-Fi.
+- S-6 reuses a check the AI fetcher already has, so the project gets one rule for outgoing requests, not two.
+- An audit log answers "who changed this" after the fact, which a no-login tool cannot do until S-8 exists.
+- Anything that adds a route or a security scheme goes through the contract process (a line here, a tag, both people), so it is not slipped in.
+
+**Limits (stated, not hidden)**
+- v1 stays a local, single-tenant tool. Without S-8, the dashboard is protected only by S-1 and S-3.
+- `docker inspect`, a process dump and anyone with the `.env` file can still read secrets. S-12 narrows this, it does not remove it.
+- A real hostile network needs S-13 (TLS) as well.
+- OAuth2 (reserved in D-2.3) is not part of this decision. If it is built later, note that Okta's management API accepts only a private-key JWT, not a client secret, for service apps (see Okta's "Implement OAuth for Okta with a service app").
+
+---
+
 ## Revision log
 
 ### R-1: Alignment with the organizers' goals (the changes-v2 document)
@@ -1447,6 +1511,13 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | `POST /ai/generate-config` reply | `yaml`, `config`, `errors` | Also `attempts` (one entry per try) | The roadmap wants the UI to show each repair step. Additive; the frontend types need regenerating. Needs Person B's approval |
 | `POST /ai/generate-config` request | `text` only | `service`, `url` and/or `text`. **AI mode takes a service name**: the AI suggests documentation pages, tries them until one lists endpoints for users, devices or alerts, follows links from front pages and parent pages, and asks again if all fail. `url` reads one given page. `text` carries an attached document. The reply adds `source` (`url`, `chars`, `truncated`), `tried` (every page tried) and `attempts`; `422` lists what was tried when nothing worked | Nobody should have to find or describe the documentation. Pages are fetched safely: https only, no credentials, every hop (redirects too) a public address, 8 MB and 15 s limits, text-like content. OpenAPI files become one line per endpoint, long pages keep the parts about users, endpoints, paging and login. The draft is finished by the platform: every `{{vars.x}}` gets an example value and duplicate YAML keys are rejected, so the person only verifies. Nothing is saved by the AI. Additive; needs Person B's approval |
 
+### R-16: Security review (1 Nov) · proposed, Person A to confirm
+
+| Item | Before | Now | Why |
+|---|---|---|---|
+| Security plan | The audit (Phase 4) showed no secret in logs, API replies, the database, files or Git history, but listed no further hardening | D-17 lists 14 items (S-1 to S-14) with owners and contract impact. **Nothing is built yet** | A review of the running stack found the API open to anyone on the network, ports published on every interface, no guard on the engine's outgoing requests, and no audit log or retention |
+| Contract files | Unchanged | Unchanged. S-7 to S-10 would add routes, a security scheme or response codes to `openapi.yaml`, and S-6 one error code to `result.schema.json` | Each needs both people's approval and a new tag before it is built |
+
 ---
 
 ## Open items
@@ -1459,3 +1530,5 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | `templates/github.yaml`, `jira.yaml` and `okta.yaml` are not verified against live accounts | Checkpoint 2 | Phase 1 and 2 |
 | Jira answers 404 for every request (8:35pm), so the site in `JIRA_BASE_URL` is wrong or has no Jira. Okta has no enrolled device. Re-run `LIVE_TESTS=1 pytest tests/live` after fixing both | Real Jira and device data at Checkpoint 2 | Before Checkpoint 2 |
 | Rate-limit state (`min_interval_ms`) is per process in v1, so it needs shared storage before running more than one worker (D-10) | Scaling out | After v1 |
+| D-17 security plan: which items go in before the freeze (S-1 to S-5 are the proposed minimum), and Person A's confirmation | Checkpoint 3 | Before the freeze |
+| The AI documentation fetcher checks an address and then connects by name, so a changing DNS answer could slip through (its own comment says so). Fine for a local single-user tool, to be fixed before the API is exposed (D-17 S-6 and S-14) | Exposing the API | Before any non-local use |
