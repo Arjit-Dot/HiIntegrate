@@ -1,0 +1,19 @@
+# Never bake secrets or local junk into an image (D-7.4). The build context is the repo root.
+.env
+.env.*
+.git
+.gitignore
+CLAUDE.md
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/*.tsbuildinfo
+**/*.db
+frontend/dist
+docs
+samples
+catchup.md
+roadmap.md

@@ -1,0 +1,78 @@
+# HiIntegrate: the whole stack.   docker compose up --build
+# Needs a .env in this folder (names are in README.md). It is never committed and never copied into an image.
+# At least: POSTGRES_PASSWORD, ENCRYPTION_KEY, and one SECRET_<NAME> (plus SECRET_<NAME>_HOST) per service you call.
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  image: hiintegrate-backend
+  env_file:
+    - path: .env
+      required: false          # a fresh clone has no .env yet; the checks below say what is missing
+  environment:
+    # Inside Compose the database is the `postgres` service, whatever .env says for local runs.
+    DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/hiintegrate
+    CORS_ORIGINS: '["http://localhost:5173"]'
+    # A test value for the mock service only (not a real key). Pinned to the mock's own host.
+    SECRET_MOCK_TOKEN: mock-secret-123
+    SECRET_MOCK_TOKEN_HOST: mock-api
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: hiintegrate
+    volumes:
+      - hiintegrate-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hiintegrate"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Scheduled pulls and alert emails. Same image and settings; waits for the API, which creates the tables.
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      backend: { condition: service_healthy }
+
+  frontend:
+    build: ./frontend
+    image: hiintegrate-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend: { condition: service_healthy }
+    restart: unless-stopped
+
+  # The local test target for the failure tests. Not a data source. It gets no .env, so no real token reaches it.
+  mock-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: hiintegrate-backend
+    command: ["uvicorn", "tests.mock_api.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+volumes:
+  hiintegrate-db:
