@@ -17,6 +17,7 @@ const MODE_WORDS: Record<string, string> = { pull: 'Scheduled pulls', lookup: 'O
 
 export default function Integrations() {
   const [items, setItems] = useState<IntegrationSummary[] | null>(null)
+  const [all, setAll] = useState<IntegrationSummary[] | null>(null)   // the unfiltered list, for the summary tiles
   const [error, setError] = useState('')
   const [q, setQ] = useState(''); const [category, setCategory] = useState(''); const [status, setStatus] = useState(''); const [mode, setMode] = useState('')
   const [testing, setTesting] = useState<IntegrationSummary | null>(null)
@@ -30,13 +31,17 @@ export default function Integrations() {
       .catch(e => setError(e.message))
   }, [q, category, status])
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t) }, [load])
+  useEffect(() => { api.listIntegrations({}).then(r => setAll(r.items)).catch(() => {}) }, [])
 
   const rows = (items ?? []).filter(i => !mode || i.actions.some(a => a.mode === mode))
 
   // Update the row at once and keep it. Only undo it if the call fails.
   // (A reload would bring back the old value from the Prism mock, which always returns the same list.)
   async function toggle(i: IntegrationSummary, enabled: boolean) {
-    const setRow = (value: boolean) => setItems(prev => prev && prev.map(x => (x.name === i.name ? { ...x, enabled: value } : x)))
+    const setRow = (value: boolean) => {
+      setItems(prev => prev && prev.map(x => (x.name === i.name ? { ...x, enabled: value } : x)))
+      setAll(prev => prev && prev.map(x => (x.name === i.name ? { ...x, enabled: value } : x)))
+    }
     setRow(enabled)
     try { await api.setEnabled(i.name, enabled); toast(`${i.display_name ?? i.name} ${enabled ? 'enabled' : 'disabled'}`) }
     catch (e) { setRow(!enabled); toast(e instanceof ApiError ? e.message : 'Could not change enabled state') }
@@ -48,6 +53,7 @@ export default function Integrations() {
     try {
       await api.deleteIntegration(i.name)
       setItems(prev => prev && prev.filter(x => x.name !== i.name))
+      setAll(prev => prev && prev.filter(x => x.name !== i.name))
       toast(`${i.display_name ?? i.name} deleted`)
     } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not delete the integration') }
   }
@@ -61,6 +67,27 @@ export default function Integrations() {
         </div>
         <Button onClick={() => nav('/add')}>+ Add integration</Button>
       </div>
+      {all && all.length > 0 && (() => {
+        const state = (i: IntegrationSummary) => (i.enabled ? i.health.status : 'disabled')
+        const count = (...kinds: string[]) => all.filter(i => kinds.includes(state(i))).length
+        const tiles: [label: string, n: number, hint: string, tone: string][] = [
+          ['Integrations', all.length, 'connected tools', 'accent'],
+          ['Healthy', count('healthy'), 'last run went well', 'ok'],
+          ['Needs attention', count('degraded', 'failing'), 'degraded or failing', 'warn'],
+          ['Paused', count('disabled', 'never_run'), 'switched off or not run yet', 'off'],
+        ]
+        return (
+          <div className="stats" aria-label="Summary">
+            {tiles.map(([label, n, hint, tone]) => (
+              <div className={`stat ${tone}`} key={label}>
+                <div className="stat-n">{n}</div>
+                <div className="stat-label">{label}</div>
+                <div className="stat-hint">{hint}</div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
       <div className="toolbar" style={{ marginBottom: 14 }}>
         <input type="text" placeholder="Search by name" value={q} onChange={e => setQ(e.target.value)} />
         <select value={category} onChange={e => setCategory(e.target.value)}>

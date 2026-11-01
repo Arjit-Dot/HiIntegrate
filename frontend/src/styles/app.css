@@ -259,3 +259,70 @@ table.dense th,table.dense td{padding-left:13px;padding-right:13px}
 .facts dt{color:var(--muted);min-width:62px}
 .facts dd{margin:0}
 .actions-cell{gap:8px 10px}
+
+/* ---- Polish: depth, colour and a little life (light and dark) ---------------------------------------------------------- */
+:root{
+  --grad:linear-gradient(135deg,#6366f1,#8b5cf6);
+  --glow1:rgba(99,102,241,.16); --glow2:rgba(168,85,247,.11);
+  --bg:#f1f3fb; --line:#e1e6f3; --head-bg:#f4f6fd;
+  --shadow:0 1px 2px rgba(30,41,90,.05),0 10px 26px -14px rgba(30,41,90,.22);
+}
+.dark{
+  --bg:#0d1224; --card:#151b30; --surface:#151b30; --line:#262f4a; --head-bg:#1a2139; --hover:#1e2745; --hover-2:#1b2340;
+  --ink:#eaf0fb; --muted:#9aa8c4; --glow1:rgba(99,102,241,.24); --glow2:rgba(139,92,246,.15);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 32px -16px rgba(0,0,0,.75);
+}
+body{background:radial-gradient(1100px 520px at 88% -8%,var(--glow1),transparent 62%),radial-gradient(900px 460px at -8% 4%,var(--glow2),transparent 58%),var(--bg);background-attachment:fixed}
+.topbar{background:color-mix(in srgb,var(--surface) 82%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.topbar::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--grad)}
+.logo{background:var(--grad);box-shadow:0 6px 16px -6px rgba(99,102,241,.8)}
+.card{border-radius:16px;box-shadow:var(--shadow)}
+.page-head h1::after{content:"";display:block;width:46px;height:4px;border-radius:4px;background:var(--grad);margin-top:10px}
+/* buttons */
+.btn,[data-slot=button][data-variant=default]{background-image:var(--grad);border-color:transparent;color:#fff;box-shadow:0 8px 18px -9px rgba(99,102,241,.75);transition:transform .12s,filter .12s,box-shadow .12s}
+.btn:hover,[data-slot=button][data-variant=default]:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 12px 22px -10px rgba(99,102,241,.85)}
+.btn.secondary,.btn.danger{background-image:none;box-shadow:none;transform:none;filter:none}
+[data-slot=button][data-variant=secondary]:hover,.btn.secondary:hover{border-color:var(--accent);color:var(--accent-ink)}
+[data-slot=switch][data-state=checked]{background-image:var(--grad)}
+/* tables */
+th{background:var(--head-bg)}
+tbody tr{transition:background .12s}
+tbody tr:hover td{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+/* status chips get a dot (the chips are the Badge component, which sets data-variant) */
+[data-slot=badge]:is([data-variant=healthy],[data-variant=success],[data-variant=degraded],[data-variant=running],[data-variant=failing],[data-variant=failed],
+  [data-variant=disabled],[data-variant=never_run],[data-variant=set],[data-variant=notset])::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:7px;flex:none}
+/* summary tiles on Integrations */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:26px}
+.stat{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 24px 20px 28px;box-shadow:var(--shadow);overflow:hidden}
+.stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--tone)}
+.stat.accent{--tone:var(--grad)} .stat.ok{--tone:#22c55e} .stat.warn{--tone:#f59e0b} .stat.off{--tone:#94a3b8}
+.stat-n{font-size:36px;font-weight:800;line-height:1.1;letter-spacing:-.02em}
+.stat.accent .stat-n{color:var(--accent-ink)} .stat.ok .stat-n{color:var(--ok)} .stat.warn .stat-n{color:var(--warn)} .stat.off .stat-n{color:var(--muted)}
+.stat-label{font-weight:700;margin-top:6px}
+.stat-hint{color:var(--muted);font-size:13px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* side menu icons */
+.sidelink{flex-direction:row;align-items:center;gap:14px}
+.sidelink-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;color:var(--tint);background:color-mix(in srgb,var(--tint) 14%,transparent);transition:background .15s,color .15s}
+.sidelink-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sidelink:hover .sidelink-icon{background:color-mix(in srgb,var(--tint) 24%,transparent)}
+.sidelink.active{background:color-mix(in srgb,var(--tint) 10%,var(--surface));border-color:color-mix(in srgb,var(--tint) 38%,transparent)}
+.sidelink.active .sidelink-icon{background:var(--tint);color:#fff;box-shadow:0 8px 16px -8px var(--tint)}
+.sidelink.active .sidelink-label{color:var(--ink)}
+/* cards, steps, segmented buttons */
+.tcard{transition:transform .15s,box-shadow .15s,border-color .15s}
+.tcard:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 18px 36px -18px rgba(79,70,229,.5)}
+.step{background:var(--grad);color:#fff}
+.seg button.active{background:var(--grad);color:#fff}
+.callout{background:linear-gradient(135deg,var(--accent-soft),color-mix(in srgb,var(--accent-soft) 55%,var(--surface)))}
+/* sign-in */
+.login-brand{display:flex;align-items:center;justify-content:center;gap:14px;font-size:28px;font-weight:800;letter-spacing:-.01em}
+.login-brand .logo{width:48px;height:48px;border-radius:14px;font-size:25px}
+.login-tag{text-align:center;color:var(--muted);margin:8px 0 30px;font-size:16px}
+.login .page-head{justify-content:center;text-align:center}
+.login .page-head h1::after{margin-left:auto;margin-right:auto}
+.login .card{box-shadow:0 24px 54px -26px rgba(79,70,229,.55)}
+.note a,.login a{color:var(--accent);font-weight:600;text-decoration:none}
+.note a:hover,.login a:hover{color:var(--accent-ink);text-decoration:underline}
+table.runs th:first-child,table.runs td:first-child{width:88px}
+table.runs th,table.runs td{padding-left:10px;padding-right:10px}

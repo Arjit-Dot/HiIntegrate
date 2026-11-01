@@ -29,7 +29,7 @@ export default function Runs() {
       </div>
       {error && <ErrorBox message={error} />}
       <div className="card tablewrap">
-        <table className="dense">
+        <table className="dense runs">
           <thead><tr><th>Run</th><th>Integration · action</th><th>Type</th><th>Status</th><th>Started</th><th>Pages</th><th>Pulled</th><th>Valid</th><th>Invalid</th><th>Retries</th><th>Error</th></tr></thead>
           <tbody>
             {data === null && !error && <tr><td colSpan={11} className="muted">Loading…</td></tr>}
