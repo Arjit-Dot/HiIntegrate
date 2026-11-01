@@ -1,0 +1,17 @@
+# Sourced by the nginx image's entrypoint before the config template is rendered (D-17 S-3).
+# DASHBOARD_PASSWORD set     -> the dashboard and the API ask for a user name and password (basic auth).
+# DASHBOARD_PASSWORD not set -> no password, as in v1 (D-6: no API login).
+HTPASSWD=/tmp/htpasswd
+: > "$HTPASSWD"
+if [ -n "${DASHBOARD_PASSWORD:-}" ]; then
+  user="${DASHBOARD_USER:-admin}"
+  case "$user" in *[!A-Za-z0-9._@-]*) echo "DASHBOARD_USER may only use letters, digits and . _ @ -" >&2; exit 1 ;; esac
+  # The password goes in on stdin, so it never appears in a process list.
+  printf '%s:%s\n' "$user" "$(printf '%s' "$DASHBOARD_PASSWORD" | busybox cryptpw -P 0 -m sha512)" > "$HTPASSWD"
+  export AUTH_BASIC='"HiIntegrate"'
+  echo "dashboard: password protection is ON (user: $user)"
+else
+  export AUTH_BASIC=off
+  echo "dashboard: password protection is OFF (set DASHBOARD_PASSWORD in .env to turn it on)"
+fi
+unset DASHBOARD_PASSWORD   # not needed by nginx, so it is not kept in the running environment
