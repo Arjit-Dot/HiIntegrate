@@ -2,7 +2,7 @@ version: 1
 name: okta
 display_name: "Okta"
 category: identity
-description: "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Not yet verified against a live account."
+description: "Pulls users, devices and System Log events from an Okta org, and looks up one user or device. Verified against a live Okta org."
 enabled: true
 
 vars:

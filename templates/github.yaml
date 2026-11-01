@@ -2,7 +2,7 @@ version: 1
 name: github
 display_name: "GitHub"
 category: identity
-description: "Lists the members of a GitHub organization and looks up one user. Not yet verified against a live account."
+description: "Lists the members of a GitHub organization and looks up one user. Verified against a live GitHub account."
 enabled: true
 
 vars:
