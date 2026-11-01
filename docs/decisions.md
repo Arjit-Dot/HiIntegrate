@@ -82,7 +82,7 @@ The **Covers** line at the top of each entry names the requirements it supports.
 | D-15 | Configs live in the database, updated in place | Locked (approved by both, 1 Nov) |
 | D-16 | Unified users across services | Locked (approved by both, 1 Nov). Tagged `contract-v3` |
 | D-17 | Security hardening | Proposed by Person B (1 Nov). **Confirmed by Person A (1 Nov).** **S-1 to S-5 built and verified (1 Nov).** No tag yet: S-1 to S-5 and S-11 to S-13 change no contract file; S-6 adds one error code; S-7 to S-10 add routes, a security scheme or response codes. Each of those needs its own approval and tag |
-| D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Needs Person B's approval and a new tag** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-7 of D-17 |
+| D-18 | Accounts and per-person data | **Proposed by Person A (1 Nov), built on branch `a/multi-user`. Approved by Person B (1 Nov) on two conditions (see "Approval" in D-18). Merges to `main` and is tagged `contract-v4` only after both are met** (adds `/auth/*`, a security scheme and two error codes to `openapi.yaml`). Supersedes the "no API login" parts of D-6 and D-12 and S-7 of D-17 |
 | Contract files | `schema/integration.schema.json`, `result.schema.json`, `openapi.yaml` | Written, and `npm run check` passes. Not yet signed off by both people |
 
 ## Quick reference
@@ -133,7 +133,7 @@ One line per decision. Details and reasons are in the sections below.
 | D-14 | AI propose-fix | One route proposes a config fix for quarantined records or a failed run; the platform validates it and dry-runs it on stored records; nothing is saved until a person applies it | None directly | agreed |
 | D-15 | Configs in the database | One row per integration with a `revision`; adding to an existing service edits that row with `PUT`; templates are starting points only | FR-2, B-5 | approved by both |
 | D-16 | Unified users | `GET /users/unified` merges users across services by lowercased email into one entry listing each service. Stored records are unchanged | FR-11 | approved by both |
-| D-18 | Accounts | Username and password sign-in; a session token in `X-Session-Token`; every integration, record, run, quarantine row and secret belongs to one account; the worker schedules every account's pulls as that account | FR-6 | Person A, awaiting B |
+| D-18 | Accounts | Username and password sign-in; a session token in `X-Session-Token`; every integration, record, run, quarantine row and secret belongs to one account; the worker schedules every account's pulls as that account | FR-6 | Person A. Approved by B on two conditions |
 | D-17 | Security hardening | Shrink what a stranger on the network, a hostile config or a leaked file can reach: ports and headers first (S-1 to S-5), then a guard on the engine's outgoing requests, an audit log, an API login and rate limits (S-6 to S-9), then retention and key handling (S-10 to S-14) | FR-6 | Person B, confirmed by A |
 
 ---
@@ -1361,7 +1361,7 @@ One shared set of examples that both people treat as the truth:
 
 ## D-18: Accounts and per-person data
 
-**Covers:** FR-6 · **Source:** the team's review of the demo: one set of keys for the whole site is not acceptable. **Status:** built by Person A on branch `a/multi-user`; needs Person B's approval and a new tag, because it changes `schema/openapi.yaml`.
+**Covers:** FR-6 · **Source:** the team's review of the demo: one set of keys for the whole site is not acceptable. **Status:** built by Person A on branch `a/multi-user`. **Approved by Person B on 1 Nov, on two conditions** (see "Approval" below). It changes `schema/openapi.yaml`, so it merges to `main` and is tagged `contract-v4` only after both conditions are met.
 
 **Decision**
 - **Accounts.** `POST /auth/register` and `POST /auth/login` take a username and a password and return a session token. `POST /auth/logout` ends it, `GET /auth/me` says who it belongs to. Usernames are lowercase (3 to 32 characters). Passwords are 8 to 128 characters, stored only as a salted scrypt hash. Only the SHA-256 of a token is stored, so a copy of the database cannot be used to sign in. A token lasts 7 days.
@@ -1381,6 +1381,22 @@ One shared set of examples that both people treat as the truth:
 - The token is kept in the browser's `localStorage`, so a script injected into the page could read it. The CSP from D-17 S-2 limits where scripts can come from.
 - Alert emails go through the server's SMTP settings and any account can choose the recipients of its own alerts.
 - Over plain HTTP the password and token travel unencrypted (D-17 S-13: TLS).
+
+**Approval (Person B, 1 Nov): approved, on two conditions.**
+
+Person B reviewed the branch (`a/multi-user` at `4af82b7`) before approving:
+- Person A's own tests pass (361), and so do `ruff`, the contract check and the frontend build and type check.
+- An attack script written by Person B, run against the branch, passed 43 of 43 checks. A second account could not read, change, delete, test or run another account's integration (404), see its records, runs, quarantine or secret names, or use its secrets (two accounts with the same secret name each got their own value). With `ENV_SECRETS_ACCOUNT` unset nobody can use the server's `.env` tokens, and with it set only that one account can. All 26 data routes answer 401 without a token. A token stops working after logout and after it expires, brute force gets 429 on the 9th wrong try, and a wrong password and an unknown user get the same answer. No password, session token or secret is stored in plain text or returned by the API.
+- Every place the engine fetches a secret passes the account. Only the command line, which has no accounts, can read `.env` secrets without one.
+- The frontend sends the token on every request, returns to the sign-in page on a 401, and adds no outside address, so the CSP (D-17 S-2) is unaffected.
+
+**Conditions, to be met before this merges to `main` and `contract-v4` is tagged** (Person B checks both):
+1. **Fix the reference to D-17.** The header row says this supersedes "S-7 of D-17". S-7 is the audit log. The API login is **S-8**. Say S-8, and note that the login rate limit also covers part of S-9.
+2. **Fail clearly on an old database.** An existing database or Compose volume has no `account` columns, and today the API fails on its first query. At startup it must stop with a message that says what is wrong and that `docker compose down -v` recreates the database (which deletes stored data), and add a test for it.
+
+**Noted, not conditions** (named so they are not lost): registration is open by default and `/auth/register` has no rate limit; scrypt `n=2^14` is below today's usual advice (`2^17`); the API docs and `openapi.json` are readable without signing in; the session token is kept in `localStorage`; the login throttle is per username and per process.
+
+---
 
 ## Revision log
 
@@ -1564,6 +1580,7 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | Item | Before | Now | Why |
 |---|---|---|---|
 | `POST /ai/suggest-mapping` | None | Paste a sample response: the platform finds the records, the model suggests a JMESPath per field of the target schema (with transform, `value_map`, confidence), and the platform checks every suggestion against the real sample records (`found` of `of`, an example value, a preview of the first record as the mapper would save it). With `mapping` it only checks the person's own entries, with no model call, so that part works with AI switched off. Nothing is saved; records sent to the model are masked (D-14) | The roadmap's replacement for a visual mapping builder: the person accepts or edits each suggestion and sees the mapped record. The model proposes, the platform proves. New route, additive |
+
 
 ---
 
