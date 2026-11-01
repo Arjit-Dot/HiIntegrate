@@ -222,3 +222,16 @@ def test_the_worker_schedules_each_accounts_integrations_separately(env, alice, 
     added = changes["added"]
     assert "bob:mock-service:users_cursor" in added and "tester:mock-service:users_cursor" in added
     assert all(job.startswith(("bob:", "tester:")) for job in added)
+
+
+def test_a_new_sign_in_is_saved_before_the_token_is_returned(env):
+    """FastAPI runs a dependency's cleanup (the commit) after the response is sent, so the session must be committed by
+    the route itself: otherwise a client's very next request can arrive first and get a 401."""
+    from app.api.auth import _signed_in
+
+    _, engine = env
+    writer = session_factory(engine)()
+    reply = _signed_in(writer, "racer")  # no commit by the caller, as in the route
+    with session_factory(engine)() as other:  # a different connection, like the client's next request
+        assert repo.get_auth_session(other, auth.token_hash(reply["token"])) is not None
+    writer.close()
