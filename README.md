@@ -57,6 +57,26 @@ Each one runs in its own terminal.
 - Alert emails are sent by whichever process runs the failing action, so both need the `SMTP_*` settings and `SECRET_SMTP_PASSWORD`.
 - Try a config without the dashboard: `cd backend && .venv/bin/python -m app.cli validate github` and `.venv/bin/python -m app.cli test <config> <action>`.
 
+## Run everything with Docker Compose
+
+One command starts the database, the API, the worker, the dashboard and the mock service:
+
+```bash
+docker compose up --build        # needs a .env in this folder; POSTGRES_PASSWORD is required
+```
+
+| Service | Address | Notes |
+|---|---|---|
+| Dashboard | http://localhost:5173 | nginx serves the app and forwards `/api` to the backend, so there is no CORS to set up |
+| API | http://localhost:8000/api/v1 | docs at `/api/v1/docs` |
+| Mock service | http://localhost:8001 | a test target, not a data source. It never sees your `.env` |
+| Postgres | internal only | data lives in the `hiintegrate-db` volume, so it survives `docker compose down` (use `down -v` to wipe it) |
+
+- Inside Compose the database is always the `postgres` service. `DATABASE_URL` in `.env` is only for running the backend outside Docker.
+- A blank line in `.env` (`SMTP_PORT=`) counts as not set.
+- `.env` is never copied into an image (`.dockerignore`) and never committed.
+- **Failure rehearsal** (needs the stack running): `backend/.venv/bin/python backend/scripts/rehearse.py` runs the four organizer tests (wrong key, network off, 429, missing field) against the mock service and prints PASS or FAIL for each. If your own dev servers already use ports 8000 or 5173, point the script at another address with `API_BASE` and `MOCK_ADMIN`; the first lines of the script explain how.
+
 ## Tests and checks
 ```bash
 cd backend && .venv/bin/pytest && .venv/bin/ruff check .     # backend (live-service tests are skipped without tokens)

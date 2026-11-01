@@ -216,11 +216,11 @@ Switch the frontend from Prism to the real backend. Fix any difference from `ope
 
 ## 8. Phase 4: packaging (2:30 to 3:30am)
 
-### Person A (about 60 minutes)
-- [ ] `docker-compose.yml` with `postgres`, `backend`, `worker`, `frontend` and `mock-api`, and a database volume. *(25)*
-- [ ] Clone to a clean folder, run `docker compose up`, and complete the demo. *(20)*
-- [ ] **Audit:** no secret appears in logs, API responses, the database, the repository or the Git history. Run gitleaks, which is not installed yet. `[FR-6]`
-- [ ] **Failure rehearsal script** that runs the four organizer tests in order: wrong key, network off, 429, missing field.
+### Person A (about 60 minutes) *(done by Person B, agreed with Person A, 1 Nov)*
+- [x] `docker-compose.yml` with `postgres`, `backend`, `worker`, `frontend` and `mock-api`, and a database volume. *(Two images: `backend/Dockerfile` serves the API, the worker and the mock; `frontend/Dockerfile` builds the app and serves it with nginx, which forwards `/api`. The volume keeps data across `down` and `up`. The mock gets no `.env`.)*
+- [x] Clone to a clean folder, run `docker compose up`, and complete the demo. *(Fresh clone of `main` at `f824da4`, a trimmed `.env` with only the three tokens, `POSTGRES_PASSWORD` and `ENCRYPTION_KEY`. All five services healthy; GitHub 200 records over 2 pages, Jira 11, Okta 2 users and 238 alerts; the worker ran scheduled pulls; people on two services appear once in the unified view. Okta devices are still 0: no enrolled device. Run on spare ports because dev servers held 8000 and 5173.)*
+- [x] **Audit:** no secret appears in logs, API responses, the database, the repository or the Git history. Run gitleaks. `[FR-6]` *(All nine secret values on the machine, plus a planted canary, were searched for in the logs of all five containers, every readable API route and test reply, a Postgres dump, tracked files, and the full Git history of both the clone and the working repo: no match. The canary is stored encrypted in the database. Both images hold no `.env`. gitleaks (Docker image) scanned 50 commits: no leaks. Not covered: `docker inspect` shows a container's environment to anyone with Docker access, as on any Compose setup.)*
+- [x] **Failure rehearsal script** that runs the four organizer tests in order: wrong key, network off, 429, missing field. *(`backend/scripts/rehearse.py`: 4 of 4 pass against the composed stack, exit code 0. With the mock unreachable all four fail and the exit code is 1.)*
 
 ### Person B (about 60 minutes)
 - [ ] Frontend Dockerfile and nginx, with `/api` forwarded to the backend. *(10)*
