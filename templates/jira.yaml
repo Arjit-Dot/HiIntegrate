@@ -2,7 +2,7 @@ version: 1
 name: jira
 display_name: "Jira"
 category: ticketing
-description: "Lists the users of a Jira Cloud site and looks up one user. Not yet verified against a live account."
+description: "Lists the users of a Jira Cloud site and looks up one user. Verified against a live Jira Cloud site."
 enabled: true
 
 vars:

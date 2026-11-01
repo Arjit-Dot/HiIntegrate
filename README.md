@@ -69,3 +69,7 @@ cd backend && .venv/bin/pytest && .venv/bin/ruff check .
 cd frontend && npm run lint
 cd schema/tools && npm install && npm run check
 ```
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).

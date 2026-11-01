@@ -9,7 +9,7 @@
 | **NVD** (CVE database) | **No.** A free key only makes it faster | `alert` records (CVEs, with severity) | optional: https://nvd.nist.gov/developers/request-an-api-key | `nvd_api_key` / `services.nvd.nist.gov` | The **NVD template**, or AI mode with the NVD document |
 | **GitHub** | Yes: a personal access token (scope `read:org`) | `user` records (organisation members) | https://github.com/settings/tokens | `github_token` / `api.github.com` | AI mode, **just the name**, or the template |
 | **Okta** | Yes: an API token | `user` records | Okta admin console, Security, API, Tokens | `okta_token` / `<your-org>.okta.com` | AI mode with the documentation **link**, or the template |
-| Jira | Yes: an Atlassian API token | `user` records | https://id.atlassian.com/manage-profile/security/api-tokens | `jira_token` / `<site>.atlassian.net` | Template only (provided, not tested on a live site) |
+| Jira | Yes: an Atlassian API token | `user` records | https://id.atlassian.com/manage-profile/security/api-tokens | `jira_token` / `<site>.atlassian.net` | The template (tested on a live site) |
 
 Secret names are your choice. The form saves the token under whatever name is in its **Secret name** field and writes that same
 name into the config. Use a different name for each service: a secret is pinned to one host.

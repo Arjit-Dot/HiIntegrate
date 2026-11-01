@@ -1,12 +1,12 @@
 # Contract Decisions
 
-The locked Phase 0 decisions, numbered as in `roadmap.md` (D-1 to D-11). Each entry opens with a **Covers / Source** line, then has a **Decision** and a **Why**.
+The locked Phase 0 decisions, numbered as in the original project plan (D-1 to D-11). Each entry opens with a **Covers / Source** line, then has a **Decision** and a **Why**.
 
 Changes to anything in `schema/` need both people's approval and a new line here.
 
 **Source tags**
-- `Roadmap`: taken as written in `roadmap.md`.
-- `Extends roadmap`: changes the roadmap, or fills a gap it left open.
+- `Roadmap`: taken as written in the original project plan.
+- `Extends roadmap`: changes the project plan, or fills a gap it left open.
 - `changes-v2`: comes from the changes-v2 document, which aligned the plan with the organizers' goals and minimum schema. That document was removed from the repo and is in Git history (`git show 8595962:changes-v2.md`).
 - `changes-v3`: comes from the changes-v3 document (change C-12), which added generalisability features to the config. It was removed from the repo and is in Git history (`git show 8595962:changesv3.md`).
 - `default`: proposed by default to keep Phase 0 on time, then **approved by the team on 31 Oct 2026** ("all works for me"). They are agreed decisions now.
@@ -1211,7 +1211,7 @@ One shared set of examples that both people treat as the truth:
 - `docs/ui-prototype.html` is the **final visual** for the dashboard: the screens, the fields, the dropdowns, the colours and the wording. Person B builds the React app to match it.
 - It is a single file with sample data. It is not the app, and it is not connected to the backend.
 - It already includes the write-only token and password field with the pinned host (D-7.5, D-7.6), and a Run panel for lookups with simulated failures.
-- What it does not show, and the app still needs, is listed in `roadmap.md`, under "The dashboard looks like `docs/ui-prototype.html`".
+- What it does not show, and the app still needs, was tracked as follow-up work in the team's project plan.
 
 **Why**
 - Both people can open one file and see the same dashboard, so the frontend does not drift from what was agreed.
@@ -1337,7 +1337,7 @@ One shared set of examples that both people treat as the truth:
 | S-13 | TLS in nginx for any use beyond localhost, and CI with `pip-audit`, `npm audit` and an image scan | A and B | No |
 | S-14 | AI hardening: treat documentation, uploaded files and records as untrusted text that may try to steer the model; pin the resolved address in the documentation fetcher (its stated limit); remember that masked records leave the machine for Google's service | owner of the AI code | No |
 
-**Built (1 Nov): S-1 to S-5**, on `feat/security-quickwins`, with the results in `roadmap.md` (Phase 4, Security hardening). Two facts from building them: the dashboard password is basic auth over plain http, so it is for localhost until S-13 (TLS); and gitleaks flagged four fake values in Person A's redactor tests, which `.gitleaks.toml` now allows, for those two files and three rules only. S-6 to S-14 are not built.
+**Built (1 Nov): S-1 to S-5**, on `feat/security-quickwins`, as Phase 4 (security hardening) of the project plan. Two facts from building them: the dashboard password is basic auth over plain http, so it is for localhost until S-13 (TLS); and gitleaks flagged four fake values in Person A's redactor tests, which `.gitleaks.toml` now allows, for those two files and three rules only. S-6 to S-14 are not built.
 
 **Order.** S-1 to S-5 only touch deployment files and add no code risk, so they are the first thing to do and fit the Phase 4 slot. S-6 is the strongest protection the engine can give itself. S-7 to S-9 are next. S-10 to S-14 are described so they can be named in the demo as next steps. None of these may displace a must-have: they are done only when Checkpoint 3's list is already green.
 
@@ -1419,7 +1419,7 @@ Person B reviewed the branch (`a/multi-user` at `4af82b7`) before approving:
 
 **Covers:** FR-6 · **Source:** D-17. **Proposed by Person B, 1 Nov. Status: merged to `main` and tagged `contract-v5` by Person B, on Person B's own call, because Person A handed S-7 to S-9 to Person B (R-20). Person A had not yet read D-19 when it was merged: Person A should read it and either confirm or ask for changes. Any change after that needs a new tag, not a moved one.**
 
-D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each needs its own contract approval. Checkpoint 3 is **not** green yet (see `roadmap.md`). Person A handed S-7 to S-9 to Person B on 1 Nov (R-20), so Person B built S-7 and S-9 now and keeps them off `main` until Person A approves the contract change. Nothing here is on `main`, so the ordering rule is still met where it matters: no unapproved contract change is live.
+D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each needs its own contract approval. Checkpoint 3 is **not** green yet (the team's project plan tracks it). Person A handed S-7 to S-9 to Person B on 1 Nov (R-20), so Person B built S-7 and S-9 now and keeps them off `main` until Person A approves the contract change. Nothing here is on `main`, so the ordering rule is still met where it matters: no unapproved contract change is live.
 
 **S-8 is not part of this.** D-18 already gives every route a sign-in and a `401`. This decision does not touch it.
 
@@ -1456,8 +1456,8 @@ D-17 said S-6 to S-9 are built only after Checkpoint 3 is green, and that each n
 ### Still wanted from Person A
 
 1. Approve or list changes to the contract impact above.
-2. If approved: merge `a/audit-and-limits` to `main`, tag `contract-v5`, and tick S-7 and S-9 in `roadmap.md`.
-3. Decide whether the limits (60 / 30 / 20 a minute) suit the demo. The rehearsal script and the Finaltester steps stay well under them.
+2. If approved: merge `a/audit-and-limits` to `main`, tag `contract-v5`, and mark S-7 and S-9 done in the team's project plan.
+3. Decide whether the limits (60 / 30 / 20 a minute) suit the demo. The rehearsal script and the end-to-end AI test plan stay well under them.
 
 ---
 
@@ -1632,7 +1632,6 @@ Approved by both people on 31 Oct (7:40pm) and tagged in `contract-v2`. Raw reco
 | Contract tag | `contract-v2` (covers D-7.6 and D-14) is the contract to build against |
 | Clock | Phase 1 started 50 minutes late, so every later phase moved by 45 minutes, and the rehearsal was shortened to keep 5:00am |
 | Branches | `checkpoint1`, `docs/phase0-contract` and `contract/ai-propose-fix` were merged and deleted |
-| Alignment check | `catchup.md` lets either person's AI verify that both machines match this state |
 
 ### R-12: Configs in the database (D-15), credentials rotated
 

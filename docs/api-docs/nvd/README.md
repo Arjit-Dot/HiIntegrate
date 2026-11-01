@@ -1,7 +1,7 @@
 # NVD CVE API 2.0: reference for AI drafting
 
 Why this file exists: nvd.nist.gov is now a JavaScript app (`<app-root>`), so the AI's documentation reader gets an empty
-page, and NVD publishes no OpenAPI file to fall back on (Finaltester stage 2, 1 Nov). This is the part of NVD's developer
+page, and NVD publishes no OpenAPI file to fall back on (found in end-to-end testing, 1 Nov). This is the part of NVD's developer
 documentation (https://nvd.nist.gov/developers/vulnerabilities) the platform needs, checked against the live API on 1 Nov.
 Attach this file (and `sample-cves.json`) in AI mode, or paste it.
 
