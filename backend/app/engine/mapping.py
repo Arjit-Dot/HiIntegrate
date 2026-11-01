@@ -115,7 +115,10 @@ def map_record(cfg: dict, action_name: str, raw: Any, *, run_id: str, fetched_at
             continue
         entry = action["map"][field]
         e = {"path": entry} if isinstance(entry, str) else entry
-        v = jmespath.search(e["path"], raw) if e.get("path") else None
+        try:
+            v = jmespath.search(e["path"], raw) if e.get("path") else None
+        except jmespath.exceptions.JMESPathError:
+            return fail("transform_failed", field)  # a path that is not valid JMESPath (an AI draft can write one): quarantine, do not crash
         if _empty(v):
             v = e.get("default")
         else:

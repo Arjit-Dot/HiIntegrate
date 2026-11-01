@@ -77,3 +77,11 @@ def test_datetime_transform():
     assert to_iso(1767225600123) == "2026-01-01T00:00:00.123Z"     # epoch milliseconds
     assert to_iso("2026-01-01T09:00:00.000Z") == "2026-01-01T09:00:00Z"
     assert to_iso("2026-01-01T14:30:00+05:30") == "2026-01-01T09:00:00Z"
+
+
+def test_path_that_is_not_valid_jmespath_is_quarantined_not_a_crash():
+    """An AI draft can write `a + ' ' + b`, which is not JMESPath. The record is quarantined (transform_failed), the run does not crash."""
+    cfg = {"name": "t", "actions": {"a": {"mode": "pull", "target_schema": "user", "required": ["id"],
+                                          "map": {"id": "id", "name": "profile.firstName + ' ' + profile.lastName"}}}}
+    out = map_record(cfg, "a", {"id": "1", "profile": {"firstName": "A", "lastName": "B"}}, run_id="r", fetched_at="2026-01-01T00:00:00Z")
+    assert out["quarantine"]["reason"] == "transform_failed" and out["quarantine"]["field"] == "name"

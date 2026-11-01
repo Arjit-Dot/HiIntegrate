@@ -98,6 +98,7 @@ export const api = {
   validate: (config: Config) => call<ValidateResponse>('POST', '/integrations/validate', config),
   create: (config: Config) => call<Integration>('POST', '/integrations', config),
   replace: (id: string, config: Config) => call<Integration>('PUT', `/integrations/${encodeURIComponent(id)}`, config),
+  deleteIntegration: (id: string) => call<void>('DELETE', `/integrations/${encodeURIComponent(id)}`),
   setEnabled: (id: string, enabled: boolean) =>
     call<IntegrationSummary>('PATCH', `/integrations/${encodeURIComponent(id)}/enabled`, { enabled }),
   test: (id: string, action: string, inputs?: Record<string, unknown>) =>

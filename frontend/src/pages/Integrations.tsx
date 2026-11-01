@@ -38,6 +38,16 @@ export default function Integrations() {
     catch (e) { setRow(!enabled); toast(e instanceof ApiError ? e.message : 'Could not change enabled state') }
   }
 
+  // Deleting removes the config and its scheduling state. Records, quarantine and run history stay (they are history keyed by source).
+  async function remove(i: IntegrationSummary) {
+    if (!window.confirm(`Delete the integration "${i.display_name ?? i.name}"?\n\nIts config and schedule are removed. Records it already pulled, quarantined records and run history are kept.`)) return
+    try {
+      await api.deleteIntegration(i.name)
+      setItems(prev => prev && prev.filter(x => x.name !== i.name))
+      toast(`${i.display_name ?? i.name} deleted`)
+    } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not delete the integration') }
+  }
+
   return (
     <section>
       <div className="page-head">
@@ -93,7 +103,8 @@ export default function Integrations() {
                     {i.actions.some(a => a.mode === 'lookup') && <><Button variant="secondary" size="sm" onClick={() => setRunning(i)}>Run</Button>{' '}</>}
                     <Button variant="secondary" size="sm" onClick={() => setTesting(i)}>Test</Button>{' '}
                     <Link to={`/integrations/${encodeURIComponent(i.name)}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>{' '}
-                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit?add=1`}><Button variant="secondary" size="sm" title="Add several actions to this integration at once">+ Actions</Button></Link>
+                    <Link to={`/integrations/${encodeURIComponent(i.name)}/edit?add=1`}><Button variant="secondary" size="sm" title="Add several actions to this integration at once">+ Actions</Button></Link>{' '}
+                    <Button variant="destructive" size="sm" onClick={() => remove(i)} title="Delete this integration's config">Delete</Button>
                   </td>
                 </tr>
               )

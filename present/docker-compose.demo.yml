@@ -1,0 +1,12 @@
+# Demo overlay. Replaces the stack's mock-api with the demo mock (present/mock_api). Everything else is the normal stack.
+# Run from the repo root (or use `source present/demo.sh` and the `dc` helper, which does this for you):
+#   docker compose -p hidemo -f docker-compose.yml -f present/docker-compose.demo.yml up --build -d
+# The project name `hidemo` keeps the demo's database in its own volume, so `down -v` here never touches your
+# development data in the `hiintegrate` project.
+services:
+  mock-api:
+    build:
+      context: .
+      dockerfile: present/mock_api/Dockerfile
+    image: hiintegrate-demo-mock
+    command: ["uvicorn", "demo_app:app", "--host", "0.0.0.0", "--port", "8001"]
