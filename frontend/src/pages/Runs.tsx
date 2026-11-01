@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api, type RunRecord } from '../api/client'
+import { Button } from '@/components/ui/button'
 import { ErrorBox, Pill } from '../components/common'
+import { RunDetail } from '../components/RecordDetails'
 import { PAGE_SIZE, Pager } from '../components/Pager'
 
 const duration = (ms: number | null) => (ms === null ? '…' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`)
@@ -10,6 +12,7 @@ export default function Runs() {
   const [offset, setOffset] = useState(0)
   const [data, setData] = useState<{ items: RunRecord[]; total: number } | null>(null)
   const [error, setError] = useState('')
+  const [detail, setDetail] = useState<RunRecord | null>(null)
 
   useEffect(() => {
     setData(null)
@@ -30,10 +33,10 @@ export default function Runs() {
       {error && <ErrorBox message={error} />}
       <div className="card tablewrap">
         <table className="dense runs">
-          <thead><tr><th>Run</th><th>Integration · action</th><th>Type</th><th>Status</th><th>Started</th><th>Pages</th><th>Pulled</th><th>Valid</th><th>Invalid</th><th>Retries</th><th>Error</th></tr></thead>
+          <thead><tr><th>Run</th><th>Integration · action</th><th>Type</th><th>Status</th><th>Started</th><th>Pages</th><th>Pulled</th><th>Valid</th><th>Invalid</th><th>Retries</th><th>Error</th><th><span className="sr-only">Details</span></th></tr></thead>
           <tbody>
-            {data === null && !error && <tr><td colSpan={11} className="muted">Loading…</td></tr>}
-            {data !== null && rows.length === 0 && <tr><td colSpan={11} className="muted">No runs yet.</td></tr>}
+            {data === null && !error && <tr><td colSpan={12} className="muted">Loading…</td></tr>}
+            {data !== null && rows.length === 0 && <tr><td colSpan={12} className="muted">No runs yet.</td></tr>}
             {rows.map(r => (
               <tr key={r.run_id}>
                 <td className="mono small nowrap">{r.run_id}</td>
@@ -54,6 +57,7 @@ export default function Runs() {
                       : <Pill kind="failed">{r.error.code}</Pill>
                   )}
                 </td>
+                <td><Button variant="secondary" size="sm" type="button" onClick={() => setDetail(r)}>Details</Button></td>
               </tr>
             ))}
           </tbody>
@@ -61,6 +65,7 @@ export default function Runs() {
       </div>
       {data && <Pager offset={offset} total={data.total} onChange={setOffset} />}
       <p className="note">Test runs are shown here but ignored by the health view.</p>
+      {detail && <RunDetail r={detail} onClose={() => setDetail(null)} />}
     </section>
   )
 }

@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { api, ApiError, type Config, type ProposeFixResponse, type RunRecord } from '../api/client'
-import { Modal, Pill, useToast } from './common'
+import { api, ApiError, type Config, type ProposeFixResponse, type QuarantineRecord, type RunRecord } from '../api/client'
+import { Modal, useToast } from './common'
+import { Banner, KeyValue, Loading, RecordTable, Section, TechDetails } from './modal-parts'
+import { describe, messageAddsInfo, REASON_INFO } from '../lib/errors'
 
 // "Fix with AI" on the Quarantine page (D-14). The server asks the model for a change, validates it, and maps the stored
 // raw records again with it (a dry run): "rescues N of M". Nothing is saved by that. Apply is the normal
@@ -25,6 +27,8 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
   const toast = useToast()
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
+  const [errorCode, setErrorCode] = useState<string | null>(null)
+  const [reasons, setReasons] = useState<QuarantineRecord[] | null>(null)   // the quarantined records of this action, to say what went wrong
   const [off, setOff] = useState(false)
   const [fix, setFix] = useState<ProposeFixResponse | null>(null)
   const [revision, setRevision] = useState<number | null>(null)   // the revision the proposal was made against
@@ -35,7 +39,8 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
   const [after, setAfter] = useState<RunRecord | null>(null)   // the run started after applying, to show the effect
 
   async function ask() {
-    setBusy(true); setError(''); setFix(null); setApplied(false); setSavedAt(null)
+    setBusy(true); setError(''); setErrorCode(null); setFix(null); setApplied(false); setSavedAt(null)
+    api.listQuarantine({ source: integration, limit: 200 }).then(r => setReasons(r.items.filter(q => q.action === action))).catch(() => setReasons(null))
     try {
       const current = await api.getIntegration(integration)
       setRevision(current.revision ?? null)
@@ -45,7 +50,7 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
     } catch (e) {
       if (e instanceof ApiError && e.status === 501) setOff(true)
       else {
-        setError((e as Error).message)
+        setError((e as Error).message); setErrorCode(e instanceof ApiError ? e.code : null)
         const saved = loadFix(integration, action)
         if (saved) { setFix(saved.fix); setRevision(saved.revision); setSavedAt(saved.at) }
       }
@@ -69,14 +74,14 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
       // The proposal replaces the whole config, so refuse if someone edited the integration after it was made.
       const now = await api.getIntegration(integration)
       if (revision !== null && now.revision !== revision) {
-        setError('This integration was edited after the proposal was made, so applying it would overwrite that edit. Ask the AI again.')
+        setError('This integration was edited after the proposal was made, so applying it would overwrite that edit. Ask the AI again.'); setErrorCode(null)
         return
       }
       await api.replace(integration, fix.proposed_config as Config)
       setApplied(true)
       toast(`Applied to ${integration}`)
       onApplied()
-    } catch (e) { setError((e as Error).message) }
+    } catch (e) { setError((e as Error).message); setErrorCode(e instanceof ApiError ? e.code : null) }
     finally { setApplying(false) }
   }
 
@@ -97,72 +102,108 @@ export function FixWithAi({ integration, action, onClose, onApplied }: Props) {
   }
 
   const v = fix?.verification
+  const failedInfo = error ? describe(errorCode, error) : null
+  // How many records failed and why, grouped, in plain words.
+  const groups = (() => {
+    const m = new Map<string, { reason: string; field: string; n: number }>()
+    for (const q of reasons ?? []) { const k = `${q.reason}|${q.field}`; m.set(k, { reason: q.reason, field: q.field ?? '', n: (m.get(k)?.n ?? 0) + 1 }) }
+    return [...m.values()].sort((x, y) => y.n - x.n)
+  })()
+
+  const footer = applied
+    ? <>
+        <span className="mdl-foot-note">The new config is saved. Records already quarantined stay as they are.</span>
+        <Button variant="secondary" type="button" onClick={onClose}>Close</Button>
+        <Button type="button" onClick={runNow} disabled={running}>{running ? 'Running…' : `Run ${action} now`}</Button>
+      </>
+    : <>
+        <span className="mdl-foot-note">{canApply ? <><b>Nothing is saved until you press Apply fix.</b> It updates {integration} in place.</> : 'Nothing was changed.'}</span>
+        <Button variant="secondary" type="button" onClick={onClose}>Discard</Button>
+        <Button type="button" onClick={apply} disabled={!canApply || applying} title={canApply ? `Replace the config of ${integration} with the proposal` : 'There is nothing valid to apply'}>
+          {applying ? 'Applying…' : 'Apply fix'}
+        </Button>
+      </>
+
   return (
-    <Modal title={`Fix with AI: ${integration}.${action}`} onClose={onClose}>
-      {off && <div className="callout"><strong>AI is switched off.</strong> The server has no <code>LLM_API_KEY</code>. Quarantine works without it: export the records and fix the mapping by hand in Edit.</div>}
-      {busy && <p className="muted"><Sparkles size={14} style={{ verticalAlign: -2 }} /> Reading the quarantined records and the config, then checking the AI's proposal against them. This can take up to a minute.</p>}
-      {error && <div className="hint err" role="alert">{error}{!applied && !busy && <> <Button variant="secondary" size="sm" type="button" onClick={ask}>Ask again</Button></>}</div>}
+    <Modal title={`Fix with AI: ${integration} · ${action}`} subtitle="The AI reads the records that were set aside and proposes a change to the mapping. You see the effect before anything is saved." onClose={onClose} size="lg" footer={footer}>
+      {off && <Banner tone="info" title="AI is switched off">The server has no <code>LLM_API_KEY</code>. Quarantine works without it: export the records and fix the mapping by hand in Edit.</Banner>}
+
+      {busy && <Loading title="Asking Gemini to propose a fix…" hint="It reads the quarantined records and the config, then each proposal is checked against your stored records. This can take about 10 seconds, up to a minute if the AI is busy." />}
+
+      {!busy && error && (
+        <Banner tone="failed" title={failedInfo?.title ?? 'The AI could not give a proposal'} next={fix ? 'You can still look at the saved proposal below, or ask again.' : failedInfo?.next}>
+          {failedInfo?.explain} {messageAddsInfo(errorCode) && <span className="muted">({error})</span>}
+          {!applied && <div style={{ marginTop: 10 }}><Button variant="secondary" size="sm" type="button" onClick={ask}>Ask again</Button></div>}
+        </Banner>
+      )}
 
       {fix && (
         <>
-          {savedAt && <div className="callout">This is the <b>saved proposal from {new Date(savedAt).toLocaleString()}</b>, shown because the AI could not be reached. You can only apply it if {integration} has not been edited since.</div>}
-          <p style={{ marginTop: 0 }}>{fix.summary}</p>
+          {savedAt && <Banner tone="warning" title="Showing a saved proposal">From {new Date(savedAt).toLocaleString()}. It is shown because the AI could not be reached. It can only be applied if {integration} has not been edited since.</Banner>}
 
-          {fix.changes.length === 0 && (
-            <div className="callout">The AI found no config change that fixes this. The records stay quarantined; nothing was changed.</div>
+          {applied && <Banner tone="success" title="Fix applied" next={<>Run <code>{action}</code> again and the new run uses the fix. <Link to={`/integrations/${encodeURIComponent(integration)}/edit`}>See the new config</Link>.</>}>
+            {integration} now has the updated config.
+          </Banner>}
+          {after && (
+            <Banner tone={after.status === 'success' && after.records_invalid === 0 ? 'success' : 'warning'}
+              title={after.status === 'success' ? 'The new run finished' : 'The new run failed'}>
+              {after.records_valid} record{after.records_valid === 1 ? '' : 's'} saved, <b>{after.records_invalid} quarantined</b>{after.status === 'failed' && after.error ? <> ({after.error.message})</> : null}. See it in <Link to="/runs">Run history</Link>.
+            </Banner>
           )}
-
-          {fix.changes.map(c => (
-            <div key={c.path} style={{ marginBottom: 14 }}>
-              <div className="mono small"><b>{c.path}</b></div>
-              <div className="muted small" style={{ margin: '2px 0 6px' }}>{c.reason}</div>
-              <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div><div className="hint">Now</div><pre>{show(c.before)}</pre></div>
-                <div><div className="hint">Proposed</div><pre>{show(c.after)}</pre></div>
-              </div>
-            </div>
-          ))}
 
           {fix.errors.length > 0 && (
-            <div className="callout" role="alert">
-              <strong>This proposal is not valid, so it cannot be applied.</strong>
-              <ul>{fix.errors.map((e, i) => <li key={i}><code>{e.path}</code>: {e.message}</li>)}</ul>
-            </div>
+            <Banner tone="warning" title="This proposal is not valid, so it cannot be applied" next="Ask again, or fix the mapping by hand in Edit.">
+              <ul className="bullets">{fix.errors.map((e, i) => <li key={i}><code>{e.path}</code>: {e.message}</li>)}</ul>
+            </Banner>
           )}
+
+          <Section title="What went wrong" hint="The records that were set aside for this action.">
+            <KeyValue rows={[['Quarantined records', reasons ? reasons.length : v ? v.checked : null]]} />
+            {groups.length > 0 && (
+              <ul className="bullets">
+                {groups.map(g => (
+                  <li key={g.reason + g.field}><b>{g.n}</b> · {REASON_INFO[g.reason]?.title ?? g.reason}{g.field ? <> (field <code>{g.field}</code>)</> : null}</li>
+                ))}
+              </ul>
+            )}
+          </Section>
+
 
           {v && (
-            <div className="callout">
-              <div><b>Rescues {v.rescued} of {v.checked}</b> quarantined record{v.checked === 1 ? '' : 's'} <span className="muted">(a dry run on the stored originals: nothing was saved)</span></div>
-              <div style={{ margin: '8px 0', height: 8, borderRadius: 4, background: 'var(--border, #e5e7eb)', overflow: 'hidden' }} aria-hidden>
-                <div style={{ width: `${v.checked ? Math.round((v.rescued / v.checked) * 100) : 0}%`, height: '100%', background: 'var(--ok, #16a34a)' }} />
-              </div>
-              <div className="small">{v.still_quarantined === 0 ? 'None would stay quarantined.' : <>{v.still_quarantined} would <Pill kind="failed">still be quarantined</Pill>, so this fix is partial.</>}</div>
-              {v.mapped_samples.length > 0 && <details style={{ marginTop: 8 }} open><summary>How {v.mapped_samples.length} of them would be saved</summary><pre style={{ marginTop: 6 }}>{JSON.stringify(v.mapped_samples, null, 2)}</pre></details>}
-            </div>
+            <Section title="What this would fix" hint="A dry run on the stored originals. Nothing was saved.">
+              <div style={{ fontSize: 17 }}><b>Rescues {v.rescued} of {v.checked}</b> quarantined record{v.checked === 1 ? '' : 's'}</div>
+              <div className="meter" aria-hidden><div style={{ width: `${v.checked ? Math.round((v.rescued / v.checked) * 100) : 0}%` }} /></div>
+              {v.still_quarantined === 0
+                ? <p className="field-note" style={{ marginTop: 0 }}>None would stay quarantined.</p>
+                : <p className="field-note" style={{ marginTop: 0 }}><b>{v.still_quarantined}</b> would stay quarantined. A config change cannot repair those: a record with no id has nothing to store, and a value that is simply wrong stays wrong. This fix is partial.</p>}
+              {rescuesNone && <Banner tone="warning" title="This change would not help" next="Ask again, or fix the mapping by hand.">The dry run rescues none of the records, so applying it would change the config without improving anything.</Banner>}
+            </Section>
           )}
 
-          {applied ? (
-            <div className="callout">
-              <b>Applied.</b> {integration} now has the new config (it was updated in place; <Link to={`/integrations/${encodeURIComponent(integration)}/edit`}>see it in Edit</Link>).
-              Records already quarantined stay as they are. Run <code>{action}</code> again and the new run uses the fix.
-              <div style={{ marginTop: 8 }}><Button type="button" size="sm" onClick={runNow} disabled={running}>{running ? 'Running…' : `Run ${action} now`}</Button></div>
-              {after && (
-                <div style={{ marginTop: 8 }} role="status">
-                  <b>{after.status === 'success' ? 'Run finished' : 'Run failed'}:</b> {after.records_valid} saved, <b>{after.records_invalid} quarantined</b>
-                  {after.status === 'failed' && after.error ? <> ({after.error.message})</> : null}. <span className="muted">See it on the <Link to="/runs">Runs</Link> page.</span>
+          {fix.changes.length === 0
+            ? <Banner tone="info" title="The AI found no config change that would help">The records stay quarantined and nothing was changed. You can fix the mapping by hand in Edit.</Banner>
+            : fix.changes.map(c => (
+              <Section key={c.path} title="Proposed change" hint={c.reason || undefined}>
+                <div className="mono small" style={{ marginBottom: 8 }}><b>{c.path}</b></div>
+                <div className="diff">
+                  <div className="was"><h4>Now</h4><pre>{show(c.before)}</pre></div>
+                  <div className="will"><h4>After the fix</h4><pre>{show(c.after)}</pre></div>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="inline" style={{ justifyContent: 'flex-end' }}>
-              <Button variant="secondary" type="button" onClick={onClose}>Close without applying</Button>
-              <Button type="button" onClick={apply} disabled={!canApply || applying} title={canApply ? 'Replace the config with the proposal' : 'There is nothing valid to apply'}>
-                {applying ? 'Applying…' : 'Apply this change'}
-              </Button>
-            </div>
+              </Section>
+            ))}
+
+          <details className="tech">
+            <summary>Why the AI suggests this</summary>
+            <div className="tech-body"><p style={{ margin: 0, lineHeight: 1.65 }}>{fix.summary}</p></div>
+          </details>
+
+          {v && v.mapped_samples.length > 0 && (
+            <Section title="How a rescued record would be saved">
+              <RecordTable record={v.mapped_samples[0] as Record<string, unknown>} />
+            </Section>
           )}
-          {!applied && rescuesNone && <div className="hint err" style={{ textAlign: 'right', marginTop: 6 }}>Not applied: the dry run shows this change rescues none of the quarantined records, so it would change the config without helping. Ask again, or fix it by hand.</div>}
-          {!applied && canApply && <div className="hint" style={{ textAlign: 'right', marginTop: 6 }}>Apply updates {integration} in place. Nothing changes until you press it.</div>}
+
+          <TechDetails data={{ summary: fix.summary, changes: fix.changes, errors: fix.errors, verification: fix.verification, saved_at: savedAt }} />
         </>
       )}
     </Modal>

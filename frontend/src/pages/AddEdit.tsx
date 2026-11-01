@@ -576,7 +576,7 @@ export default function AddEdit() {
               <div className="actions-bar"><Button type="button"  onClick={runTest} disabled={busy}>{busy ? 'Working…' : 'Run test (first page only)'}</Button></div>
               <div className="hint" style={{ marginBottom: 10 }}>The test calls the saved integration, so this saves it first if it is valid.</div>
               {testErr && <ErrorBox message={testErr} />}
-              {test ? <TestResult r={test} /> : !testErr && <div className="muted">Calls the service once, then shows the raw reply beside the mapped record and flags paths that were not found.</div>}
+              {test ? <TestResult r={test} integration={String(parsed.config?.display_name ?? s.name ?? '') || undefined} action={s.actionName} host={host || null} /> : !testErr && <div className="muted">Calls the service once, then shows the raw reply beside the mapped record and flags paths that were not found.</div>}
             </div>
           )}
         </aside>

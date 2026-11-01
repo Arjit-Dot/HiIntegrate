@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { api, ApiError, type MappingSuggestion } from '../api/client'
 import { TRANSFORMS, type MapRow, type SchemaName } from '../lib/config'
 import { Modal, Pill } from './common'
+import { Banner, Loading, RecordTable, Section } from './modal-parts'
 
 // AI mapping suggestions (D-14). Paste a sample response: the AI suggests where each field of the schema comes from, and the
 // platform checks every suggestion against the real records. The person accepts or edits each row, sees the record as it would
@@ -66,19 +67,29 @@ export function SuggestMapping({ schema, current, onApply, onClose }: {
   const chosen = rows.filter(r => r.accept && r.path.trim())
 
   return (
-    <Modal title="Suggest the field mapping with AI" onClose={onClose}>
-      <p className="hint" style={{ marginTop: 0 }}>
-        Paste a sample response from the service (JSON). The AI suggests where each <code>{schema}</code> field comes from, and every suggestion is checked against your sample.
-        You accept or edit each row, see the record as it would be saved, then apply the rows to the form. Names and emails in the sample are hidden from the AI.
-      </p>
-      <textarea className="mono" rows={8} placeholder={'{ "data": [ { "accountId": "5b10a2", "displayName": "Ada", "emailAddress": "ada@example.com" } ] }'}
-        value={text} onChange={e => { setText(e.target.value); setError('') }} aria-label="Sample response" />
-      <div className="inline" style={{ margin: '10px 0', flexWrap: 'wrap' }}>
-        <Button type="button" onClick={suggest} disabled={busy || !text.trim() || off}><Sparkles size={14} style={{ marginRight: 6 }} />{busy ? 'Working…' : 'Suggest with AI'}</Button>
-        <Button type="button" variant="secondary" onClick={() => check(true)} disabled={busy || !text.trim()} title="No AI: check the paths already in the form against this sample">Check the form&apos;s current mapping</Button>
-      </div>
-      {off && <div className="callout"><strong>AI is switched off.</strong> The server has no <code>LLM_API_KEY</code>. You can still paste a sample and check the paths in the form against it.</div>}
-      {error && <div className="hint err" role="alert">{error}</div>}
+    <Modal title="Suggest the field mapping with AI" subtitle={`Show the AI a sample reply and it suggests where each ${schema} field comes from. Nothing is saved from here.`}
+      onClose={onClose} size="xl" dirty={chosen.length > 0 && !!result}
+      footer={result
+        ? <>
+            <span className="mdl-foot-note">This only fills the form. Press <b>Test connection</b> or <b>Save</b> there when you are ready.</span>
+            <Button type="button" variant="secondary" onClick={onClose}>Close without applying</Button>
+            <Button type="button" disabled={chosen.length === 0}
+              onClick={() => { onApply(chosen.map(r => ({ field: r.field, path: r.path.trim(), transform: r.transform ?? '', valueMap: r.valueMap })), result.records_path); onClose() }}>
+              Apply {chosen.length} row{chosen.length === 1 ? '' : 's'} to the form
+            </Button>
+          </>
+        : <Button type="button" variant="secondary" onClick={onClose}>Close</Button>}>
+      <Section title="1. The sample reply" hint="Paste what the service returns, as JSON. Names and emails in it are hidden from the AI.">
+        <textarea className="mono" rows={8} placeholder={'{ "data": [ { "accountId": "5b10a2", "displayName": "Ada", "emailAddress": "ada@example.com" } ] }'}
+          value={text} onChange={e => { setText(e.target.value); setError('') }} aria-label="Sample response" aria-invalid={!!error || undefined} />
+        <div className="inline" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+          <Button type="button" onClick={suggest} disabled={busy || !text.trim() || off}><Sparkles size={14} style={{ marginRight: 6 }} />{busy ? 'Working…' : 'Suggest with AI'}</Button>
+          <Button type="button" variant="secondary" onClick={() => check(true)} disabled={busy || !text.trim()} title="No AI: check the paths already in the form against this sample">Check the form&apos;s current mapping</Button>
+        </div>
+      </Section>
+      {off && <Banner tone="info" title="AI is switched off">The server has no <code>LLM_API_KEY</code>. You can still paste a sample and check the paths already in the form against it.</Banner>}
+      {busy && <Loading title="Working on it…" hint="Asking the AI can take about 10 seconds. Checking paths only takes a moment." />}
+      {error && <Banner tone="failed" title="That did not work" next="Fix the sample (it must be valid JSON with at least one record) and try again.">{error}</Banner>}
 
       {result && (
         <>
@@ -107,20 +118,11 @@ export function SuggestMapping({ schema, current, onApply, onClose }: {
             <span className="hint">Edit a path or transform, then re-check to see the new example and the preview.</span>
           </div>
 
-          <div className="callout" style={{ marginTop: 12 }}>
-            {'record' in result.preview
-              ? <><b>The first record would be saved as:</b><pre style={{ marginTop: 6 }}>{JSON.stringify(result.preview.record, null, 2)}</pre></>
-              : <><b>The first record would be quarantined:</b> <Pill kind="failed">{result.preview.quarantine.reason}</Pill> on <code>{result.preview.quarantine.field}</code>. Fix that row, then re-check.</>}
-          </div>
-
-          <div className="inline" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-            <Button type="button" variant="secondary" onClick={onClose}>Close without applying</Button>
-            <Button type="button" disabled={chosen.length === 0}
-              onClick={() => { onApply(chosen.map(r => ({ field: r.field, path: r.path.trim(), transform: r.transform ?? '', valueMap: r.valueMap })), result.records_path); onClose() }}>
-              Apply {chosen.length} row{chosen.length === 1 ? '' : 's'} to the form
-            </Button>
-          </div>
-          <div className="hint" style={{ textAlign: 'right' }}>This only fills the form. Press Test connection or Save when you are ready.</div>
+          {'record' in result.preview
+            ? <Section title="2. The first record would be saved as"><RecordTable record={result.preview.record as Record<string, unknown>} /></Section>
+            : <Banner tone="warning" title="The first record would be quarantined" next="Fix that row (or untick it), then press Re-check my edits.">
+                Reason: <Pill kind="failed">{result.preview.quarantine.reason}</Pill> on <code>{result.preview.quarantine.field}</code>.
+              </Banner>}
         </>
       )}
     </Modal>
