@@ -13,7 +13,8 @@ import { API_BASE, auth } from './api/client'
 import { SESSION_EXPIRED, getToken } from './api/session'
 import { useTheme } from './lib/theme'
 
-const NAV: [string, string][] = [
+// The pages, in a row across the top bar.
+const NAV: [path: string, label: string][] = [
   ['/integrations', 'Integrations'], ['/add', 'Add integration'], ['/templates', 'Templates'],
   ['/results', 'Results'], ['/quarantine', 'Quarantine'], ['/runs', 'Run history'], ['/secrets', 'Secrets'],
 ]

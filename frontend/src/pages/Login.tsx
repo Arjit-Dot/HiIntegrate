@@ -21,7 +21,9 @@ export default function Login({ onSignedIn }: { onSignedIn: (username: string) =
 
   const creating = mode === 'register'
   return (
-    <section style={{ maxWidth: 380, margin: '8vh auto 0' }}>
+    <section className="login" style={{ maxWidth: 420, margin: '6vh auto 0' }}>
+      <div className="login-brand"><div className="logo">⇄</div><span>HiIntegrate</span></div>
+      <p className="login-tag">Connect your security tools in one place.</p>
       <div className="page-head"><div>
         <h1>{creating ? 'Create an account' : 'Sign in'}</h1>
         <p>{creating ? 'Your integrations, records and secrets belong to you alone.' : 'Your integrations, records and secrets are private to your account.'}</p>

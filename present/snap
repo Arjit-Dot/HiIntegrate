@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Same as the `snap` command that demo.sh defines, for a terminal that has not sourced it:  present/snap  or  present/snap -q
+exec "$(cd "$(dirname "$0")" && pwd)/db.sh" "$@"

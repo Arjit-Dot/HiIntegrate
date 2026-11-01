@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { api, ApiError, type Config, type IntegrationSummary } from '../api/client'
-import { ErrorBox, Modal, Pill } from './common'
+import { ErrorBox, Modal } from './common'
+import { Banner, KeyValue, Loading, RecordTable, Section, TechDetails } from './modal-parts'
+import { describe } from '../lib/errors'
 
 type InputDef = { type: string; required?: boolean; values?: string[] }
 type Outcome =
@@ -51,46 +53,60 @@ export function RunLookup({ integ, onClose }: { integ: IntegrationSummary; onClo
     setBusy(false)
   }
 
+  const inputEntries = Object.entries(defs)
+  const failedInfo = out?.kind === 'failed' ? describe(out.errorCode, out.message) : null
   return (
-    <Modal title={`Run a lookup: ${integ.display_name ?? integ.name}`} onClose={onClose}>
+    <Modal title={`Look up one record: ${integ.display_name ?? integ.name}`} subtitle="Ask the service for a single record on demand, for example one user by id." onClose={onClose} size="lg"
+      footer={<>
+        <span className="mdl-foot-note">{act?.store === false ? <>The result is <b>shown only</b>, not stored.</> : <>The record is <b>saved</b>. Running it again updates it.</>} The run is logged in Run history.</span>
+        <Button variant="secondary" type="button" onClick={onClose}>Close</Button>
+        <Button type="button" disabled={busy || !act || missing.length > 0} onClick={run}>{busy ? 'Looking up…' : out ? 'Look up again' : 'Look up record'}</Button>
+      </>}>
       {loadError && <ErrorBox message={loadError} />}
-      <div style={{ marginBottom: 12 }}>
-        <label className="req">Action</label>
-        <select value={action} onChange={e => setAction(e.target.value)}>{lookups.map(l => <option key={l.name}>{l.name}</option>)}</select>
-        <div className="hint">Only lookup actions are listed. Pulls run on a schedule.</div>
-      </div>
-      {config === null && !loadError && <div className="muted">Loading inputs…</div>}
-      {Object.entries(defs).map(([k, d]) => (
-        <div style={{ marginBottom: 12 }} key={k}>
-          <label className={d.required !== false ? 'req' : ''}>{k} <span className="muted" style={{ fontWeight: 400 }}>({d.type})</span></label>
-          {d.type === 'enum'
-            ? <select value={values[k] ?? ''} onChange={e => setValues(p => ({ ...p, [k]: e.target.value }))}><option value="">Choose…</option>{(d.values ?? []).map(v => <option key={v}>{v}</option>)}</select>
-            : <input type="text" className="mono" placeholder={d.type} value={values[k] ?? ''} onChange={e => setValues(p => ({ ...p, [k]: e.target.value }))} />}
+      <Section title="What to look up">
+        <div className="grid">
+          <div className="full">
+            <label htmlFor="lookup-action" className="req">Lookup action</label>
+            <select id="lookup-action" value={action} onChange={e => setAction(e.target.value)}>{lookups.map(l => <option key={l.name}>{l.name}</option>)}</select>
+            <div className="hint">Only lookups are listed here. Pulls run on a schedule.{schema && <> This one fills the <b>{schema}</b> schema.</>}</div>
+          </div>
+          {config === null && !loadError && <div className="full"><Loading title="Loading this action's inputs…" /></div>}
+          {inputEntries.map(([k, d]) => (
+            <div key={k} className={inputEntries.length === 1 ? 'full' : undefined}>
+              <label htmlFor={`in-${k}`} className={d.required !== false ? 'req' : ''}>{k}</label>
+              {d.type === 'enum'
+                ? <select id={`in-${k}`} value={values[k] ?? ''} onChange={e => setValues(p => ({ ...p, [k]: e.target.value }))}><option value="">Choose…</option>{(d.values ?? []).map(v => <option key={v}>{v}</option>)}</select>
+                : <input id={`in-${k}`} type="text" className="mono" placeholder={d.type === 'int' ? 'for example 42' : 'for example u-1'} value={values[k] ?? ''} onChange={e => setValues(p => ({ ...p, [k]: e.target.value }))} />}
+              <div className="hint">{d.required !== false ? 'Required' : 'Optional'}, {d.type === 'enum' ? 'pick one of the values' : `a ${d.type}`}.{missing.includes(k) && <> <span className="err">Fill this in to continue.</span></>}</div>
+            </div>
+          ))}
         </div>
-      ))}
-      {act && <div className="muted small" style={{ marginBottom: 12 }}>Fills the <b>{schema}</b> schema. {act.store === false ? <>Result is <b>not saved</b> (<code>store: false</code>).</> : <>Result is <b>saved</b>; running it again updates the record.</>}</div>}
-      <div className="actions-bar">
-        <Button disabled={busy || !act || missing.length > 0} onClick={run}>{busy ? 'Running…' : 'Run lookup'}</Button>
-        {missing.length > 0 && <span className="muted small">Still needed: {missing.join(', ')}</span>}
-      </div>
-      <div className="runbox">
-        {out?.kind === 'ok' && <>
-          <div style={{ marginBottom: 10 }}><Pill kind="success">success</Pill> <Pill kind="trigger">manual</Pill></div>
-          <h3 style={{ marginBottom: 6 }}>Mapped record</h3>
-          <pre>{JSON.stringify(out.record, null, 2)}</pre>
-          {out.runId && <div className="hint" style={{ marginTop: 8 }}>Recorded as <b>{out.runId}</b> in <Link to="/runs" onClick={onClose}>Run history</Link>.</div>}
-        </>}
-        {out?.kind === 'rejected' && <div className="issue"><div>
-          <b>Rejected before any request was sent.</b> No run was created.
-          <div>{out.message}</div>
-          {out.details != null && <pre style={{ marginTop: 8 }}>{JSON.stringify(out.details, null, 2)}</pre>}
-        </div></div>}
-        {out?.kind === 'failed' && <>
-          <div style={{ marginBottom: 10 }}><Pill kind="failed">failed</Pill> {out.errorCode && <Pill kind="trigger">{out.errorCode}</Pill>}</div>
-          <ErrorBox message={out.message} />
-          {out.runId && <div className="hint" style={{ marginTop: 8 }}>Recorded as <b>{out.runId}</b> in <Link to="/runs" onClick={onClose}>Run history</Link>.</div>}
-        </>}
-        {out?.kind === 'error' && <ErrorBox message={out.message} />}
+      </Section>
+
+      <div className="runbox" style={{ marginTop: 0 }}>
+        {busy && <Loading title="Asking the service…" hint="This usually takes a second or two." />}
+        {!busy && out?.kind === 'ok' && (
+          <div className="mdl-stack">
+            <Banner tone="success" title="Record found">The service returned it, and it was mapped to the {schema ?? 'common'} schema.</Banner>
+            <Section title="The record"><RecordTable record={out.record} /></Section>
+            <KeyValue rows={[['Run', out.runId ? <>{out.runId} · <Link to="/runs" onClick={onClose}>see Run history</Link></> : null]]} />
+            <TechDetails data={out.record} title="Technical details (raw mapped record)" />
+          </div>
+        )}
+        {!busy && out?.kind === 'rejected' && (
+          <div className="mdl-stack">
+            <Banner tone="warning" title="Check the inputs" next="Fix the value(s) and look up again. No request was sent, and no run was created.">{out.message}</Banner>
+            {out.details != null && <TechDetails data={out.details} />}
+          </div>
+        )}
+        {!busy && out?.kind === 'failed' && (
+          <div className="mdl-stack">
+            <Banner tone="failed" title={failedInfo?.title ?? 'The lookup failed'} next={failedInfo?.next}>{failedInfo?.explain}</Banner>
+            <KeyValue rows={[['Error code', out.errorCode ? <code>{out.errorCode}</code> : null], ['Run', out.runId ? <>{out.runId} · <Link to="/runs" onClick={onClose}>see Run history</Link></> : null]]} />
+            <TechDetails text={out.message} />
+          </div>
+        )}
+        {!busy && out?.kind === 'error' && <ErrorBox message={out.message} />}
       </div>
     </Modal>
   )

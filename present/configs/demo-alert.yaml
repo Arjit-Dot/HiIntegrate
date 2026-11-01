@@ -1,0 +1,27 @@
+# Bonus B-4: a connection that fails on purpose (wrong key), so an email goes out after 2 failed runs.
+# Paste this in the browser (Add integration, Config tab) and replace YOU@example.com with your real address.
+version: 1
+name: demo-alert
+display_name: "Demo: a connection that breaks"
+category: other
+description: "Uses a wrong key on purpose, so every run fails."
+enabled: true
+requires:
+  secrets: [mock_token]
+base_url: "http://mock-api:8001"
+auth: { type: api_key, in: header, name: Authorization, prefix: "SSWS ", secret: mock_token }
+alerts:
+  after_failures: 2
+  to: [YOU@example.com]
+actions:
+  wrong_key:
+    mode: pull
+    target_schema: user
+    schedule: every 10s
+    request: { method: GET, path: /wrong-key }
+    records_path: "@"
+    map:
+      id: { path: id, transform: string }
+      name: name
+    required: [id]
+    on_invalid: quarantine

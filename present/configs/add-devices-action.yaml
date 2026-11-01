@@ -1,0 +1,17 @@
+# Paste this in Integrations, "+ Actions" on demo-acme, tab "Paste YAML or JSON", then "Read the actions".
+actions:
+  list_devices:
+    mode: pull
+    target_schema: device
+    schedule: every 1h
+    request: { method: GET, path: /devices }
+    records_path: "@"
+    map:
+      id: id
+      hostname: hostname
+      ip: ip_address
+      os: os
+      owner: owner
+      last_seen: { path: last_seen, transform: datetime }
+    required: [id]
+    on_invalid: quarantine
